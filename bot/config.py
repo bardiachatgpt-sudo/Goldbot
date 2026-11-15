@@ -11,9 +11,18 @@ BARS = int(os.environ.get("BARS", "500"))          # تعداد کندل برا�
 MIN_BARS = 60                                      # کمتر از این تحلیل نمی‌شود
 CHART_BARS = 120                                   # تعداد کندل در تصویر نمودار
 
-# ستاپ‌هایی که هشدار زنده می‌فرستند: H1,H2,L1,L2,WEDGE,WEDGE_BO,RANGE_BO,PIN
+# بریک‌اوت چندتایم‌فریمی: زمینه روی TIMEFRAME (M5)، ماشه روی TRIGGER_TF (M1)
+CONTEXT_TF = TIMEFRAME
+TRIGGER_TF = os.environ.get("TRIGGER_TF", "1")
+TRIGGER_BARS = int(os.environ.get("TRIGGER_BARS", "300"))   # تعداد کندل M1 در هر بررسی
+HOLD_BARS = 10          # اگر قیمت این تعداد کندل M1 بیرون سطح بماند → تأیید
+BO_COOLDOWN = 15        # بعد از پایان یک تلاش، تا این تعداد کندل M1 تلاش جدید روی همان رنج شروع نشود
+
+# ستاپ‌هایی که هشدار زنده می‌فرستند:
+#   روی M5: H1,H2,L1,L2,WEDGE,PIN و (بدون M1) WEDGE_BO,RANGE_BO
+#   M5→M1: MTF_BO  (آماده باش / تأیید شد / شکست خورد)
 ALERT_SETUPS = {s.strip().upper() for s in
-                os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE,WEDGE_BO,RANGE_BO,PIN").split(",")
+                os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE,PIN,MTF_BO").split(",")
                 if s.strip()}
 
 # کانال یا گروه تلگرام که هشدارها به آن هم فرستاده می‌شود (مثلاً @mychannel یا -100...)

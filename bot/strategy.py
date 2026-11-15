@@ -30,6 +30,14 @@ RANGE_HEIGHT = 6.0      # ارتفاع رنج ≤ ۶ برابر میانگین �
 WEDGE_BO_BARS = 20      # بریک‌اوت وج باید تا این تعداد کندل بعد از فشار سوم رخ دهد
 
 
+def wedge_level(df, w):
+    """سطح بریک‌اوت وج: بلندترین سقف (Wedge Bottom) یا پایین‌ترین کف (Wedge Top) بین فشار دوم و سوم."""
+    b, c = w["points"][1]["index"], w["points"][2]["index"]
+    if w["side"] > 0:
+        return float(df["high"].values[b:c + 1].max())
+    return float(df["low"].values[b:c + 1].min())
+
+
 def from_tradingview(df):
     """کندل‌های data.py (ستون‌های Open..Close، ایندکس زمان UTC) → قالب تحلیل‌گر."""
     out = df.rename(columns=str.lower)[["open", "high", "low", "close"]].copy()
@@ -203,9 +211,9 @@ class AlBrooksPAAnalyzer:
         sig = np.zeros(n, dtype=int)
         found = {}
         for w in wedges:
-            b, c = w["points"][1]["index"], w["points"][2]["index"]
+            c = w["points"][2]["index"]
             side = w["side"]
-            level = high[b:c + 1].max() if side > 0 else low[b:c + 1].min()
+            level = wedge_level(d, w)
             extreme = w["points"][2]["price"]
             for i in range(c + SWING_WINDOW, min(n, c + WEDGE_BO_BARS + 1)):
                 if (side > 0 and low[i] < extreme) or (side < 0 and high[i] > extreme):
@@ -334,3 +342,39 @@ def new_events(sym, res, since):
                            "points": [p["price"] for p in w["points"]], "cycle": res["market_cycle"],
                            "ema20": float(row["ema20"])})
     return events
+
+
+def breakout_levels(res):
+    """سطح‌هایی که الان روی تایم‌فریم زمینه (M5) ارزش زیر نظر گرفتن دارند.
+
+    - رنج فعلی: سقف (بریک‌اوت صعودی) و کف (بریک‌اوت نزولی)
+    - وج‌های تأییدشده‌ای که هنوز نه باطل شده‌اند و نه از آن‌ها بریک‌اوت شده
+    """
+    if "df" not in res:
+        return []
+    df = res["df"]
+    n = len(df)
+    levels = []
+    tr = res.get("trading_range")
+    if tr:
+        for side, lvl in ((1, tr["high"]), (-1, tr["low"])):
+            levels.append({"key": ("RANGE", side), "kind": "RANGE", "side": side, "level": lvl,
+                           "range_high": tr["high"], "range_low": tr["low"]})
+    seen = set()
+    for w in reversed(res["all_wedges"]):
+        c, side = w["trigger_index"], w["side"]
+        if c + SWING_WINDOW > n - 1 or n - 1 - c > WEDGE_BO_BARS:
+            continue
+        level, extreme = wedge_level(df, w), w["points"][2]["price"]
+        after = df.iloc[c + 1:]
+        if side > 0 and ((after["low"] < extreme).any() or (after["close"] > level).any()):
+            continue
+        if side < 0 and ((after["high"] > extreme).any() or (after["close"] < level).any()):
+            continue
+        if (side, round(level, 10)) in seen:
+            continue
+        seen.add((side, round(level, 10)))
+        levels.append({"key": ("WEDGE", w["trigger_date"], side), "kind": "WEDGE", "side": side,
+                       "level": level, "extreme": extreme, "type": w["type"],
+                       "points": [p["price"] for p in w["points"]]})
+    return levels
