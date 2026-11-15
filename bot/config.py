@@ -21,9 +21,33 @@ BO_COOLDOWN = 15        # بعد از پایان یک تلاش، تا این ت�
 # ستاپ‌هایی که هشدار زنده می‌فرستند:
 #   روی M5: H1,H2,L1,L2,WEDGE,PIN و (بدون M1) WEDGE_BO,RANGE_BO
 #   M5→M1: MTF_BO  (آماده باش / تأیید شد / شکست خورد)
+#   M1: TRADE  (ستاپ ورود، ورود، حد سود/ضرر)
 ALERT_SETUPS = {s.strip().upper() for s in
-                os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE,PIN,MTF_BO").split(",")
+                os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE,PIN,MTF_BO,TRADE").split(",")
                 if s.strip()}
+
+# ---------------------------------------------------------------- معامله (روی M1)
+RR = float(os.environ.get("RR", "2"))                 # ریسک به ریوارد
+ORDER_BARS = int(os.environ.get("ORDER_BARS", "3"))   # سفارش/انتظار Key bar حداکثر این تعداد کندل M1
+ARM_BARS = 20           # پین‌بار باید تا این تعداد کندل M1 بعد از تأیید بریک‌اوت بیاید
+RANGE_EDGE = 0.25       # پین‌بار رنج: در ربع پایینی/بالایی رنج M5
+
+# اسپرد پیش‌فرض (به واحد قیمت). هر کدام با متغیر محیطی SPREAD_<نماد> عوض می‌شود، مثلاً SPREAD_XAUUSD=0.25
+DEFAULT_SPREADS = {
+    "XAUUSD": 0.30,
+    "EURUSD": 0.00012, "GBPUSD": 0.00015, "USDJPY": 0.015, "USDCHF": 0.00015,
+    "USDCAD": 0.00018, "AUDUSD": 0.00014, "NZDUSD": 0.00018,
+    "BTCUSD": 15.0,
+}
+
+
+def spread(sym):
+    v = os.environ.get(f"SPREAD_{sym}")
+    try:
+        return float(v) if v else DEFAULT_SPREADS.get(sym, 0.0)
+    except ValueError:
+        return DEFAULT_SPREADS.get(sym, 0.0)
+
 
 # هر هشدار یک عکس از همان لحظه هم دارد (کندل سیگنال پررنگ، خط روند/کانال، سطح‌ها)
 ALERT_CHARTS = os.environ.get("ALERT_CHARTS", "1") not in ("0", "false", "no")

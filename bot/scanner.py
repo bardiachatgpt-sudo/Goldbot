@@ -10,14 +10,15 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from .alert_chart import m1_alert_chart, m5_alert_chart
+from .alert_chart import m1_alert_chart, m5_alert_chart, trade_chart
 from .config import (ALERT_CHARTS, ALERT_SETUPS, BARS, CONTEXT_TF, MIN_BARS, SYMBOLS, TRIGGER_BARS,
                      TRIGGER_TF, WORKERS)
 from .cycle import CycleEngine
 from .data import get_closed_candles
-from .messages import build_alert, build_cycle_alert
+from .messages import build_alert, build_cycle_alert, build_trade_alert
 from .mtf import BreakoutWatcher
 from .strategy import analyze, new_events
+from .trades import TradeManager
 
 
 def _chart(make, *args):
@@ -38,6 +39,7 @@ class Scanner:
         self.seen = {}                                    # نماد → آخرین کندل M5 پردازش‌شده
         self.watchers = {s: BreakoutWatcher(s) for s in SYMBOLS}
         self.cycles = {}                                  # نماد → موتور چرخه‌ی زنده
+        self.trades = {s: TradeManager(s) for s in SYMBOLS}
         self.lock = threading.RLock()                     # ربات تلگرام هم موتورها را می‌خواند
 
     def _fetch(self, sym):
@@ -52,12 +54,21 @@ class Scanner:
                 continue
             with self.lock:
                 events = self.watchers[sym].process(m5, m1)       # اول M1، با زمینه‌ی M5 همان لحظه
-                if events:
-                    res_m1 = analyze(m1, cycle=False) if ALERT_CHARTS else None
-                    for ev in events:
-                        self.send(build_alert(ev), _chart(m1_alert_chart, sym, res_m1, ev))
+                res_m1 = analyze(m1, cycle=False) if m1 is not None and len(m1) >= MIN_BARS else None
+                for ev in events:
+                    self.send(build_alert(ev), _chart(m1_alert_chart, sym, res_m1, ev))
+                self._trades(sym, res_m1, events)
                 self._cycle(sym, m5)
                 self._m5_setups(sym, m5)
+
+    def _trades(self, sym, res_m1, mtf_events):
+        """ستاپ‌های ورود روی M1: زمینه = چرخه‌ی M5 تا آخرین کندل بسته‌شده."""
+        if "TRADE" not in ALERT_SETUPS or res_m1 is None:
+            return
+        eng = self.cycles.get(sym)
+        ctx = eng.snapshot() if eng is not None else None
+        for ev in self.trades[sym].process(res_m1["df"], ctx, mtf_events):
+            self.send(build_trade_alert(ev), _chart(trade_chart, sym, res_m1, ev))
 
     def _cycle(self, sym, df):
         eng = self.cycles.get(sym)

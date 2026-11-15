@@ -79,3 +79,31 @@ def m1_alert_chart(sym, res_m1, ev):
         focus["marks"] = [{"time": ev["started"], "text": "KEY BAR"}]
     res_m1 = {**res_m1, "market_cycle": "", "cycle": None}
     return render_chart(sym, res_m1, n=M1_BARS, focus=focus, tf="1", clean=True)
+
+
+def trade_chart(sym, res_m1, ev):
+    """نمودار M1 معامله: پین‌بار پررنگ، Key bar، و خطوط ورود / حد ضرر / حد سود."""
+    k, side = ev["kind"], ev["side"]
+    pin = ev["pin"]
+    entry = ev.get("entry", ev.get("planned_entry"))
+    text = {"TRADE_PENDING": "PIN BAR", "TRADE_OPEN": "ENTRY", "TRADE_CLOSED": ev.get("result", ""),
+            "TRADE_CANCELLED": "CANCELLED"}[k]
+    title = {"TRADE_PENDING": "Setup", "TRADE_OPEN": "Entry", "TRADE_CLOSED": "Trade closed",
+             "TRADE_CANCELLED": "Setup cancelled"}[k]
+    title += " · " + ("Range" if ev["mode"] == "RANGE" else "Breakout") + (" BUY" if side > 0 else " SELL")
+    focus = {"time": ev["time"], "text": text, "side": side, "title": title,
+             "levels": [_lv(sym, entry, "Entry", "#E5E7EB", "--"),
+                        _lv(sym, ev["sl"], "Stop loss", "#EF4444"),
+                        _lv(sym, ev["tp"], "Take profit", "#10B981")]}
+    if ev["mode"] == "RANGE" and ev.get("range_high") is not None:
+        focus["zone"] = (ev["range_low"], ev["range_high"])
+    if ev["mode"] == "BREAKOUT" and ev.get("level") is not None:
+        focus["levels"].append(_lv(sym, ev["level"], "M5 level", "#FDE047", ":"))
+    marks = []
+    if pin["time"] != ev["time"]:
+        marks.append({"time": pin["time"], "text": "PIN BAR"})
+    if ev.get("key") and ev["key"]["time"] != ev["time"]:
+        marks.append({"time": ev["key"]["time"], "text": "KEY BAR"})
+    focus["marks"] = marks
+    res_m1 = {**res_m1, "market_cycle": "", "cycle": None}
+    return render_chart(sym, res_m1, n=M1_BARS, focus=focus, tf="1", clean=True)

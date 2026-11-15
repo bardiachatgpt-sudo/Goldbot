@@ -161,9 +161,13 @@ class AlBrooksPAAnalyzer:
         big_enough = d["range"] >= 0.8 * avg
         new_low = d["low"] <= d["low"].rolling(PIN_LOOKBACK).min().shift(1)
         new_high = d["high"] >= d["high"].rolling(PIN_LOOKBACK).max().shift(1)
-        bull = (d["lower_tail"] >= PIN_TAIL * d["range"]) & new_low & big_enough
-        bear = (d["upper_tail"] >= PIN_TAIL * d["range"]) & new_high & big_enough
-        d["pin_bar"] = np.where(bull, 1, np.where(bear, -1, 0))
+        bull_shape = (d["lower_tail"] >= PIN_TAIL * d["range"]) & big_enough
+        bear_shape = (d["upper_tail"] >= PIN_TAIL * d["range"]) & big_enough
+        d["pin_bar"] = np.where(bull_shape & new_low, 1, np.where(bear_shape & new_high, -1, 0))
+        # پین‌بار پولبک (برای ورود بعد از بریک‌اوت): همان شکل، با کفی پایین‌تر از ۳ کندل قبل
+        pb_low = d["low"] <= d["low"].rolling(3).min().shift(1)
+        pb_high = d["high"] >= d["high"].rolling(3).max().shift(1)
+        d["pin_pullback"] = np.where(bull_shape & pb_low, 1, np.where(bear_shape & pb_high, -1, 0))
 
     def _strong_bars(self):
         """کندل بریک‌اوت قوی (Key bar): بدنه‌ی بزرگ، بزرگ‌تر از معمول، بسته‌شدن نزدیک انتها."""
