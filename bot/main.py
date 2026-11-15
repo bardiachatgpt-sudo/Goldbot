@@ -8,7 +8,7 @@ import threading
 from flask import Flask
 
 from .config import STATE_FILE
-from .scanner import run_scanner
+from .scanner import Scanner, run_scanner
 from .storage import open_state
 from .telegram_bot import Telegram
 
@@ -29,7 +29,9 @@ def main():
     state = open_state(STATE_FILE)
     print(f"storage: {state.describe()}, users={len(state.users)}")
     tg = Telegram(os.environ.get("BOT_TOKEN"), state)
-    threading.Thread(target=run_scanner, args=(tg.broadcast,), daemon=True).start()
+    scanner = Scanner(tg.broadcast, tg.notify_followers)
+    tg.scanner = scanner                                    # دکمه‌ها همان وضعیت چرخه‌ی هشدارها را نشان می‌دهند
+    threading.Thread(target=run_scanner, args=(scanner,), daemon=True).start()
     tg.run()
 
 

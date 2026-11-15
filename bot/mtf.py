@@ -29,7 +29,7 @@ class BreakoutWatcher:
         """m5 و m1: کندل‌های بسته‌شده (خروجی data.py). رویدادهای تازه را برمی‌گرداند."""
         if m1 is None or m5 is None or len(m1) < MIN_BARS:
             return []
-        d = analyze(m1)["df"]
+        d = analyze(m1, cycle=False)["df"]
         if self.last is None:                       # اولین اجرا: فقط نقطه‌ی شروع
             self.last = d["date"].iloc[-1]
             return []
@@ -42,7 +42,7 @@ class BreakoutWatcher:
             n = int((m5_end <= row["date"]).sum())
             if n != self.ctx_n:
                 self.ctx_n = n
-                self.levels = breakout_levels(analyze(m5.iloc[:n])) if n >= MIN_BARS else []
+                self.levels = breakout_levels(analyze(m5.iloc[:n], cycle=False)) if n >= MIN_BARS else []
             events += self._step(row)
         self.last = rows["date"].iloc[-1]
         return events

@@ -13,6 +13,50 @@ from .config import CHART_BARS, TEHRAN, label, tf_label  # noqa: E402
 BULL, BEAR, DOJI, EMA = "#10B981", "#EF4444", "#9CA3AF", "#F59E0B"
 
 
+SEG_COLORS = {"RANGE": "#60A5FA", "SPIKE": "#FACC15", "CHANNEL": None, "TEST": "#A78BFA"}
+SEG_TEXT = {"RANGE": "RANGE", "SPIKE": "SPIKE", "CHANNEL": "CHANNEL", "TEST": "TEST"}
+
+
+def _draw_cycle(ax, eng, n_full, start, n_vis, top, pad):
+    """بخش‌های چرخه (سایه‌ی پس‌زمینه + برچسب) و خطوط کانال/رنج فعلی."""
+    off = eng.n - n_full                         # اندیس موتور → اندیس df
+
+    def vis(k):
+        return k - off - start
+
+    for seg in eng.segments:
+        a = vis(seg["start"])
+        b = vis(seg["end"] if seg["end"] is not None else eng.n - 1)
+        if b < 0 or a > n_vis - 1:
+            continue
+        a, b = max(a, 0), min(b, n_vis - 1)
+        col = SEG_COLORS[seg["state"]] or (BULL if seg["side"] > 0 else BEAR)
+        ax.axvspan(a - 0.5, b + 0.5, color=col, alpha=0.06, linewidth=0)
+        arrow = "" if seg["side"] == 0 else ("↑" if seg["side"] > 0 else "↓")
+        if b - a >= 2:
+            ax.text((a + b) / 2, top + pad * 8, SEG_TEXT[seg["state"]] + arrow, color=col, fontsize=7,
+                    ha="center", va="bottom", fontweight="bold", alpha=0.9)
+
+    snap = eng.snapshot()
+    last = n_vis - 1
+    if snap["state"] in ("CHANNEL", "TEST") and "trend_line" in snap:
+        a = vis(snap["anchor_i"])
+        xs = np.array([max(a, 0), last + 5])
+        k = xs + off + start                     # برگشت به اندیس موتور
+        tl = snap["start_price"] + snap["slope"] * (k - snap["anchor_i"])
+        col = BULL if snap["side"] > 0 else BEAR
+        ax.plot(xs, tl, color=col, linewidth=1.6, label="Major trend line")
+        if snap["state"] == "CHANNEL":
+            ax.plot(xs, tl + snap["offset"], color=col, linewidth=1.0, linestyle="--", label="Channel line")
+        else:
+            ax.axhline(snap["high"], color="#A78BFA", linewidth=1.0, linestyle=":", label="High to test")
+    elif snap["state"] == "RANGE" and snap.get("hi"):
+        a = max(vis(eng.since), 0)
+        for y in (snap["hi"], snap["lo"]):
+            ax.plot([a, last + 3], [y, y], color="#60A5FA", linewidth=1.2, linestyle="--")
+        ax.plot([a, last + 3], [snap["mid"]] * 2, color="#60A5FA", linewidth=0.7, linestyle=":")
+
+
 def render_chart(sym, res, n=CHART_BARS):
     """تصویر PNG به‌صورت bytes."""
     full = res["df"]
@@ -50,16 +94,9 @@ def render_chart(sym, res, n=CHART_BARS):
             ax.annotate("BO", xy=(i, h if up else l), xytext=(i, (h + pad * 6) if up else (l - pad * 6)),
                         color="#FACC15", fontsize=8, fontweight="bold", ha="center",
                         arrowprops=dict(arrowstyle="->", color="#FACC15"))
-        if r["range_bo"]:
-            ax.add_patch(patches.Rectangle((i - 20, r["range_lo"]), 20, r["range_hi"] - r["range_lo"],
-                                           facecolor="#FACC15", alpha=0.07, edgecolor="#FACC15",
-                                           linestyle=":", linewidth=0.8))
 
-    tr = res.get("trading_range")
-    if tr:
-        ax.add_patch(patches.Rectangle((len(df) - 20, tr["low"]), 20, tr["high"] - tr["low"],
-                                       facecolor="#60A5FA", alpha=0.08, edgecolor="#60A5FA",
-                                       linestyle="--", linewidth=0.8))
+    if res.get("cycle") is not None:
+        _draw_cycle(ax, res["cycle"], len(full), start, len(df), df["high"].max(), pad)
 
     for s in res["swing_highs"]:
         if s["index"] >= start:
@@ -82,6 +119,7 @@ def render_chart(sym, res, n=CHART_BARS):
     ax.grid(True, linestyle="--", color="#27272A", alpha=0.7)
     for spine in ax.spines.values():
         spine.set_color("#27272A")
+    ax.set_xlim(-1, len(df) + 6)
     ax.set_title(f"{label(sym).split()[-1]} {tf_label()} · Al Brooks Price Action · {res['market_cycle']}",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_xlabel("Tehran time", color="#9CA3AF", fontsize=8)

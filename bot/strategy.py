@@ -295,9 +295,21 @@ class AlBrooksPAAnalyzer:
         return None
 
 
-def analyze(candles):
-    """کندل‌های TradingView → نتیجه‌ی تحلیل."""
-    return AlBrooksPAAnalyzer(from_tradingview(candles)).run_analysis()
+def analyze(candles, cycle=True, engine=None):
+    """کندل‌های TradingView → نتیجه‌ی تحلیل.
+
+    cycle: چرخه‌ی بازار (رنج/اسپایک/کانال/تست) هم محاسبه شود. engine: موتور چرخه‌ی زنده‌ی اسکنر،
+    اگر باشد از همان استفاده می‌شود تا وضعیت گزارش با هشدارها یکی باشد.
+    """
+    res = AlBrooksPAAnalyzer(from_tradingview(candles)).run_analysis()
+    if cycle and "df" in res:
+        from .cycle import CycleEngine
+        if engine is None or not engine.t or engine.t[-1] != candles.index[-1]:
+            engine = CycleEngine()
+            engine.feed(candles)
+        res["cycle"] = engine
+        res["market_cycle"] = engine.label()
+    return res
 
 
 def new_events(sym, res, since):

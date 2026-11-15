@@ -123,10 +123,12 @@ def build_report(sym, res):
     """گزارش کامل وضعیت فعلی بازار (دستور /analyze)."""
     p = lambda x: fmt_price(sym, x)
     last = res["latest"]
-    lines = [f"📊 <b>{label(sym)} · {tf_label()} · Al Brooks PA</b>", LINE,
-             f"🧭 Market cycle: <b>{res['market_cycle']}</b>",
-             f"   ({res['bars_above_ema']}/15 recent bars closed above EMA20)",
-             f"💰 Close: <b>{p(last['close'])}</b>   〰️ EMA20: {p(last['ema20'])}",
+    lines = [f"📊 <b>{label(sym)} · {tf_label()} · Al Brooks PA</b>", LINE]
+    if res.get("cycle") is not None:
+        lines += [cycle_block(sym, res["cycle"].snapshot()), LINE]
+    else:
+        lines.append(f"🧭 Market cycle: <b>{res['market_cycle']}</b>")
+    lines += [f"💰 Close: <b>{p(last['close'])}</b>   〰️ EMA20: {p(last['ema20'])}",
              f"🕯 Last bar: {last['bar_type']}  (H {p(last['high'])} · L {p(last['low'])})"]
 
     if res["active_setups"]:
@@ -142,9 +144,6 @@ def build_report(sym, res):
     lines.append(f"{LINE}\n🔻 Swing highs (resistance): {', '.join(sh) or '-'}")
     lines.append(f"🔺 Swing lows (support): {', '.join(sl) or '-'}")
 
-    tr = res.get("trading_range")
-    lines.append(f"📦 Trading range now: {p(tr['low'])} – {p(tr['high'])}" if tr
-                 else "📦 Not inside a tight trading range")
 
     df = res["df"]
     events = []
@@ -166,3 +165,113 @@ def build_report(sym, res):
     lines.append(f"{LINE}\n{_times(last['date'])}")
     lines.append("<i>Educational analysis, not financial advice.</i>")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------- چرخه‌ی بازار
+CYCLE_ICON = {"RANGE": "📦", "SPIKE": "🚀", "CHANNEL": "📈", "TEST": "⚠️"}
+
+
+def _cycle_icon(state, side):
+    if state == "CHANNEL" and side < 0:
+        return "📉"
+    return CYCLE_ICON[state]
+
+
+def _where(pos):
+    if pos >= 0.8:
+        return "at the top"
+    if pos <= 0.2:
+        return "at the bottom"
+    return "in the upper half" if pos >= 0.5 else "in the lower half"
+
+
+def _why(code, side):
+    """دلیل تشکیل رنج، با کلمات درست برای جهت کانال قبلی."""
+    bull = side >= 0
+    return {
+        "spike_erased": "the spike was fully erased",
+        "no_new_extreme": f"no new {'high' if bull else 'low'} after the first pullback",
+        "hh_double_top": "higher-high double top" if bull else "lower-low double bottom",
+        "double_top": "double top" if bull else "double bottom",
+        "lower_high": "lower high" if bull else "higher low",
+        "test_timeout": f"20 bars without a new {'high' if bull else 'low'}",
+    }.get(code, code)
+
+
+def cycle_block(sym, snap):
+    """وضعیت چرخه‌ی M5 با سطح‌هایش."""
+    p = lambda x: fmt_price(sym, x)
+    st, sd = snap["state"], snap["side"]
+    up = sd > 0
+    hi_word, lo_word = ("high", "low") if up else ("low", "high")
+    head = f"{_cycle_icon(st, sd)} <b>{snap['label'].upper()}</b> · {snap.get('bars', 0)} bars"
+    out = [f"🧭 <b>Market cycle (M5)</b>", head]
+
+    if st == "RANGE":
+        if snap.get("hi") is None:
+            return "\n".join(out)
+        out.append(f"   Top {p(snap['hi'])} · Mid {p(snap['mid'])} · Bottom {p(snap['lo'])}")
+        out.append(f"   Price {_where(snap['pos'])} ({snap['pos'] * 100:.0f}% of the range)")
+        if snap.get("why"):
+            out.append(f"   Formed by: {_why(snap['why'], snap.get('from_side', 0))}")
+        if snap.get("magnet"):
+            m = snap["magnet"]
+            out.append(f"   🎯 Previous channel start {p(m['price'])} · Brooks: usually gets tested")
+        w = snap.get("watch")
+        if snap.get("reversal") and w:
+            if w["side"] > 0:
+                out.append(f"   ⚠️ Closed below the break low {p(w['level'])} after a failed test "
+                           f"→ possible bear reversal")
+            else:
+                out.append(f"   ⚠️ Closed above the break high {p(w['level'])} after a failed test "
+                           f"→ possible bull reversal")
+        out.append("   <i>Brooks: buy low, sell high · most breakouts fail</i>")
+    elif st == "SPIKE":
+        out.append(f"   From {p(snap['start_price'])} to {p(snap['extreme'])} "
+                   f"({snap['size']:.1f}× average bar)")
+        out.append(f"   Every bar a new {hi_word} with a strong close · first pullback → channel")
+    elif st == "CHANNEL" and snap.get("forming"):
+        out.append(f"   First pullback after the spike · channel start so far {p(snap['start_price'])}")
+        out.append(f"   Beyond {p(snap['high'])} → channel confirmed · "
+                   f"back beyond {p(snap['spike_start'])} → trading range")
+    elif st == "CHANNEL":
+        out.append(f"   Major trend line now: <b>{p(snap['trend_line'])}</b>")
+        out.append(f"   Channel line now: <b>{p(snap['channel_line'])}</b>")
+        pos = snap["pos"]
+        near = "near the trend line" if pos <= 0.25 else "near the channel line" if pos >= 0.75 else "mid-channel"
+        out.append(f"   Price {near} ({pos * 100:.0f}% from trend line to channel line)")
+        out.append(f"   Channel start {p(snap['start_price'])} · Brooks: usually tested later")
+        out.append(f"   Close {'below' if up else 'above'} the trend line → channel under test")
+        if snap.get("kind") == "tight":
+            out.append("   <i>Tight channel: Brooks trades only with the trend</i>")
+        else:
+            out.append("   <i>Broad channel: two-sided, behaves like a sloped range</i>")
+    else:
+        strength = "strong break" if snap["strong"] else "weak break"
+        out.append(f"   Major trend line broken ({strength}) · line now {p(snap['trend_line'])}")
+        out.append(f"   ✅ Close {'above' if up else 'below'} {p(snap['high'])} and hold → channel continues")
+        out.append(f"   📦 Lower {hi_word} / double {'top' if up else 'bottom'}, or "
+                   f"{max(snap['bars_left'], 0)} more bars without a new {hi_word} → trading range")
+        out.append(f"   Break {lo_word}: {p(snap['break_low'])} · beyond it after a failed test → possible reversal")
+    return "\n".join(out)
+
+
+def build_cycle_alert(ev):
+    """پیام تغییر چرخه برای کسانی که این نماد را فالو کرده‌اند."""
+    from .cycle import describe_state
+    sym, snap = ev["sym"], ev["snap"]
+    a = describe_state(*ev["from"])
+    b = snap["label"]
+    note = ev.get("note")
+    if note == "resumed":
+        head = f"✅ <b>{b.upper()} RESUMED</b> · real breakout beyond the high"
+    elif note == "reversal":
+        w = snap.get("watch") or {"side": 1}
+        head = ("⚠️ <b>POSSIBLE BEAR REVERSAL</b> · range broke below the test low" if w["side"] > 0 else
+                "⚠️ <b>POSSIBLE BULL REVERSAL</b> · range broke above the test high")
+    else:
+        head = f"🔄 <b>{a}  →  {b}</b>"
+    return (f"🧭 <b>{label(sym)}</b>  ·  M5 cycle\n{head}\n{LINE}\n"
+            f"💰 Price: <b>{fmt_price(sym, ev['price'])}</b>\n"
+            f"{cycle_block(sym, snap)}\n{LINE}\n"
+            f"{_times(ev['time'])}")
