@@ -61,8 +61,11 @@ def walk(path, levels):
 
 
 class TradeManager:
-    def __init__(self, sym):
+    def __init__(self, sym, wedge_filter=None):
+        from .config import WEDGE_FILTER
         self.sym = sym
+        # تأیید وج (از ریپازیتوری اول): پین‌بار رنج فقط وقتی که خودش فشار سوم یک وج باشد
+        self.wedge_filter = WEDGE_FILTER if wedge_filter is None else wedge_filter
         self.last = None          # آخرین کندل M1 پردازش‌شده (زمان شروع)
         self.pending = None       # ستاپ منتظر ورود
         self.open = None          # معامله‌ی باز
@@ -213,7 +216,10 @@ class TradeManager:
             top, bot = ctx["hi"], ctx["lo"]
             edge = RANGE_EDGE * (top - bot)
             if (pin_side > 0 and pin["low"] <= bot + edge) or (pin_side < 0 and pin["high"] >= top - edge):
-                return [self._pending(RANGE, pin_side, pin, end, range_high=top, range_low=bot)]
+                if self.wedge_filter and int(row.get("wedge_push", 0)) != pin_side:
+                    return []                              # بدون وج: رد
+                return [self._pending(RANGE, pin_side, pin, end, range_high=top, range_low=bot,
+                                      wedge=bool(int(row.get("wedge_push", 0)) == pin_side))]
         return []
 
     def _pending(self, mode, side, pin, time, **extra):

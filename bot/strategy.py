@@ -30,6 +30,44 @@ RANGE_HEIGHT = 6.0      # ارتفاع رنج ≤ ۶ برابر میانگین �
 WEDGE_BO_BARS = 20      # بریک‌اوت وج باید تا این تعداد کندل بعد از فشار سوم رخ دهد
 
 
+WEDGE_LOOKBACK = 60     # وج: هر سه فشار در ۶۰ کندل اخیر
+WEDGE_SWING = 2         # سوئینگ فشارها: ۲ کندل هر طرف
+WEDGE_GAP = 3           # فاصله‌ی هر دو فشار حداقل ۳ کندل
+WEDGE_DECAY = 1.0       # فشار سوم ضعیف‌تر: افت ۲→۳ حداکثر برابر افت ۱→۲
+
+
+def wedge_third_push(high, low):
+    """+1 اگر کف این کندل فشار سوم یک Wedge Bottom باشد، -1 برای فشار سوم Wedge Top، وگرنه 0.
+
+    تعریف ال بروکس (دقیق‌تر از detect_wedges): دو کف سوئینگ تأییدشده و پایین‌رونده (فشار ۱ و ۲) در
+    WEDGE_LOOKBACK کندل اخیر، کف همین کندل پایین‌تر از فشار ۲ (فشار ۳)، و فشار سوم ضعیف‌تر از دوم.
+    فقط از کندل‌های گذشته استفاده می‌کند (سوئینگ j وقتی تأییدشده است که j + WEDGE_SWING ≤ همین کندل).
+    """
+    n = len(low)
+    w = WEDGE_SWING
+    sw_lo = [j for j in range(w, n - w) if low[j] == min(low[j - w:j + w + 1])]
+    sw_hi = [j for j in range(w, n - w) if high[j] == max(high[j - w:j + w + 1])]
+    out = np.zeros(n, dtype=int)
+    for side, sw, arr in ((1, sw_lo, low), (-1, sw_hi, high)):
+        k = 0
+        recent = []
+        for i in range(n):
+            while k < len(sw) and sw[k] + w <= i:          # سوئینگ‌هایی که تا این کندل تأیید شده‌اند
+                recent.append(sw[k])
+                k += 1
+            pts = [j for j in recent[-2:] if j >= i - WEDGE_LOOKBACK]
+            if len(pts) < 2:
+                continue
+            j1, j2 = pts
+            p1, p2, p3 = arr[j1], arr[j2], arr[i]
+            pushes_down = (p1 - p2) * side > 0 and (p2 - p3) * side > 0
+            spaced = j2 - j1 >= WEDGE_GAP and i - j2 >= WEDGE_GAP
+            fading = (p2 - p3) * side <= WEDGE_DECAY * (p1 - p2) * side
+            if pushes_down and spaced and fading:
+                out[i] = side
+    return out
+
+
 def wedge_level(df, w):
     """سطح بریک‌اوت وج: بلندترین سقف (Wedge Bottom) یا پایین‌ترین کف (Wedge Top) بین فشار دوم و سوم."""
     b, c = w["points"][1]["index"], w["points"][2]["index"]
@@ -168,6 +206,7 @@ class AlBrooksPAAnalyzer:
         pb_low = d["low"] <= d["low"].rolling(3).min().shift(1)
         pb_high = d["high"] >= d["high"].rolling(3).max().shift(1)
         d["pin_pullback"] = np.where(bull_shape & pb_low, 1, np.where(bear_shape & pb_high, -1, 0))
+        d["wedge_push"] = wedge_third_push(d["high"].values, d["low"].values)
 
     def _strong_bars(self):
         """کندل بریک‌اوت قوی (Key bar): بدنه‌ی بزرگ، بزرگ‌تر از معمول، بسته‌شدن نزدیک انتها."""

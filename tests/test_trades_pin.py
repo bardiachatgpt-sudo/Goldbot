@@ -194,6 +194,63 @@ class TestLivePrices(unittest.TestCase):
         self.assertEqual(kinds(ev), ["TRADE_PENDING", "TRADE_CANCELLED"])
 
 
+class TestWedgeConfirmation(unittest.TestCase):
+    """تأیید وج (از ریپازیتوری اول، با تعریف دقیق‌تر ال بروکس)."""
+
+    @staticmethod
+    def lows(pushes):
+        """کف‌ها: هر فشار یک کف سوئینگ، بین فشارها برگشت."""
+        out = []
+        for p in pushes:
+            out += [p + 3, p + 2, p + 1, p, p + 1, p + 2, p + 3]
+        return out
+
+    def test_third_push_lower_and_weaker_is_a_wedge(self):
+        from bot.strategy import wedge_third_push
+        low = self.lows([100, 97, 95.5])[:-3]                  # فشار ۳ = آخرین کندل (کف 95.5)
+        high = [x + 1 for x in low]
+        flags = wedge_third_push(high, low)
+        self.assertEqual(flags[-1], 1)
+
+    def test_third_push_stronger_is_not_a_wedge(self):
+        from bot.strategy import wedge_third_push
+        low = self.lows([100, 98, 90])[:-3]                    # فشار سوم قوی‌تر: شتاب، نه وج
+        self.assertEqual(wedge_third_push([x + 1 for x in low], low)[-1], 0)
+
+    def test_two_pushes_are_not_enough(self):
+        from bot.strategy import wedge_third_push
+        low = self.lows([100, 97])[:-3]
+        self.assertEqual(wedge_third_push([x + 1 for x in low], low)[-1], 0)
+
+    def test_wedge_top_mirror(self):
+        from bot.strategy import wedge_third_push
+        high = [-x for x in self.lows([-100, -103, -104.5])[:-3]]
+        self.assertEqual(wedge_third_push(high, [x - 1 for x in high])[-1], -1)
+
+    def test_filter_only_takes_range_pins_that_are_a_third_push(self):
+        rows = [PIN_LOW, UP]
+        no_wedge = run(rows, tm=TradeManager("XAUUSD", wedge_filter=True))
+        self.assertEqual(no_wedge, [])                         # پین‌بار بدون وج: رد
+        d = frame([FLAT, PIN_LOW, UP])
+        d["wedge_push"] = [0, 1, 0]
+        tm = TradeManager("XAUUSD", wedge_filter=True)
+        tm.process(d.iloc[:1], RANGE_CTX)
+        ev = tm.process(d.iloc[:2], RANGE_CTX) + tm.process(d, RANGE_CTX)
+        self.assertEqual(kinds(ev), ["TRADE_PENDING", "TRADE_OPEN"])
+        self.assertTrue(ev[0]["wedge"])
+        self.assertEqual(run(rows, tm=TradeManager("XAUUSD", wedge_filter=False))[0]["kind"], "TRADE_PENDING")
+
+    def test_backtest_reports_all_rule_sets(self):
+        from bot import backtest
+        m1 = candles(n=7600, vol=0.0005, freq="1min", seed=SEED)
+        res, _ = backtest.run_days("XAUUSD", 5, m1=m1, m5=backtest.to_m5(m1))
+        self.assertEqual(res["strategy"], "pin")
+        self.assertEqual([c["strategy"] for c in res["compare"]], ["pin_wedge", "brooks"])
+        txt = backtest.report_text(res)
+        self.assertIn("Pin bar + wedge confirmation on the same data", txt)
+        self.assertIn("Brooks (M5 signal bar) on the same data", txt)
+
+
 class TestPinScannerMatchesBacktest(unittest.TestCase):
     def test_live_scanner_equals_backtest(self):
         m1 = candles(n=4200, vol=0.0005, freq="1min", seed=SEED)

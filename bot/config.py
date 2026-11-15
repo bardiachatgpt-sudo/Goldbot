@@ -41,6 +41,11 @@ if STRATEGY not in ("pin", "brooks"):
 _ALWAYS_IN_ENV = os.environ.get("ALWAYS_IN", "").strip()
 
 
+# تأیید وج برای پین‌بار رنج (قاعده‌ی pin): فقط وقتی پین‌بار فشار سوم یک Wedge Bottom/Top است.
+# پیش‌فرض خاموش تا بک‌تست روی چند جفت نشان بدهد بهتر است؛ بک‌تست همیشه هر دو را گزارش می‌کند.
+WEDGE_FILTER = os.environ.get("WEDGE_FILTER", "0").strip() not in ("0", "false", "no", "")
+
+
 def always_in_for(strategy=None):
     if _ALWAYS_IN_ENV:
         return _ALWAYS_IN_ENV not in ("0", "false", "no")

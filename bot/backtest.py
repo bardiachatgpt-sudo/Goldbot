@@ -43,25 +43,29 @@ def to_m5(m1):
     return to_tf(m1, 5)
 
 
-STRATEGY_NAMES = {"pin": "Pin bar (M1)", "brooks": "Brooks (M5 signal bar)"}
+STRATEGY_NAMES = {"pin": "Pin bar (M1)", "pin_wedge": "Pin bar + wedge confirmation",
+                  "brooks": "Brooks (M5 signal bar)"}
 
 
 def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
     """رویدادهای معامله با قاعده‌های strategy (pin یا brooks؛ پیش‌فرض: تنظیم ربات زنده)."""
     from .config import STRATEGY
-    if (strategy or STRATEGY) == "pin":
-        return run_pin(sym, trig, ctx, start, ctx_min, trig_min)
+    strategy = strategy or STRATEGY
+    if strategy == "pin":
+        return run_pin(sym, trig, ctx, start, ctx_min, trig_min, wedge_filter=False)
+    if strategy == "pin_wedge":
+        return run_pin(sym, trig, ctx, start, ctx_min, trig_min, wedge_filter=True)
     return run_brooks(sym, trig, ctx, start, ctx_min, trig_min)
 
 
-def run_pin(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
+def run_pin(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, wedge_filter=None):
     """نسخه‌ی اول: هر کندل M1 فقط با کندل‌های M5 که قبل از شروعش بسته شده‌اند تصمیم می‌گیرد."""
     from .config import always_in_for
     from .trades_pin import TradeManager as PinTradeManager
     ctx = to_tf(trig, ctx_min) if ctx is None else ctx
     d = analyze(trig, cycle=False)["df"]
     eng = CycleEngine(sym, always_in=always_in_for("pin"))
-    tm = PinTradeManager(sym)
+    tm = PinTradeManager(sym, wedge_filter=wedge_filter)
     ctx_end = ctx.index + pd.Timedelta(minutes=ctx_min)
     k = 0
     events = []
@@ -192,15 +196,21 @@ def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, p
     if (m1.index < start).sum() < 300:                                 # گرم شدن کافی
         start = m1.index[min(300, len(m1) - 1)]
     m5 = m5[m5.index <= m1.index[-1]] if m5 is not None else None
-    from .config import STRATEGY
+    from .config import STRATEGY, WEDGE_FILTER
     strategy = strategy or STRATEGY
+    if strategy == "pin" and WEDGE_FILTER:                              # همان چیزی که ربات زنده اجرا می‌کند
+        strategy = "pin_wedge"
     events, _ = run(sym, m1, m5, start, ctx_min, trig_min, strategy)
     res = summary(sym, events, start, end, balance)
-    if compare:                                                         # قاعده‌ی دیگر روی همان داده
-        other = "brooks" if strategy == "pin" else "pin"
-        ev2, _ = run(sym, m1, m5, start, ctx_min, trig_min, other)
-        res["compare"] = {"strategy": other, **{k: v for k, v in summary(sym, ev2, start, end, balance).items()
-                                                if k in ("trades", "wins", "net_r", "accounts")}}
+    if compare:                                                         # قاعده‌های دیگر روی همان داده
+        res["compare"] = []
+        for other in ("pin", "pin_wedge", "brooks"):
+            if other == strategy:
+                continue
+            ev2, _ = run(sym, m1, m5, start, ctx_min, trig_min, other)
+            res["compare"].append({"strategy": other, **{k: v for k, v in summary(sym, ev2, start, end,
+                                                                                  balance).items()
+                                                         if k in ("trades", "wins", "net_r")}})
     res.update(strategy=strategy, tf=tf, tf_name=tf_name, days=days,
                days_covered=len([d for d in day_list if pd.Timestamp(d, tz="UTC") >= start.floor("D")]))
     return res, None
@@ -227,10 +237,9 @@ def report_text(res, balance=DEFAULT_BALANCE):
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
         lines.append(f"   ⏳ {res['open']} trade still open at the end (not counted)")
-    cmp = res.get("compare")
-    if cmp:
+    for cmp in res.get("compare") or []:
         cwr = cmp["wins"] / cmp["trades"] * 100 if cmp["trades"] else 0
-        lines.append(f"🔁 Other rules ({STRATEGY_NAMES[cmp['strategy']]}) on the same data: {cmp['trades']} trades, "
+        lines.append(f"🔁 {STRATEGY_NAMES[cmp['strategy']]} on the same data: {cmp['trades']} trades, "
                      f"win rate {cwr:.0f}%, {cmp['net_r']:+g}R")
     lines.append(LINE)
     lines.append(f"💵 Account ${balance:,.0f}:")
