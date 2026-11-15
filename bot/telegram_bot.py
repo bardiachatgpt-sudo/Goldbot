@@ -18,8 +18,10 @@ from .strategy import analyze
 
 HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / channel / under test) "
         "with levels and chart.\n"
-        "⭐ Follow a pair to also get every cycle change for it.\n\n"
-        "/status XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following")
+        "⭐ Follow a pair to also get every cycle change for it.\n"
+        "🧪 /backtest XAUUSD 5 replays the last 5 days with the same rules on a $1,000 account.\n\n"
+        "/status XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest XAUUSD 5")
+BACKTEST_MAX_DAYS = 10
 
 
 CAPTION_LIMIT = 1024
@@ -121,6 +123,22 @@ class Telegram:
                 print("photo error:", e)
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.pair_keyboard(chat_id, sym))
 
+    def send_backtest(self, chat_id, sym, days):
+        from . import backtest
+        try:
+            res, err = backtest.run_days(sym, days)
+        except Exception as e:
+            res, err = None, str(e)[:200]
+        if res is None:
+            self.bot.send_message(chat_id, f"⚠️ Backtest failed: {err}")
+            return
+        try:
+            png = backtest.equity_chart(res)
+        except Exception as e:
+            print("backtest chart error:", e)
+            png = None
+        self._send(chat_id, backtest.report_text(res), png)
+
     def set_follow(self, chat_id, sym, on):
         self.state.add_user(chat_id)
         self.state.set_follow(chat_id, sym, on)
@@ -173,6 +191,23 @@ class Telegram:
             self.set_follow(m.chat.id, sym, on)
             bot.send_message(m.chat.id, ("⭐ Following " if on else "🔕 Unfollowed ") + label(sym) + "\n"
                              + self.following_text(m.chat.id))
+
+        @bot.message_handler(commands=["backtest", "bt"])
+        def on_backtest(m):
+            parts = m.text.split()
+            sym, days = "XAUUSD", 5
+            for a in parts[1:]:
+                if a.isdigit():
+                    days = max(1, min(int(a), BACKTEST_MAX_DAYS))
+                elif a.upper() in SYMBOLS:
+                    sym = a.upper()
+                else:
+                    bot.send_message(m.chat.id, f"Usage: /backtest XAUUSD 5  (pairs: {', '.join(SYMBOLS)}; "
+                                                f"days 1–{BACKTEST_MAX_DAYS})")
+                    return
+            bot.send_message(m.chat.id, f"🧪 Backtesting {label(sym)} over the last {days} trading days… "
+                                        f"(fetching data, up to a minute)")
+            self.send_backtest(m.chat.id, sym, days)
 
         @bot.message_handler(commands=["following"])
         def on_following(m):

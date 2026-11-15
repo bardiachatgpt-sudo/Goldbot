@@ -204,9 +204,11 @@ class TestScannerWiring(unittest.TestCase):
             part = m1.iloc[:feed["n"]]
             return part.tail(300) if interval == "1" else to_tf(part).tail(500)
 
+        live_ev = []
         with mock.patch.object(scanner, "get_closed_candles", fake), \
              mock.patch.object(scanner, "SYMBOLS", {"XAUUSD": []}), \
-             mock.patch.object(scanner, "ALERT_CHARTS", False):
+             mock.patch.object(scanner, "ALERT_CHARTS", False), \
+             mock.patch.object(scanner, "build_trade_alert", lambda ev: live_ev.append(ev) or "trade"):
             sc = scanner.Scanner(lambda t, photo=None: alerts.append(t), lambda s, t, photo=None: fol.append(t))
             sc.trades = {"XAUUSD": TradeManager("XAUUSD")}
             sc.scan_once()
@@ -216,6 +218,13 @@ class TestScannerWiring(unittest.TestCase):
         self.assertTrue(fol)                                            # تغییرات چرخه برای فالوکننده‌ها
         self.assertTrue(all("M5 cycle" not in a for a in alerts))       # و نه برای همه
         self.assertTrue(any("M5 SPIKE" in a for a in alerts) or any("SPIKE" in f for f in fol))
+        # بک‌تست روی همان داده دقیقاً همان معامله‌ها را می‌دهد
+        from bot import backtest
+        start = m1.index[2800]
+        bt, _ = backtest.run("XAUUSD", m1, backtest.to_m5(m1), start)
+        key = lambda e: (e["kind"], e["mode"], e["time"], round(e.get("entry", e["planned_entry"]), 4))
+        self.assertEqual([key(e) for e in live_ev],
+                         [key(e) for e in bt if e["time"] > start + pd.Timedelta(minutes=1)])
 
 
 class TestTradeOutput(unittest.TestCase):
@@ -244,6 +253,26 @@ class TestTradeOutput(unittest.TestCase):
         self.assertIn("2650.00", txt)
 
 
+
+
+class TestBacktest(unittest.TestCase):
+    def test_account_math_and_report(self):
+        from bot import backtest
+        T = pd.Timestamp("2026-11-12", tz="UTC")
+        ev = [{"kind": "TRADE_OPEN", "opened": T}, {"kind": "TRADE_CLOSED", "opened": T, "r": 2.0, "time": T},
+              {"kind": "TRADE_OPEN", "opened": T + pd.Timedelta(hours=1)},
+              {"kind": "TRADE_CLOSED", "opened": T + pd.Timedelta(hours=1), "r": -1.0, "time": T}]
+        final, dd, curve = backtest.account(ev, 1000, 1.0)
+        self.assertAlmostEqual(final, 1000 * 1.02 * 0.99)               # +2% بعد −1% (مرکب)
+        self.assertAlmostEqual(dd, 1.0)
+        m1 = candles(n=7600, vol=0.0005, freq="1min", seed=5)
+        res, err = backtest.run_days("XAUUSD", 5, m1=m1, m5=backtest.to_m5(m1))
+        self.assertIsNone(err)
+        self.assertEqual(res["trades"], res["wins"] + res["losses"])
+        txt = backtest.report_text(res)
+        self.assertIn("BACKTEST", txt)
+        self.assertIn("Risk 1% per trade", txt)
+        self.assertEqual(backtest.equity_chart(res)[:4], b"\x89PNG")
 
 
 class TestLiveParse(unittest.TestCase):
