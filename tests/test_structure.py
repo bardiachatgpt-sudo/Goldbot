@@ -141,6 +141,9 @@ class TestCoreLines(unittest.TestCase):
         piv = [(5, "L", 10.0, 8), (20, "H", 20.0, 23), (35, "L", 13.0, 38), (50, "H", 16.0, 53)]
         self.assertEqual(structure.core_lines(ph, piv, np.ones(120)), (20.0, 10.0))
 
+    def test_render_plain_png(self):
+        self.assertEqual(structure.render_plain(fake_market(57730))[:4], b"\x89PNG")
+
     def test_render_core_png(self):
         png, phases, now = structure.render("XAUUSD", fake_market(57730), core=True)
         self.assertEqual(png[:4], b"\x89PNG")
@@ -173,12 +176,14 @@ class TestStructureButton(unittest.TestCase):
             tg.send_structure(7, "XAUUSD")
         self.assertEqual(calls, [("XAUUSD", 501, "5")])            # پیش‌فرض: M5
         photos = tg.bot.send_photo.call_args_list
-        self.assertEqual(len(photos), 2)                                 # 1️⃣ فعلی و 2️⃣ خط‌های بیشترین برخورد
+        self.assertEqual(len(photos), 3)                                 # 1️⃣ فعلی، 2️⃣ بیشترین برخورد، 3️⃣ خالی
         for call in photos:
             self.assertEqual(call.args[1][:4], b"\x89PNG")
         self.assertIn("1️⃣", photos[0].kwargs["caption"])
         self.assertIn("last 500 candles", photos[0].kwargs["caption"])
         self.assertIn("most touches", photos[1].kwargs["caption"])
+        self.assertIn("plain candles", photos[2].kwargs["caption"])
+        self.assertIn("reply_markup", photos[2].kwargs)                 # دکمه‌ها زیر عکس آخر
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
 

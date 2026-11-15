@@ -158,9 +158,18 @@ class Telegram:
                     f"Same phases as 1️⃣. Range top/bottom = the level most swing highs/lows turned at "
                     f"(a single far wick no longer stretches the box). The faint dotted lines are the outer "
                     f"edges: a close beyond them still ends the range.")
-            self.bot.send_photo(chat_id, png2, caption=cap2, parse_mode="HTML", reply_markup=kb)
+            self.bot.send_photo(chat_id, png2, caption=cap2, parse_mode="HTML")
         except Exception as e:
             print("structure core error:", e)
+        # 3️⃣ فقط کندل‌ها، برای کشیدن خط با دست و مقایسه
+        try:
+            from .structure import render_plain
+            self.bot.send_photo(chat_id, render_plain(df),
+                                caption=f"3️⃣ {label(sym)} · {tf_name} · plain candles (same {len(df)} candles) — "
+                                        f"draw your own lines and compare",
+                                reply_markup=kb)
+        except Exception as e:
+            print("structure plain error:", e)
             self.bot.send_message(chat_id, "📐", reply_markup=kb)
 
     # ------------------------------------------------------------ وضعیت

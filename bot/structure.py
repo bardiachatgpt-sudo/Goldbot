@@ -351,6 +351,36 @@ def core_lines(ph, piv, avg):
     return best("H", top, True), best("L", bot, False)
 
 
+def render_plain(df):
+    """فقط کندل‌ها: بدون عنوان، برچسب، محور، سوئینگ یا خط — برای اینکه خود تریدر خط بکشد و مقایسه کند.
+    اندازه و مقیاس همان render است تا سه عکس روی هم بیفتند."""
+    import io
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.patches as patches
+    import matplotlib.pyplot as plt
+
+    o, h, l, c = (df[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
+    n = len(c)
+    fig, ax = plt.subplots(figsize=(22, 9), dpi=100)
+    fig.patch.set_facecolor("#121214")
+    ax.set_facecolor("#18181B")
+    for i in range(n):
+        col = "#10B981" if c[i] >= o[i] else "#EF4444"
+        ax.vlines(i, l[i], h[i], color=col, lw=0.8)
+        ax.add_patch(patches.Rectangle((i - 0.3, min(o[i], c[i])), 0.6, max(abs(c[i] - o[i]), 1e-9), color=col))
+    pad = (h.max() - l.min()) * 0.015
+    ax.set_xlim(-2, n + 2)
+    ax.set_ylim(l.min() - pad * 3, h.max() + pad * 4)
+    ax.axis("off")
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", facecolor="#121214")
+    plt.close(fig)
+    return buf.getvalue()
+
+
 def render(sym, df, title_extra="", v2=False, tf="M5", core=False):
     """df: ستون‌های Open/High/Low/Close (مثل data.py). PNG: کندل‌ها، سوئینگ‌ها، خط‌ها، مستطیل رنگی هر فاز."""
     import io
