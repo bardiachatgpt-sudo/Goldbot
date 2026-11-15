@@ -50,11 +50,12 @@ class TestStrategy(unittest.TestCase):
             return self.c.iloc[max(0, feed["n"] - n_bars):feed["n"]]
 
         with mock.patch.object(scanner, "get_closed_candles", fake), \
+             mock.patch.object(scanner, "ALERT_CHARTS", False), \
              mock.patch.object(scanner, "BARS", 10_000), \
              mock.patch.object(scanner, "SYMBOLS", {"XAUUSD": []}), \
              mock.patch.object(scanner, "ALERT_SETUPS", {"H1", "H2", "L1", "L2", "WEDGE", "WEDGE_BO", "RANGE_BO", "PIN"}), \
              mock.patch.object(scanner, "build_alert", lambda ev: ev):
-            sc = scanner.Scanner(live.append)
+            sc = scanner.Scanner(lambda t, photo=None: live.append(t))
             sc.scan_once()                                # اولین اجرا: بی‌صدا
             self.assertEqual(live, [])
             sc.scan_once()                                # کندل جدیدی نیامده
@@ -219,9 +220,10 @@ class TestSymbols(unittest.TestCase):
             return data[sym].iloc[:feed["n"]]
 
         with mock.patch.object(scanner, "get_closed_candles", fake), \
+             mock.patch.object(scanner, "ALERT_CHARTS", False), \
              mock.patch.object(scanner, "ALERT_SETUPS", {"H2", "L2", "WEDGE", "PIN"}), \
              mock.patch.object(scanner, "build_alert", lambda ev: ev):
-            sc = scanner.Scanner(out.append)
+            sc = scanner.Scanner(lambda t, photo=None: out.append(t))
             sc.scan_once()
             self.assertEqual(set(sc.seen), set(SYMBOLS))
             for _ in range(150):

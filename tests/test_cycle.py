@@ -13,7 +13,7 @@ from bot import scanner  # noqa: E402
 from bot.cycle import CHANNEL, RANGE, SPIKE, TEST, TEST_BARS, CycleEngine  # noqa: E402
 from bot.messages import build_cycle_alert, cycle_block  # noqa: E402
 from bot.storage import JsonState, followers, is_following  # noqa: E402
-from bot.telegram_bot import Telegram  # noqa: E402
+from bot.telegram_bot import Telegram, caption_fits  # noqa: E402
 from tests.synthetic import candles  # noqa: E402
 
 ALLOWED = {RANGE: {SPIKE}, SPIKE: {CHANNEL, SPIKE}, CHANNEL: {TEST, RANGE, SPIKE},
@@ -115,16 +115,28 @@ class TestFollowRouting(unittest.TestCase):
         def fake(sym, n_bars, min_bars, interval=None):
             return c.iloc[:feed["n"]]
 
+        photos = []
+
+        def send(t, photo=None):
+            alerts.append(t)
+            photos.append(photo)
+
+        def send_fol(s, t, photo=None):
+            fol.append((s, t))
+            photos.append(photo)
+
         with mock.patch.object(scanner, "get_closed_candles", fake), \
              mock.patch.object(scanner, "SYMBOLS", {"XAUUSD": []}), \
              mock.patch.object(scanner, "ALERT_SETUPS", {"H2", "L2", "PIN"}):
-            sc = scanner.Scanner(alerts.append, lambda s, t: fol.append((s, t)))
+            sc = scanner.Scanner(send, send_fol)
             sc.scan_once()
             self.assertEqual((alerts, fol), ([], []))
             while feed["n"] < len(c):
                 feed["n"] += 1
                 sc.scan_once()
         self.assertTrue(fol)
+        self.assertTrue(alerts)
+        self.assertTrue(all(p and p[:4] == b"\x89PNG" for p in photos))       # هر هشدار یک عکس دارد
         self.assertTrue(all(s == "XAUUSD" and "M5 cycle" in t for s, t in fol))
         self.assertFalse(any("M5 cycle" in t for t in alerts))
         # موتور زنده با موتوری که کل داده را یک‌جا خوانده یکی است
@@ -154,6 +166,53 @@ class TestFollowStorage(unittest.TestCase):
         self.assertEqual(btns, ["uf:XAUUSD", "st:XAUUSD", "home"])
         btns = [b.callback_data for row in tg.pair_keyboard(1, "EURUSD").keyboard for b in row]
         self.assertEqual(btns[0], "fo:EURUSD")
+
+
+class TestTelegramPhotos(unittest.TestCase):
+    def _tg(self):
+        st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
+        for u in (1, 2, 3):
+            st.add_user(u)
+        tg = Telegram(None, st)
+        tg.bot = mock.MagicMock()
+        photo_msg = mock.MagicMock()
+        photo_msg.photo = [mock.MagicMock(file_id="small"), mock.MagicMock(file_id="FILE123")]
+        tg.bot.send_photo.return_value = photo_msg
+        return tg
+
+    def test_photo_uploaded_once_then_reused_as_caption(self):
+        tg = self._tg()
+        tg.broadcast("<b>H2</b> short alert", b"\x89PNGdata")
+        calls = tg.bot.send_photo.call_args_list
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0].args[1], b"\x89PNGdata")                   # اولی آپلود
+        self.assertEqual([c.args[1] for c in calls[1:]], ["FILE123", "FILE123"])   # بقیه file_id
+        self.assertEqual(calls[0].kwargs["caption"], "<b>H2</b> short alert")
+        tg.bot.send_message.assert_not_called()
+
+    def test_long_text_goes_after_photo(self):
+        tg = self._tg()
+        long = "<b>x</b>" + "y" * 1100
+        self.assertFalse(caption_fits(long))
+        self.assertTrue(caption_fits("<b>" + "y" * 1000 + "</b>"))
+        tg.notify_followers("XAUUSD", long, b"png")       # کسی فالو نکرده
+        tg.bot.send_photo.assert_not_called()
+        tg.state.set_follow(2, "XAUUSD", True)
+        tg.notify_followers("XAUUSD", long, b"png")
+        self.assertNotIn("caption", tg.bot.send_photo.call_args.kwargs)
+        tg.bot.send_message.assert_called_once_with(2, long, parse_mode="HTML")
+
+    def test_alert_charts_mark_the_signal_bar(self):
+        from bot.alert_chart import _m5_focus
+        from bot.strategy import analyze, new_events
+        from bot.alert_chart import m5_alert_chart
+        c = candles(n=600, seed=1)
+        res = analyze(c)
+        evs = new_events("XAUUSD", res, c.index[-100])
+        pin = [e for e in evs if e["kind"] == "PIN"][-1]
+        f = _m5_focus("XAUUSD", pin)
+        self.assertEqual((f["text"], f["time"]), ("PIN BAR", pin["time"]))
+        self.assertEqual(m5_alert_chart("XAUUSD", res, pin)[:4], b"\x89PNG")
 
 
 if __name__ == "__main__":

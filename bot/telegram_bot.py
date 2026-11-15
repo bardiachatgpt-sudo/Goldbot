@@ -22,6 +22,16 @@ HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / cha
         "/status XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following")
 
 
+CAPTION_LIMIT = 1024
+
+
+def caption_fits(text):
+    """تلگرام کپشن عکس را به ۱۰۲۴ کاراکتر (بدون تگ‌های HTML) محدود می‌کند."""
+    import re
+    plain = re.sub(r"<[^>]+>", "", text).replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+    return len(plain) <= CAPTION_LIMIT
+
+
 class Telegram:
     def __init__(self, token, state, scanner=None):
         self.state = state
@@ -31,28 +41,40 @@ class Telegram:
             self._register_handlers()
 
     # ------------------------------------------------------------ ارسال
-    def _send(self, chat_id, text):
+    def _send(self, chat_id, text, photo=None):
+        """متن، یا عکس + متن. عکس فقط یک بار آپلود می‌شود و برای بقیه از file_id استفاده می‌شود.
+        برمی‌گرداند: file_id عکس (برای گیرنده‌ی بعدی) یا همان photo."""
         try:
-            self.bot.send_message(chat_id, text, parse_mode="HTML")
+            if photo is None:
+                self.bot.send_message(chat_id, text, parse_mode="HTML")
+                return None
+            if caption_fits(text):
+                msg = self.bot.send_photo(chat_id, photo, caption=text, parse_mode="HTML")
+            else:
+                msg = self.bot.send_photo(chat_id, photo)
+                self.bot.send_message(chat_id, text, parse_mode="HTML")
+            return msg.photo[-1].file_id if getattr(msg, "photo", None) else photo
         except Exception as e:
             print("telegram send error:", chat_id, e)
+            return photo
 
-    def broadcast(self, text):
+    def _send_all(self, targets, text, photo=None):
+        for chat_id in targets:
+            photo = self._send(chat_id, text, photo)
+
+    def broadcast(self, text, photo=None):
         """هشدارهای ستاپ و بریک‌اوت: همه‌ی کاربران + کانال."""
         if not self.bot:
-            print(text)
+            print(text + ("\n[+ chart]" if photo else ""))
             return
-        targets = list(self.state.users) + ([CHANNEL_ID] if CHANNEL_ID else [])
-        for chat_id in targets:
-            self._send(chat_id, text)
+        self._send_all(list(self.state.users) + ([CHANNEL_ID] if CHANNEL_ID else []), text, photo)
 
-    def notify_followers(self, sym, text):
+    def notify_followers(self, sym, text, photo=None):
         """تغییرات چرخه: فقط کسانی که این نماد را فالو کرده‌اند."""
         if not self.bot:
-            print(f"[followers of {sym}]\n{text}")
+            print(f"[followers of {sym}]\n{text}" + ("\n[+ chart]" if photo else ""))
             return
-        for chat_id in followers(self.state, sym):
-            self._send(chat_id, text)
+        self._send_all(followers(self.state, sym), text, photo)
 
     # ------------------------------------------------------------ دکمه‌ها
     def pairs_keyboard(self, chat_id):

@@ -25,6 +25,9 @@ ALERT_SETUPS = {s.strip().upper() for s in
                 os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE,PIN,MTF_BO").split(",")
                 if s.strip()}
 
+# هر هشدار یک عکس از همان لحظه هم دارد (کندل سیگنال پررنگ، خط روند/کانال، سطح‌ها)
+ALERT_CHARTS = os.environ.get("ALERT_CHARTS", "1") not in ("0", "false", "no")
+
 # کانال یا گروه تلگرام که هشدارها به آن هم فرستاده می‌شود (مثلاً @mychannel یا -100...)
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
 

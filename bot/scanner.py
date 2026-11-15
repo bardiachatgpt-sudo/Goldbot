@@ -10,7 +10,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from .config import (ALERT_SETUPS, BARS, CONTEXT_TF, MIN_BARS, SYMBOLS, TRIGGER_BARS,
+from .alert_chart import m1_alert_chart, m5_alert_chart
+from .config import (ALERT_CHARTS, ALERT_SETUPS, BARS, CONTEXT_TF, MIN_BARS, SYMBOLS, TRIGGER_BARS,
                      TRIGGER_TF, WORKERS)
 from .cycle import CycleEngine
 from .data import get_closed_candles
@@ -19,10 +20,21 @@ from .mtf import BreakoutWatcher
 from .strategy import analyze, new_events
 
 
+def _chart(make, *args):
+    """عکس هشدار؛ اگر رسم نشد، هشدار بدون عکس می‌رود."""
+    if not ALERT_CHARTS:
+        return None
+    try:
+        return make(*args)
+    except Exception as e:
+        print("alert chart error:", e)
+        return None
+
+
 class Scanner:
     def __init__(self, send, send_followers=None):
-        self.send = send                                  # همه‌ی کاربران + کانال
-        self.send_followers = send_followers or (lambda sym, text: None)
+        self.send = send                                  # همه‌ی کاربران + کانال: send(text, photo)
+        self.send_followers = send_followers or (lambda sym, text, photo=None: None)
         self.seen = {}                                    # نماد → آخرین کندل M5 پردازش‌شده
         self.watchers = {s: BreakoutWatcher(s) for s in SYMBOLS}
         self.cycles = {}                                  # نماد → موتور چرخه‌ی زنده
@@ -39,8 +51,11 @@ class Scanner:
             if m5 is None:
                 continue
             with self.lock:
-                for ev in self.watchers[sym].process(m5, m1):     # اول M1، با زمینه‌ی M5 همان لحظه
-                    self.send(build_alert(ev))
+                events = self.watchers[sym].process(m5, m1)       # اول M1، با زمینه‌ی M5 همان لحظه
+                if events:
+                    res_m1 = analyze(m1, cycle=False) if ALERT_CHARTS else None
+                    for ev in events:
+                        self.send(build_alert(ev), _chart(m1_alert_chart, sym, res_m1, ev))
                 self._cycle(sym, m5)
                 self._m5_setups(sym, m5)
 
@@ -51,8 +66,11 @@ class Scanner:
             eng.feed(df)
             self.cycles[sym] = eng
             return
-        for ev in eng.feed(df):
-            self.send_followers(sym, build_cycle_alert(ev))
+        events = eng.feed(df)
+        if events:
+            res = analyze(df, engine=eng) if ALERT_CHARTS else None
+            for ev in events:
+                self.send_followers(sym, build_cycle_alert(ev), _chart(m5_alert_chart, sym, res, ev))
 
     def _m5_setups(self, sym, df):
         newest = df.index[-1]
@@ -65,7 +83,7 @@ class Scanner:
         res = analyze(df, engine=self.cycles.get(sym))
         for ev in new_events(sym, res, self.seen[sym]):
             if ev["setup"] in ALERT_SETUPS:
-                self.send(build_alert(ev))
+                self.send(build_alert(ev), _chart(m5_alert_chart, sym, res, ev))
         self.seen[sym] = newest
 
     def engine(self, sym):

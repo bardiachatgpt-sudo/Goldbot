@@ -57,8 +57,47 @@ def _draw_cycle(ax, eng, n_full, start, n_vis, top, pad):
         ax.plot([a, last + 3], [snap["mid"]] * 2, color="#60A5FA", linewidth=0.7, linestyle=":")
 
 
-def render_chart(sym, res, n=CHART_BARS):
-    """تصویر PNG به‌صورت bytes."""
+KEY = "#FACC15"
+FOCUS = "#FDE047"
+
+
+def _draw_focus(ax, df, focus, pad):
+    """کندل سیگنال هشدار: سایه‌ی زرد، فلش و برچسب؛ به‌اضافه‌ی سطح‌های مربوط به هشدار."""
+    for lv in focus.get("levels", []):
+        ax.axhline(lv["price"], color=lv.get("color", FOCUS), linewidth=lv.get("width", 1.3),
+                   linestyle=lv.get("style", "-"), alpha=0.9)
+        ax.text(len(df) + 5.5, lv["price"], f"{lv['text']} {lv['price_txt']}", color=lv.get("color", FOCUS),
+                fontsize=8, ha="right", va="bottom", fontweight="bold")
+    zone = focus.get("zone")
+    if zone:
+        ax.axhspan(zone[0], zone[1], color="#60A5FA", alpha=0.07)
+    hits = df.index[df["date"] == focus["time"]]
+    if not len(hits):
+        return
+    i = int(hits[0])
+    r = df.loc[i]
+    up = focus.get("side", 1) > 0
+    ax.axvspan(i - 0.6, i + 0.6, color=FOCUS, alpha=0.22, linewidth=0)
+    y, ytxt = (r["low"], r["low"] - pad * 9) if up else (r["high"], r["high"] + pad * 9)
+    ax.annotate(focus["text"], xy=(i, y), xytext=(i, ytxt), color=FOCUS, fontsize=10, fontweight="bold",
+                ha="center", va="top" if up else "bottom",
+                arrowprops=dict(arrowstyle="-|>", color=FOCUS, linewidth=1.6),
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#18181B", edgecolor=FOCUS, alpha=0.9))
+    for extra in focus.get("marks", []):                 # مثلاً Key bar شروع بریک‌اوت
+        hits = df.index[df["date"] == extra["time"]]
+        if len(hits):
+            j = int(hits[0])
+            ax.axvspan(j - 0.6, j + 0.6, color=KEY, alpha=0.12, linewidth=0)
+            ax.text(j, df.loc[j, "high"] + pad * 2, extra["text"], color=KEY, fontsize=8,
+                    ha="center", va="bottom", fontweight="bold")
+
+
+def render_chart(sym, res, n=CHART_BARS, focus=None, tf=None, clean=False):
+    """تصویر PNG به‌صورت bytes.
+
+    focus: کندل و سطح‌های یک هشدار برای پررنگ کردن.
+    clean: فقط کندل، EMA، Key bar، پین‌بار و focus (برای نمودار M1).
+    """
     full = res["df"]
     start = max(0, len(full) - n)
     df = full.iloc[start:].reset_index(drop=True)
@@ -76,12 +115,14 @@ def render_chart(sym, res, n=CHART_BARS):
         o, h, l, c = r["open"], r["high"], r["low"], r["close"]
         color = BULL if c > o else BEAR if c < o else DOJI
         ax.vlines(i, l, h, color=color, linewidth=1)
+        key = bool(r.get("key_bar", 0))                 # Key bar: قاب زرد
         ax.add_patch(patches.Rectangle((i - 0.3, min(o, c)), 0.6, max(abs(c - o), span * 0.001),
-                                       facecolor=color, edgecolor=color, linewidth=0.6))
-        if r["h_setup"] > 0:
+                                       facecolor=color, edgecolor=KEY if key else color,
+                                       linewidth=1.6 if key else 0.6))
+        if not clean and r["h_setup"] > 0:
             ax.text(i, l - pad, f"H{int(r['h_setup'])}", color=BULL, fontsize=8,
                     fontweight="bold", ha="center", va="top")
-        if r["l_setup"] > 0:
+        if not clean and r["l_setup"] > 0:
             ax.text(i, h + pad, f"L{int(r['l_setup'])}", color=BEAR, fontsize=8,
                     fontweight="bold", ha="center", va="bottom")
 
@@ -89,15 +130,14 @@ def render_chart(sym, res, n=CHART_BARS):
             up = r["pin_bar"] > 0
             ax.text(i, (l - pad * 4) if up else (h + pad * 4), "PIN", color=BULL if up else BEAR,
                     fontsize=7, ha="center", va="top" if up else "bottom")
-        if r["range_bo"] or r["wedge_bo"]:
-            up = (r["range_bo"] or r["wedge_bo"]) > 0
-            ax.annotate("BO", xy=(i, h if up else l), xytext=(i, (h + pad * 6) if up else (l - pad * 6)),
-                        color="#FACC15", fontsize=8, fontweight="bold", ha="center",
-                        arrowprops=dict(arrowstyle="->", color="#FACC15"))
 
     if res.get("cycle") is not None:
         _draw_cycle(ax, res["cycle"], len(full), start, len(df), df["high"].max(), pad)
+    if focus:
+        _draw_focus(ax, df, focus, pad)
 
+    if clean:
+        res = {**res, "swing_highs": [], "swing_lows": [], "wedges": []}
     for s in res["swing_highs"]:
         if s["index"] >= start:
             ax.plot(s["index"] - start, s["price"] + pad * 2.5, marker="v", color="#F43F5E", markersize=5)
@@ -120,9 +160,13 @@ def render_chart(sym, res, n=CHART_BARS):
     for spine in ax.spines.values():
         spine.set_color("#27272A")
     ax.set_xlim(-1, len(df) + 6)
-    ax.set_title(f"{label(sym).split()[-1]} {tf_label()} · Al Brooks Price Action · {res['market_cycle']}",
+    head = focus["title"] if focus and focus.get("title") else "Al Brooks Price Action"
+    cyc = f" · {res['market_cycle']}" if res.get("market_cycle") and res["market_cycle"] != head else ""
+    ax.set_title(f"{label(sym).split()[-1]} {tf_label(tf)} · {head}{cyc}",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_xlabel("Tehran time", color="#9CA3AF", fontsize=8)
+    ax.add_patch(patches.Rectangle((0, 0), 0, 0, facecolor="none", edgecolor=KEY, linewidth=1.6,
+                                   label="Key bar"))
     ax.legend(facecolor="#18181B", edgecolor="#27272A", loc="upper left")
     plt.tight_layout()
 
