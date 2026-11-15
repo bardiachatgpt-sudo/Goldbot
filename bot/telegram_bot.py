@@ -150,7 +150,18 @@ class Telegram:
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data=f"sxt:{sym}:{tf}"),
                types.InlineKeyboardButton(f"⏱ {STRUCTURE_TFS[other]}", callback_data=f"sxt:{sym}:{other}"),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
-        self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
+        self.bot.send_photo(chat_id, png, caption="1️⃣ " + cap, parse_mode="HTML")
+        # مقایسه: همان فازها، ولی خط‌ها و جعبه‌ی رنج از جایی که بیشترین برخورد بوده
+        try:
+            png2, _, _ = render(sym, df, tf=tf_name, core=True)
+            cap2 = (f"2️⃣ <b>{label(sym)} · {tf_name} structure · range lines where most touches are</b>\n"
+                    f"Same phases as 1️⃣. Range top/bottom = the level most swing highs/lows turned at "
+                    f"(a single far wick no longer stretches the box). The faint dotted lines are the outer "
+                    f"edges: a close beyond them still ends the range.")
+            self.bot.send_photo(chat_id, png2, caption=cap2, parse_mode="HTML", reply_markup=kb)
+        except Exception as e:
+            print("structure core error:", e)
+            self.bot.send_message(chat_id, "📐", reply_markup=kb)
 
     # ------------------------------------------------------------ وضعیت
     def send_status(self, chat_id, sym):

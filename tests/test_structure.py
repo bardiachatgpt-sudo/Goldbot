@@ -123,6 +123,29 @@ class TestRangeDoubt(unittest.TestCase):
         self.assertGreater(doubts, 0)
 
 
+class TestCoreLines(unittest.TestCase):
+    """خط‌های رنج از جایی که بیشترین برخورد بوده؛ یک سایه/کف دور خط را نمی‌کشد."""
+
+    def test_far_single_low_is_ignored(self):
+        ph = {"type": "RANGE", "side": 0, "start": 0, "end": 200,
+              "lines": {"x0": 0, "y0": 159.42, "slope": 0.0, "off": 159.99 - 159.42}}
+        piv = [(5, "L", 159.42, 8), (20, "H", 159.97, 23), (35, "L", 159.86, 38), (50, "H", 159.99, 53),
+               (65, "L", 159.85, 68), (80, "H", 159.96, 83), (95, "L", 159.87, 98), (110, "H", 159.95, 113)]
+        top, bot = structure.core_lines(ph, piv, np.full(250, 0.03))
+        self.assertAlmostEqual(bot, 159.86, places=3)
+        self.assertAlmostEqual(top, 159.96, places=3)
+
+    def test_no_cluster_keeps_outer_line(self):
+        ph = {"type": "RANGE", "side": 0, "start": 0, "end": 100,
+              "lines": {"x0": 0, "y0": 10.0, "slope": 0.0, "off": 10.0}}
+        piv = [(5, "L", 10.0, 8), (20, "H", 20.0, 23), (35, "L", 13.0, 38), (50, "H", 16.0, 53)]
+        self.assertEqual(structure.core_lines(ph, piv, np.ones(120)), (20.0, 10.0))
+
+    def test_render_core_png(self):
+        png, phases, now = structure.render("XAUUSD", fake_market(57730), core=True)
+        self.assertEqual(png[:4], b"\x89PNG")
+
+
 class TestStructureV2(unittest.TestCase):
     def test_v2_runs_and_keeps_v1_unchanged(self):
         df = fake_market(57730)
@@ -150,10 +173,12 @@ class TestStructureButton(unittest.TestCase):
             tg.send_structure(7, "XAUUSD")
         self.assertEqual(calls, [("XAUUSD", 501, "5")])            # پیش‌فرض: M5
         photos = tg.bot.send_photo.call_args_list
-        self.assertEqual(len(photos), 1)                                 # فقط نسخه‌ی ۱
-        self.assertEqual(photos[0].args[1][:4], b"\x89PNG")
+        self.assertEqual(len(photos), 2)                                 # 1️⃣ فعلی و 2️⃣ خط‌های بیشترین برخورد
+        for call in photos:
+            self.assertEqual(call.args[1][:4], b"\x89PNG")
+        self.assertIn("1️⃣", photos[0].kwargs["caption"])
         self.assertIn("last 500 candles", photos[0].kwargs["caption"])
-        self.assertNotIn("v2", photos[0].kwargs["caption"])
+        self.assertIn("most touches", photos[1].kwargs["caption"])
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
 
@@ -173,8 +198,8 @@ class TestStructureButton(unittest.TestCase):
         with mock.patch.object(telegram_bot, "get_closed_candles", fake):
             tg.send_structure(7, "XAUUSD", "1")
         self.assertEqual(calls, ["1"])
-        kw = tg.bot.send_photo.call_args.kwargs
-        self.assertIn("M1 structure", kw["caption"])
+        self.assertIn("M1 structure", tg.bot.send_photo.call_args_list[0].kwargs["caption"])
+        kw = tg.bot.send_photo.call_args.kwargs                         # دکمه‌ها زیر عکس دوم
         btns = [b.callback_data for row in kw["reply_markup"].keyboard for b in row]
         self.assertEqual(btns, ["sxt:XAUUSD:1", "sxt:XAUUSD:5", "sx"])      # تازه کردن، تایم‌فریم دیگر، جفت دیگر
 

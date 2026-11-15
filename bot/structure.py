@@ -323,7 +323,35 @@ def _bounds(cur, i):
 
 
 # ---------------------------------------------------------------- نمودار
-def render(sym, df, title_extra="", v2=False, tf="M5"):
+CORE_TOL = 0.5   # خط‌های «بیشترین برخورد»: سقف‌ها (کف‌ها)ی سوئینگ تا نیم کندل متوسط از هم یک خوشه‌اند
+
+
+def core_lines(ph, piv, avg):
+    """سقف و کف رنج از جایی که بیشترین برخورد بوده (مثل خطی که تریدر می‌کشد)، نه از دورترین نقطه.
+
+    هر سقف سوئینگ داخل رنج یک نامزد است؛ سطحی برنده است که بیشترین سقف‌ها تا CORE_TOL کندل متوسط
+    نزدیکش باشند (در تساوی، بالاتر). خط = میانگین همان خوشه. برای کف برعکس. اگر هیچ سطحی حداقل دو برخورد
+    نداشت، همان خط بیرونی می‌ماند. (top, bottom) برمی‌گرداند."""
+    ln = ph["lines"]
+    bot, top = ln["y0"], ln["y0"] + ln["off"]
+    a0, a1 = min(ph["start"], ln["x0"]), ph["end"]
+    inside = [p for p in piv if a0 <= p[0] <= a1 and p[3] <= a1]
+
+    def best(kind, fallback, prefer_high):
+        pts = [(j, p) for j, t, p, _ in inside if t == kind]
+        if not pts:
+            return fallback
+        scored = []
+        for j, v in pts:
+            cluster = [p for k, p in pts if abs(p - v) <= CORE_TOL * avg[k]]
+            scored.append((len(cluster), v if prefer_high else -v, float(np.mean(cluster))))
+        n, _, level = max(scored)
+        return level if n >= 2 else fallback
+
+    return best("H", top, True), best("L", bot, False)
+
+
+def render(sym, df, title_extra="", v2=False, tf="M5", core=False):
     """df: ستون‌های Open/High/Low/Close (مثل data.py). PNG: کندل‌ها، سوئینگ‌ها، خط‌ها، مستطیل رنگی هر فاز."""
     import io
 
@@ -353,6 +381,23 @@ def render(sym, df, title_extra="", v2=False, tf="M5"):
         a0, a1 = ph["start"], ph["end"]
         y0, y1 = l[a0:a1 + 1].min(), h[a0:a1 + 1].max()
         doubt = bool(ph.get("doubt"))                    # رنج نامنظم: کم‌رنگ‌تر، لبه‌ی نقطه‌چین
+        if core and ph["type"] == "RANGE" and ph["lines"]:
+            ctop, cbot = core_lines(ph, piv, avg)        # جعبه و خط‌ها از جایی که بیشترین برخورد بوده
+            ln = ph["lines"]
+            otop, obot = ln["y0"] + ln["off"], ln["y0"]
+            xs = [max(ln["x0"], a0 - 3), a1 + 1]
+            for y in (otop, obot):                       # مرز بیرونی (شکستنش رنج را تمام می‌کند): کم‌رنگ
+                ax.plot(xs, [y, y], color=COL[key], lw=0.9, ls=":", alpha=0.45, zorder=4)
+            ax.add_patch(patches.Rectangle((a0 - 0.5, cbot), a1 - a0 + 1, ctop - cbot, facecolor=COL[key],
+                                           alpha=0.06 if doubt else 0.15, edgecolor=COL[key], lw=1.4,
+                                           ls=":" if doubt else "-", zorder=1))
+            ax.plot(xs, [ctop, ctop], color=COL[key], lw=2.0, zorder=4)
+            ax.plot(xs, [cbot, cbot], color=COL[key], lw=2.0, zorder=4)
+            if a1 - a0 >= 3:
+                ax.text((a0 + a1) / 2, ctop, "RANGE (in doubt)" if doubt else NAME[key], color=COL[key],
+                        ha="center", va="bottom", fontsize=9, fontweight="bold", alpha=0.75 if doubt else 1.0,
+                        zorder=6)
+            continue
         ax.add_patch(patches.Rectangle((a0 - 0.5, y0), a1 - a0 + 1, y1 - y0, facecolor=COL[key],
                                        alpha=0.06 if doubt else 0.13, edgecolor=COL[key], lw=1.4,
                                        ls=":" if doubt else "-", zorder=1))
@@ -393,6 +438,8 @@ def render(sym, df, title_extra="", v2=False, tf="M5"):
     now_txt = NAME.get(now, "unclear (waiting for two new lows and highs)") if now else \
         "unclear (waiting for two new lows and highs)"
     ver = " · v2 (new: candle behaviour + lines)" if v2 else " · v1 (lines only)"
+    if core:
+        ver += " · range lines where most touches are"
     ax.set_title(f"{sym} {tf} · last {n} candles · structure only{ver}{title_extra}\nNow: {now_txt}",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_xlim(-2, n + 2)
