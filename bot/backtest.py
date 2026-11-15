@@ -43,7 +43,42 @@ def to_m5(m1):
     return to_tf(m1, 5)
 
 
-def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
+STRATEGY_NAMES = {"pin": "Pin bar (M1)", "brooks": "Brooks (M5 signal bar)"}
+
+
+def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
+    """رویدادهای معامله با قاعده‌های strategy (pin یا brooks؛ پیش‌فرض: تنظیم ربات زنده)."""
+    from .config import STRATEGY
+    if (strategy or STRATEGY) == "pin":
+        return run_pin(sym, trig, ctx, start, ctx_min, trig_min)
+    return run_brooks(sym, trig, ctx, start, ctx_min, trig_min)
+
+
+def run_pin(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
+    """نسخه‌ی اول: هر کندل M1 فقط با کندل‌های M5 که قبل از شروعش بسته شده‌اند تصمیم می‌گیرد."""
+    from .trades_pin import TradeManager as PinTradeManager
+    ctx = to_tf(trig, ctx_min) if ctx is None else ctx
+    d = analyze(trig, cycle=False)["df"]
+    eng = CycleEngine(sym)
+    tm = PinTradeManager(sym)
+    ctx_end = ctx.index + pd.Timedelta(minutes=ctx_min)
+    k = 0
+    events = []
+    for _, row in d.iterrows():
+        t = row["date"]
+        while k < len(ctx) and ctx_end[k] <= t:
+            r = ctx.iloc[k]
+            eng.on_bar(ctx.index[k], r["Open"], r["High"], r["Low"], r["Close"])
+            k += 1
+        tm.n += 1
+        if start is not None and t < start:
+            continue
+        snap = eng.snapshot() if eng.n >= MIN_BARS else None
+        events += tm._step(row, snap, trig_min)
+    return events, tm
+
+
+def run_brooks(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
     """رویدادهای معامله در بازه‌ی [start, پایان]. کندل‌های قبل از start فقط برای گرم شدن.
 
     trig: کندل‌های اجرا (M1)، ctx: کندل‌های زمینه و سیگنال (M5). به ترتیب زمان: هر کندل M5 که بسته شد
@@ -135,7 +170,8 @@ def fetch(sym, days, ctx_min=5, trig_min=1, progress=None):
     return None, None, " | ".join(errors)
 
 
-def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, progress=None):
+def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, progress=None,
+             strategy=None, compare=True):
     """بک‌تست روزهای معاملاتی اخیر. اگر داده داده نشود از TradingView گرفته می‌شود.
 
     tf: کلید TF_PRESETS. m1/m5 = کندل‌های ماشه/زمینه (برای تایم‌فریم‌های دیگر هم همین نام‌ها).
@@ -154,9 +190,16 @@ def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, p
     if (m1.index < start).sum() < 300:                                 # گرم شدن کافی
         start = m1.index[min(300, len(m1) - 1)]
     m5 = m5[m5.index <= m1.index[-1]] if m5 is not None else None
-    events, _ = run(sym, m1, m5, start, ctx_min, trig_min)
+    from .config import STRATEGY
+    strategy = strategy or STRATEGY
+    events, _ = run(sym, m1, m5, start, ctx_min, trig_min, strategy)
     res = summary(sym, events, start, end, balance)
-    res.update(tf=tf, tf_name=tf_name, days=days,
+    if compare:                                                         # قاعده‌ی دیگر روی همان داده
+        other = "brooks" if strategy == "pin" else "pin"
+        ev2, _ = run(sym, m1, m5, start, ctx_min, trig_min, other)
+        res["compare"] = {"strategy": other, **{k: v for k, v in summary(sym, ev2, start, end, balance).items()
+                                                if k in ("trades", "wins", "net_r", "accounts")}}
+    res.update(strategy=strategy, tf=tf, tf_name=tf_name, days=days,
                days_covered=len([d for d in day_list if pd.Timestamp(d, tz="UTC") >= start.floor("D")]))
     return res, None
 
@@ -170,6 +213,7 @@ def report_text(res, balance=DEFAULT_BALANCE):
     lines = [f"🧪 <b>BACKTEST · {label(sym)}</b>",
              f"{res['start']:%d %b %H:%M} → {res['end']:%d %b %H:%M} UTC · "
              f"{res.get('days_covered', '?')} trading days · {res.get('tf_name', 'M5 → M1')} (context → trigger)",
+             f"📐 Rules: <b>{STRATEGY_NAMES.get(res.get('strategy'), res.get('strategy', ''))}</b> (live bot)",
              LINE,
              f"🎯 Setups: {res['setups']} · cancelled: {res['cancelled']}",
              f"📊 Closed trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate {wr:.0f}%",
@@ -181,6 +225,11 @@ def report_text(res, balance=DEFAULT_BALANCE):
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
         lines.append(f"   ⏳ {res['open']} trade still open at the end (not counted)")
+    cmp = res.get("compare")
+    if cmp:
+        cwr = cmp["wins"] / cmp["trades"] * 100 if cmp["trades"] else 0
+        lines.append(f"🔁 Other rules ({STRATEGY_NAMES[cmp['strategy']]}) on the same data: {cmp['trades']} trades, "
+                     f"win rate {cwr:.0f}%, {cmp['net_r']:+g}R")
     lines.append(LINE)
     lines.append(f"💵 Account ${balance:,.0f}:")
     for rp, a in res["accounts"].items():
@@ -192,7 +241,7 @@ def report_text(res, balance=DEFAULT_BALANCE):
         for e in res["closed"][-15:]:
             icon = "🏆" if e["r"] > 0 else "🛑"
             side = "BUY" if e["side"] > 0 else "SELL"
-            mode = {"RANGE": "Range", "SPIKE": "Spike", "TREND": "Trend"}[e["mode"]]
+            mode = {"RANGE": "Range", "SPIKE": "Spike", "TREND": "Trend"}.get(e["mode"], e["mode"])
             if e.get("n_h"):
                 mode += f" {'H' if e['side'] > 0 else 'L'}{e['n_h']}"
             lines.append(f"{icon} {e['opened']:%d %b %H:%M} {mode} {side} {p(e['entry'])} → {p(e['exit'])} "

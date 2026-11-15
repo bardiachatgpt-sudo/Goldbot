@@ -28,7 +28,12 @@ ALERT_SETUPS = {s.strip().upper() for s in
 # قیمت زنده برای سفارش‌ها و معامله‌های باز (ترتیب واقعی رسیدن به ورود / حد ضرر / حد سود)
 LIVE_PRICES = os.environ.get("LIVE_PRICES", "1") not in ("0", "false", "no")
 
-# ---------------------------------------------------------------- معامله (روی M1)
+# ---------------------------------------------------------------- معامله
+# pin    = نسخه‌ی اول (پیش‌فرض): پین‌بار M1 در لبه‌ی رنج M5 و اولین پولبک اسپایک، با زمینه‌ی Always In
+# brooks = کندل سیگنال M5، H1/H2 در جهت روند، ورود دوم در رنج، حد ضرر ساختاری
+STRATEGY = os.environ.get("STRATEGY", "pin").strip().lower()
+if STRATEGY not in ("pin", "brooks"):
+    STRATEGY = "pin"
 RR = float(os.environ.get("RR", "2"))                 # ریسک به ریوارد
 ORDER_BARS = int(os.environ.get("ORDER_BARS", "3"))   # سفارش/انتظار Key bar حداکثر این تعداد کندل M1
 ARM_BARS = 20           # پین‌بار باید تا این تعداد کندل M1 بعد از تأیید بریک‌اوت بیاید

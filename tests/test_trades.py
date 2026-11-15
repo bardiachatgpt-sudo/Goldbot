@@ -290,6 +290,7 @@ class TestScannerWiring(unittest.TestCase):
              mock.patch.object(scanner, "ALERT_CHARTS", False), \
              mock.patch.object(scanner, "build_trade_alert", lambda ev: live_ev.append(ev) or "trade"):
             sc = scanner.Scanner(lambda t, photo=None: alerts.append(t), lambda s, t, photo=None: fol.append(t))
+            sc.strategy = "brooks"
             sc.trades = {"XAUUSD": TradeManager("XAUUSD")}
             sc.scan_once()
             while feed["n"] < len(m1):
@@ -301,7 +302,7 @@ class TestScannerWiring(unittest.TestCase):
         # بک‌تست روی همان داده دقیقاً همان معامله‌ها را می‌دهد
         from bot import backtest
         start = m1.index[2800]
-        bt, _ = backtest.run("XAUUSD", m1, backtest.to_m5(m1), start)
+        bt, _ = backtest.run("XAUUSD", m1, backtest.to_m5(m1), start, strategy="brooks")
         key = lambda e: (e["kind"], e["mode"], e["time"], round(e.get("entry", e["planned_entry"]), 4))
         self.assertTrue(live_ev)                                        # معامله‌ای واقعاً ساخته شد
         self.assertEqual([key(e) for e in live_ev],

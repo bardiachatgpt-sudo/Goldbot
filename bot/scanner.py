@@ -10,14 +10,15 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from .alert_chart import m5_alert_chart, trade_chart
-from .config import (ALERT_CHARTS, ALERT_SETUPS, BARS, CONTEXT_TF, LIVE_PRICES, MIN_BARS, SYMBOLS,
-                     TRIGGER_BARS, TRIGGER_TF, WORKERS)
+from .alert_chart import m5_alert_chart, pin_trade_chart, trade_chart
+from .config import (ALERT_CHARTS, ALERT_SETUPS, BARS, CONTEXT_TF, LIVE_PRICES, MIN_BARS, STRATEGY,
+                     SYMBOLS, TRIGGER_BARS, TRIGGER_TF, WORKERS)
 from .cycle import RANGE, SPIKE, CycleEngine
 from .data import get_closed_candles, source
 from .messages import build_alert, build_cycle_alert, build_spike_alert, build_trade_alert
 from .strategy import analyze, from_tradingview, new_events
 from .trades import TradeManager
+from .trades_pin import TradeManager as PinTradeManager
 
 
 def _chart(make, *args):
@@ -37,7 +38,10 @@ class Scanner:
         self.send_followers = send_followers or (lambda sym, text, photo=None: None)
         self.seen = {}                                    # نماد → آخرین کندل M5 پردازش‌شده
         self.cycles = {}                                  # نماد → موتور چرخه‌ی زنده
-        self.trades = {s: TradeManager(s) for s in SYMBOLS}
+        self.strategy = STRATEGY
+        make = PinTradeManager if STRATEGY == "pin" else TradeManager
+        self.trades = {s: make(s) for s in SYMBOLS}
+        self.m1_res = {}                                  # آخرین تحلیل M1 (عکس هشدار نسخه‌ی pin)
         self.last_m5 = {}                                 # آخرین کندل‌های M5 هر نماد (برای عکس هشدار)
         self.lock = threading.RLock()                     # تلگرام و قیمت زنده هم این‌ها را می‌خوانند
         self.stream = None
@@ -49,7 +53,10 @@ class Scanner:
     def on_price(self, sym, price, ts):
         with self.lock:
             events = self.trades[sym].on_price(price, ts)
-            if events:
+            if events and self.strategy == "pin":
+                for ev in events:
+                    self.send(build_trade_alert(ev), _chart(pin_trade_chart, sym, self.m1_res.get(sym), ev))
+            elif events:
                 res5 = self._res5(sym)
                 for ev in events:
                     self.send(build_trade_alert(ev), _chart(trade_chart, sym, res5, ev))
@@ -79,8 +86,12 @@ class Scanner:
             if m5 is None:
                 continue
             with self.lock:
-                self._cycle(sym, m5)                      # اول چرخه‌ی M5، بعد کندل سیگنال M5 و اجرای M1
-                self._trades(sym, m1, m5)
+                if self.strategy == "pin":
+                    self._trades_pin(sym, m1)             # M1 با چرخه‌ی M5 تا آخرین کندل بسته‌شده (بدون نگاه به جلو)
+                    self._cycle(sym, m5)
+                else:
+                    self._cycle(sym, m5)                  # اول چرخه‌ی M5، بعد کندل سیگنال M5 و اجرای M1
+                    self._trades(sym, m1, m5)
                 self._m5_setups(sym, m5)
             with self.lock:
                 self._update_stream()
@@ -97,6 +108,17 @@ class Scanner:
             res5 = self._res5(sym)
             for ev in events:
                 self.send(build_trade_alert(ev), _chart(trade_chart, sym, res5, ev))
+
+    def _trades_pin(self, sym, m1):
+        """نسخه‌ی اول: پین‌بار M1، زمینه = چرخه‌ی M5 (با Always In)."""
+        if "TRADE" not in ALERT_SETUPS or m1 is None or len(m1) < MIN_BARS:
+            return
+        res = analyze(m1, cycle=False)
+        self.m1_res[sym] = res
+        eng = self.cycles.get(sym)
+        ctx = eng.snapshot() if eng is not None else None
+        for ev in self.trades[sym].process(res["df"], ctx):
+            self.send(build_trade_alert(ev), _chart(pin_trade_chart, sym, res, ev))
 
     def _res5(self, sym):
         """تحلیل M5 برای عکس هشدار معامله."""

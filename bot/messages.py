@@ -245,6 +245,8 @@ def build_cycle_alert(ev):
 # ---------------------------------------------------------------- معامله
 def build_trade_alert(ev):
     """ستاپ (سفارش Stop) / ورود / حد سود یا ضرر / لغو."""
+    if ev.get("strategy") == "pin":
+        return build_pin_trade_alert(ev)
     from .config import ORDER_BARS, RR
     sym, s, k, mode = ev["sym"], ev["side"], ev["kind"], ev["mode"]
     p = lambda x: fmt_price(sym, x)
@@ -300,6 +302,60 @@ def build_trade_alert(ev):
     if ev.get("live"):
         lines.append("⚡ <i>Live price</i>")
     return (f"{head}\n<b>{label(sym)}</b>  ·  {where}\n{LINE}\n"
+            + "\n".join(lines) + f"\n{LINE}\n{_times(ev['time'], exact=True)}")
+
+
+def build_pin_trade_alert(ev):
+    """ستاپ ورود / ورود / بسته شدن / لغو."""
+    from .config import ORDER_BARS, RR
+    sym, s, k = ev["sym"], ev["side"], ev["kind"]
+    p = lambda x: fmt_price(sym, x)
+    buy = s > 0
+    side = "BUY 📈" if buy else "SELL 📉"
+    where = ("📦 Range trade" if ev["mode"] == "RANGE" else "🚀 Spike pullback trade")
+    pin = ev["pin"]
+    lines = []
+
+    if k == "TRADE_PENDING":
+        if ev["mode"] == "RANGE":
+            head = f"🎯 <b>SETUP · {side}</b> · pin bar at the range {'bottom' if buy else 'top'}"
+            how = (f"⏳ {'Buy' if buy else 'Sell'} stop at <b>{p(ev['planned_entry'])}</b> "
+                   f"(pin bar {'high' if buy else 'low'}) · valid {ORDER_BARS} M1 bars")
+        else:
+            head = f"🎯 <b>SETUP · {side}</b> · pin bar ends the first pullback after the M5 spike"
+            how = (f"⏳ Waiting for an M1 key bar ({ORDER_BARS} bars max) · "
+                   f"entry at the open of the next bar\n"
+                   f"🧱 Broken range level {p(ev['level'])} held by the pullback")
+        lines = [how,
+                 f"🛑 Stop loss: <b>{p(ev['sl'])}</b> (pin {'low' if buy else 'high'} "
+                 f"{'−' if buy else '+'} spread {p(ev['spread'])})",
+                 f"✅ Take profit: <b>{p(ev['tp'])}</b> (1:{RR:g}, from the planned entry)",
+                 f"❌ Cancelled if price goes {'below' if buy else 'above'} {p(pin['low'] if buy else pin['high'])} first"]
+    elif k == "TRADE_OPEN":
+        head = f"🚀 <b>ENTRY · {side}</b>"
+        why = (f"price broke the pin bar {'high' if buy else 'low'}" if ev["mode"] == "RANGE"
+               else "M1 key bar closed · entry at the next bar's open")
+        lines = [f"➡️ Entry: <b>{p(ev['entry'])}</b> · {why}",
+                 f"🛑 Stop loss: <b>{p(ev['sl'])}</b>   ✅ Take profit: <b>{p(ev['tp'])}</b>",
+                 f"📏 Risk {p(ev['risk'])} · Reward {p(ev['risk'] * RR)} · 1:{RR:g}"]
+        if ev.get("tp_beyond_range"):
+            edge = ev["range_high"] if buy else ev["range_low"]
+            lines.append(f"⚠️ Take profit is beyond the range {'top' if buy else 'bottom'} ({p(edge)}) · "
+                         f"Brooks: ranges often hold, consider it")
+    elif k == "TRADE_CLOSED":
+        win = ev["result"] == "TP"
+        head = (f"🏆 <b>TAKE PROFIT · +{ev['r']:g}R</b>" if win else f"🛑 <b>STOP LOSS · {ev['r']:g}R</b>")
+        lines = [f"{side} from {p(ev['entry'])} → exit {p(ev['exit'])}",
+                 f"⏱ {ev['bars']} M1 bars in the trade"]
+    else:
+        reason = (f"price went {'below' if buy else 'above'} the pin bar tail before entry"
+                  if ev["reason"] == "tail" else f"no entry within {ORDER_BARS} M1 bars")
+        head = f"✖️ <b>SETUP CANCELLED · {side}</b>"
+        lines = [f"<i>{reason}</i>"]
+
+    if ev.get("live"):
+        lines.append("⚡ <i>Live price</i>")
+    return (f"{head}\n<b>{label(sym)}</b>  ·  {where}  ·  M5 context → M1 trigger\n{LINE}\n"
             + "\n".join(lines) + f"\n{LINE}\n{_times(ev['time'], exact=True)}")
 
 
