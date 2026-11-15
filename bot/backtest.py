@@ -5,8 +5,8 @@
 - داده‌ی گذشته قیمت زنده ندارد: ترتیب داخل هر کندل M1 از شکل کندل (صعودی: باز←کف←سقف←بسته)
 - حساب: موجودی شروع، ریسک ثابت درصدی از موجودی فعلی در هر معامله (مرکب)
 
-اجرا از خط فرمان (با فایل CSV کندل‌های M1: time,open,high,low,close):
-    python -m bot.backtest XAUUSD --csv m1.csv --balance 1000 --risk 1
+اجرا از خط فرمان (با فایل CSV کندل‌های ماشه: time,open,high,low,close):
+    python -m bot.backtest XAUUSD --csv m1.csv --days 5 --balance 1000 --tf 5-1
 """
 import argparse
 import io
@@ -21,35 +21,52 @@ from .trades import TradeManager
 DEFAULT_BALANCE = 1000.0
 RISKS = (1.0, 2.0)          # درصد ریسک هر معامله که گزارش می‌شود
 
+# تایم‌فریم‌ها: کلید → (دقیقه‌ی زمینه، دقیقه‌ی ماشه، نام، بازه‌های پیشنهادی به روز معاملاتی)
+TF_PRESETS = {
+    "5-1": (5, 1, "M5 → M1", (1, 3, 5, 10)),
+    "15-3": (15, 3, "M15 → M3", (3, 5, 10, 20)),
+    "60-5": (60, 5, "H1 → M5", (5, 10, 20, 40)),
+}
+LIVE_TF = "5-1"             # تنظیم ربات زنده
 
-def to_m5(m1):
-    """M1 → M5 مثل TradingView (زمان = شروع کندل). کندل ناقص آخر حذف می‌شود."""
-    agg = m1.resample("5min", label="left", closed="left").agg(
+
+def to_tf(df, minutes):
+    """کندل‌ها → تایم‌فریم بالاتر مثل TradingView (زمان = شروع کندل). کندل ناقص آخر حذف می‌شود."""
+    step = df.index[1] - df.index[0] if len(df) > 1 else pd.Timedelta(minutes=1)
+    agg = df.resample(f"{minutes}min", label="left", closed="left").agg(
         {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
-    done = agg.index + pd.Timedelta(minutes=5) <= m1.index[-1] + pd.Timedelta(minutes=1)
+    done = agg.index + pd.Timedelta(minutes=minutes) <= df.index[-1] + step
     return agg[done]
 
 
-def run(sym, m1, m5=None, start=None):
-    """رویدادهای معامله در بازه‌ی [start, پایان]. کندل‌های قبل از start فقط برای گرم شدن."""
-    m5 = to_m5(m1) if m5 is None else m5
-    d = analyze(m1, cycle=False)["df"]
+def to_m5(m1):
+    return to_tf(m1, 5)
+
+
+def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
+    """رویدادهای معامله در بازه‌ی [start, پایان]. کندل‌های قبل از start فقط برای گرم شدن.
+
+    trig: کندل‌های ماشه (M1)، ctx: کندل‌های زمینه (M5). هر کندل ماشه فقط با کندل‌های زمینه‌ای
+    که قبل از شروعش بسته شده‌اند تصمیم می‌گیرد.
+    """
+    ctx = to_tf(trig, ctx_min) if ctx is None else ctx
+    d = analyze(trig, cycle=False)["df"]
     eng = CycleEngine(sym)
     tm = TradeManager(sym)
-    m5_end = m5.index + pd.Timedelta(minutes=5)
+    ctx_end = ctx.index + pd.Timedelta(minutes=ctx_min)
     k = 0
     events = []
     for _, row in d.iterrows():
         t = row["date"]
-        while k < len(m5) and m5_end[k] <= t:          # کندل‌های M5 بسته‌شده تا شروع این کندل M1
-            r = m5.iloc[k]
-            eng.on_bar(m5.index[k], r["Open"], r["High"], r["Low"], r["Close"])
+        while k < len(ctx) and ctx_end[k] <= t:
+            r = ctx.iloc[k]
+            eng.on_bar(ctx.index[k], r["Open"], r["High"], r["Low"], r["Close"])
             k += 1
         tm.n += 1
         if start is not None and t < start:
             continue
-        ctx = eng.snapshot() if eng.n >= MIN_BARS else None
-        events += tm._step(row, ctx, 1)
+        snap = eng.snapshot() if eng.n >= MIN_BARS else None
+        events += tm._step(row, snap, trig_min)
     return events, tm
 
 
@@ -89,38 +106,50 @@ def summary(sym, events, start, end, balance=DEFAULT_BALANCE):
     return res
 
 
-def fetch(sym, days):
-    """داده‌ی TradingView (روی Render). روزهای معاملاتی اخیر + گرم شدن."""
-    from .data import fetch_candles, LAST_SOURCE
+def fetch(sym, days, ctx_min=5, trig_min=1, progress=None):
+    """داده‌ی TradingView (روی Render): روزهای معاملاتی اخیر + گرم شدن."""
     from .config import SYMBOLS
-    n1 = min(days * 1440 + 400, 20000)
-    n5 = min(days * 288 + 600, 5000)
+    from .data import LAST_SOURCE, fetch_candles
+    n_trig = min(days * 1440 // trig_min + 400, 20000)
+    n_ctx = min(days * 1440 // ctx_min + 600, 5000)
     errors = []
-    for tv in ([LAST_SOURCE[sym]] if sym in LAST_SOURCE else []) + SYMBOLS[sym]:
-        m1, e1 = fetch_candles(tv, "1", n1, timeout=60)
-        m5, e5 = fetch_candles(tv, "5", n5, timeout=60)
-        if m1 is not None and m5 is not None and len(m1) > MIN_BARS and len(m5) > MIN_BARS:
-            return m1.iloc[:-1], m5.iloc[:-1], None
-        errors.append(e1 or e5 or f"{tv}: too few bars")
+    for tv in dict.fromkeys(([LAST_SOURCE[sym]] if sym in LAST_SOURCE else []) + SYMBOLS[sym]):
+        if progress:
+            progress("fetch_trig")
+        trig, e1 = fetch_candles(tv, str(trig_min), n_trig, timeout=90)
+        if progress:
+            progress("fetch_ctx")
+        ctx, e2 = fetch_candles(tv, str(ctx_min), n_ctx, timeout=60)
+        if trig is not None and ctx is not None and len(trig) > MIN_BARS and len(ctx) > MIN_BARS:
+            return trig.iloc[:-1], ctx.iloc[:-1], None
+        errors.append(e1 or e2 or f"{tv}: too few bars")
     return None, None, " | ".join(errors)
 
 
-def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None):
-    """بک‌تست روزهای اخیر. اگر m1/m5 داده نشود از TradingView گرفته می‌شود."""
+def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, progress=None):
+    """بک‌تست روزهای معاملاتی اخیر. اگر داده داده نشود از TradingView گرفته می‌شود.
+
+    tf: کلید TF_PRESETS. m1/m5 = کندل‌های ماشه/زمینه (برای تایم‌فریم‌های دیگر هم همین نام‌ها).
+    """
+    ctx_min, trig_min, tf_name, _ = TF_PRESETS[tf]
     if m1 is None:
-        m1, m5, err = fetch(sym, days)
+        m1, m5, err = fetch(sym, days, ctx_min, trig_min, progress)
         if m1 is None:
             return None, err
-    end = m1.index[-1] + pd.Timedelta(minutes=1)
-    # شروع: days روز معاملاتی آخر (بر اساس روزهایی که داده دارند)
-    day_list = sorted(set(m1.index.tz_convert("UTC").date))
+    if progress:
+        progress("replay")
+    end = m1.index[-1] + pd.Timedelta(minutes=trig_min)
+    day_list = sorted(set(m1.index.tz_convert("UTC").date))          # روزهایی که داده دارند
     first_day = day_list[-days] if len(day_list) >= days else day_list[0]
     start = pd.Timestamp(first_day, tz="UTC")
-    if (m1.index < start).sum() < 300:                    # گرم شدن کافی
+    if (m1.index < start).sum() < 300:                                 # گرم شدن کافی
         start = m1.index[min(300, len(m1) - 1)]
     m5 = m5[m5.index <= m1.index[-1]] if m5 is not None else None
-    events, _ = run(sym, m1, m5, start)
-    return summary(sym, events, start, end, balance), None
+    events, _ = run(sym, m1, m5, start, ctx_min, trig_min)
+    res = summary(sym, events, start, end, balance)
+    res.update(tf=tf, tf_name=tf_name, days=days,
+               days_covered=len([d for d in day_list if pd.Timestamp(d, tz="UTC") >= start.floor("D")]))
+    return res, None
 
 
 # ---------------------------------------------------------------- خروجی
@@ -130,7 +159,8 @@ def report_text(res, balance=DEFAULT_BALANCE):
     p = lambda x: fmt_price(sym, x)
     wr = res["wins"] / res["trades"] * 100 if res["trades"] else 0
     lines = [f"🧪 <b>BACKTEST · {label(sym)}</b>",
-             f"{res['start']:%d %b %H:%M} → {res['end']:%d %b %H:%M} UTC · M5 context → M1 trigger",
+             f"{res['start']:%d %b %H:%M} → {res['end']:%d %b %H:%M} UTC · "
+             f"{res.get('days_covered', '?')} trading days · {res.get('tf_name', 'M5 → M1')} (context → trigger)",
              LINE,
              f"🎯 Setups: {res['setups']} · cancelled: {res['cancelled']}",
              f"📊 Closed trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate {wr:.0f}%",
@@ -157,7 +187,7 @@ def report_text(res, balance=DEFAULT_BALANCE):
         if len(res["closed"]) > 15:
             lines.append(f"<i>… {len(res['closed']) - 15} earlier trades not listed</i>")
     lines.append(LINE)
-    lines.append(f"<i>Spread {spread(sym):g} in the stop · no commission or slippage · inside each M1 bar the order "
+    lines.append(f"<i>Spread {spread(sym):g} in the stop · no commission or slippage · inside each trigger bar the order "
                  f"comes from the candle shape (live trading uses real-time prices) · past results do not "
                  f"predict the future</i>")
     return "\n".join(lines)
@@ -180,7 +210,7 @@ def equity_chart(res, balance=DEFAULT_BALANCE):
         for t, b in a["curve"]:
             ax.plot(t, b, "o", color=colors.get(rp, "#60A5FA"), markersize=4)
     ax.axhline(balance, color="#9CA3AF", linestyle=":", linewidth=1)
-    ax.set_title(f"{res['sym']} backtest · {res['trades']} trades · {res['net_r']:+g}R",
+    ax.set_title(f"{res['sym']} {res.get('tf_name', '')} backtest · {res['trades']} trades · {res['net_r']:+g}R",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_ylabel("Account ($)", color="#9CA3AF")
     ax.tick_params(colors="#9CA3AF")
@@ -211,9 +241,11 @@ def main():
     ap.add_argument("--days", type=int, default=5)
     ap.add_argument("--csv", help="M1 candles CSV (time,open,high,low,close); otherwise TradingView")
     ap.add_argument("--balance", type=float, default=DEFAULT_BALANCE)
+    ap.add_argument("--tf", default=LIVE_TF, choices=list(TF_PRESETS))
     args = ap.parse_args()
     m1 = load_csv(args.csv) if args.csv else None
-    res, err = run_days(args.sym, args.days, args.balance, m1=m1, m5=to_m5(m1) if m1 is not None else None)
+    ctx = to_tf(m1, TF_PRESETS[args.tf][0]) if m1 is not None else None
+    res, err = run_days(args.sym, args.days, args.balance, m1=m1, m5=ctx, tf=args.tf)
     if res is None:
         print("error:", err)
         return

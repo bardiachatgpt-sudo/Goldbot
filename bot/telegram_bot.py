@@ -9,6 +9,7 @@ import time
 import telebot
 from telebot import types
 
+from .backtest_ui import BacktestFlow
 from .chart import render_chart
 from .config import ALERT_SETUPS, BARS, CHANNEL_ID, MIN_BARS, SYMBOLS, label, tf_label
 from .data import get_closed_candles
@@ -19,8 +20,9 @@ from .strategy import analyze
 HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / channel / under test) "
         "with levels and chart.\n"
         "⭐ Follow a pair to also get every cycle change for it.\n"
-        "🧪 /backtest XAUUSD 5 replays the last 5 days with the same rules on a $1,000 account.\n\n"
-        "/status XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest XAUUSD 5")
+        "🧪 Backtest: tap the button (pair → timeframe → period) to replay recent days with the same rules "
+        "on a $1,000 account.\n\n"
+        "/status XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest")
 BACKTEST_MAX_DAYS = 10
 
 
@@ -39,6 +41,7 @@ class Telegram:
         self.state = state
         self.scanner = scanner
         self.bot = telebot.TeleBot(token) if token else None
+        self.backtests = BacktestFlow(self)
         if self.bot:
             self._register_handlers()
 
@@ -83,6 +86,7 @@ class Telegram:
         kb = types.InlineKeyboardMarkup(row_width=3)
         kb.add(*[types.InlineKeyboardButton(("⭐ " if is_following(self.state, chat_id, n) else "") + label(n),
                                             callback_data="st:" + n) for n in SYMBOLS])
+        kb.row(types.InlineKeyboardButton("🧪 Backtest", callback_data="bt"))
         return kb
 
     def pair_keyboard(self, chat_id, sym):
@@ -122,22 +126,6 @@ class Telegram:
             except Exception as e:
                 print("photo error:", e)
         self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=self.pair_keyboard(chat_id, sym))
-
-    def send_backtest(self, chat_id, sym, days):
-        from . import backtest
-        try:
-            res, err = backtest.run_days(sym, days)
-        except Exception as e:
-            res, err = None, str(e)[:200]
-        if res is None:
-            self.bot.send_message(chat_id, f"⚠️ Backtest failed: {err}")
-            return
-        try:
-            png = backtest.equity_chart(res)
-        except Exception as e:
-            print("backtest chart error:", e)
-            png = None
-        self._send(chat_id, backtest.report_text(res), png)
 
     def set_follow(self, chat_id, sym, on):
         self.state.add_user(chat_id)
@@ -194,20 +182,22 @@ class Telegram:
 
         @bot.message_handler(commands=["backtest", "bt"])
         def on_backtest(m):
-            parts = m.text.split()
-            sym, days = "XAUUSD", 5
-            for a in parts[1:]:
+            self.state.add_user(m.chat.id)
+            parts = m.text.split()[1:]
+            if not parts:                                   # مرحله‌به‌مرحله با دکمه
+                self.backtests.start(m.chat.id)
+                return
+            sym, days = "XAUUSD", 5                          # میان‌بر: /backtest XAUUSD 5
+            for a in parts:
                 if a.isdigit():
                     days = max(1, min(int(a), BACKTEST_MAX_DAYS))
                 elif a.upper() in SYMBOLS:
                     sym = a.upper()
                 else:
-                    bot.send_message(m.chat.id, f"Usage: /backtest XAUUSD 5  (pairs: {', '.join(SYMBOLS)}; "
-                                                f"days 1–{BACKTEST_MAX_DAYS})")
+                    bot.send_message(m.chat.id, f"Usage: /backtest  (step by step)  or  /backtest XAUUSD 5\n"
+                                                f"Pairs: {', '.join(SYMBOLS)} · days 1–{BACKTEST_MAX_DAYS}")
                     return
-            bot.send_message(m.chat.id, f"🧪 Backtesting {label(sym)} over the last {days} trading days… "
-                                        f"(fetching data, up to a minute)")
-            self.send_backtest(m.chat.id, sym, days)
+            self.backtests.run(m.chat.id, sym, "5-1", days)
 
         @bot.message_handler(commands=["following"])
         def on_following(m):
@@ -218,6 +208,9 @@ class Telegram:
         def on_button(c):
             chat_id = c.message.chat.id
             action, _, sym = c.data.partition(":")
+            if action in ("bt", "btp", "btt", "btd"):          # بک‌تست مرحله‌به‌مرحله
+                self.backtests.on_callback(c)
+                return
             if action == "home":
                 bot.answer_callback_query(c.id)
                 bot.send_message(chat_id, self.following_text(chat_id), reply_markup=self.pairs_keyboard(chat_id))
