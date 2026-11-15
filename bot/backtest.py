@@ -46,27 +46,35 @@ def to_m5(m1):
 def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
     """رویدادهای معامله در بازه‌ی [start, پایان]. کندل‌های قبل از start فقط برای گرم شدن.
 
-    trig: کندل‌های ماشه (M1)، ctx: کندل‌های زمینه (M5). هر کندل ماشه فقط با کندل‌های زمینه‌ای
-    که قبل از شروعش بسته شده‌اند تصمیم می‌گیرد.
+    trig: کندل‌های اجرا (M1)، ctx: کندل‌های زمینه و سیگنال (M5). به ترتیب زمان: هر کندل M5 که بسته شد
+    اول به چرخه داده می‌شود، بعد کندل سیگنال بررسی می‌شود؛ کندل‌های M1 ورود و خروج را اجرا می‌کنند.
     """
+    from .strategy import from_tradingview
     ctx = to_tf(trig, ctx_min) if ctx is None else ctx
-    d = analyze(trig, cycle=False)["df"]
+    d1 = from_tradingview(trig)
+    d5 = from_tradingview(ctx)
     eng = CycleEngine(sym)
-    tm = TradeManager(sym)
-    ctx_end = ctx.index + pd.Timedelta(minutes=ctx_min)
+    tm = TradeManager(sym, signal_tf=ctx_min)
+    rows5 = list(d5.itertuples(index=False))
+    step5 = pd.Timedelta(minutes=ctx_min)
     k = 0
     events = []
-    for _, row in d.iterrows():
-        t = row["date"]
-        while k < len(ctx) and ctx_end[k] <= t:
-            r = ctx.iloc[k]
-            eng.on_bar(ctx.index[k], r["Open"], r["High"], r["Low"], r["Close"])
+    for r1 in d1.itertuples(index=False):
+        t = r1.date
+        while k < len(rows5) and rows5[k].date + step5 <= t:     # کندل‌های M5 بسته‌شده تا این لحظه
+            r5 = rows5[k]
+            eng.on_bar(r5.date, r5.open, r5.high, r5.low, r5.close)
+            snap = eng.snapshot() if eng.n >= MIN_BARS else None
+            ev = tm.on_m5_close(r5._asdict(), snap)
+            if start is None or r5.date + step5 > start:
+                events += ev
+            else:
+                tm.pending = None                                 # قبل از بازه: فقط گرم شدن
             k += 1
-        tm.n += 1
         if start is not None and t < start:
+            tm.pending, tm.open = None, None
             continue
-        snap = eng.snapshot() if eng.n >= MIN_BARS else None
-        events += tm._step(row, snap, trig_min)
+        events += tm.on_m1(r1._asdict(), trig_min)
     return events, tm
 
 

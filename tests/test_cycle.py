@@ -16,7 +16,7 @@ from bot.storage import JsonState, followers, is_following  # noqa: E402
 from bot.telegram_bot import Telegram, caption_fits  # noqa: E402
 from tests.synthetic import candles  # noqa: E402
 
-ALLOWED = {RANGE: {SPIKE}, SPIKE: {CHANNEL, SPIKE}, CHANNEL: {TEST, RANGE, SPIKE},
+ALLOWED = {RANGE: {SPIKE, CHANNEL}, SPIKE: {CHANNEL, SPIKE}, CHANNEL: {TEST, RANGE, SPIKE},
            TEST: {CHANNEL, RANGE, SPIKE}}
 
 
@@ -102,7 +102,8 @@ class TestCycleRules(unittest.TestCase):
             self.assertEqual(segs[0]["start"], 0)
             for x, y in zip(segs, segs[1:]):
                 self.assertEqual(x["end"] + 1, y["start"])                     # بخش‌ها پیوسته‌اند
-        for need in [(RANGE, SPIKE), (SPIKE, CHANNEL), (CHANNEL, TEST), (TEST, RANGE), (TEST, CHANNEL)]:
+        for need in [(RANGE, SPIKE), (RANGE, CHANNEL), (SPIKE, CHANNEL), (CHANNEL, TEST), (TEST, RANGE),
+                     (TEST, CHANNEL)]:
             self.assertIn(need, seen)
 
 

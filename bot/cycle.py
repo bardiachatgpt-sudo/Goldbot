@@ -21,6 +21,10 @@
             اگر بعداً در رنج، کف شکست هم شکسته شود ← «احتمال برگشت».
 اسپایک قوی مخالف در هر حالتی ← اسپایک مخالف.
 
+روند بدون اسپایک (Always In): از رنج، اگر سقف و کف بالاتر/پایین‌تر، شیب EMA20 و ۱۵ از ۲۰ کندل آخر یک
+طرف EMA باشد ← کانال (جزوه فصل ۰۲). رنج «واقعی» فقط با EMA صاف، عبور از دو طرف EMA و ارتفاع بیشتر از
+Barbwire (فصل ۰۶). snapshot تست‌های کف و سقف رنج را هم برمی‌گرداند (ورود دوم، فصل ۰۴ و ۰۵).
+
 اسپایکی که از رنج بیرون می‌زند سطح شکسته‌شده را به خاطر می‌سپارد. اولین پولبک بعدش تا وقتی آن طرف این
 سطح بسته نشده «پولبک معتبر» است (snapshot["pullback"]) و ستاپ ورود اسپایک فقط در همین پنجره فعال است.
 """
@@ -36,6 +40,22 @@ DOUBLE_TOP = 0.5        # سقف دوم تا نصف میانگین اندازه�
 SWING_N = 3             # تأیید سوئینگ تست: ۳ کندل هر طرف
 TIGHT_PULLBACK = 3      # کانال تنگ: پولبک‌ها حداکثر ۳ کندل
 RANGE_LOOKBACK = 60     # سقف و کف رنج از حداکثر ۶۰ کندل اخیر آن
+
+# روند بدون اسپایک (Always In) — ال بروکس / جزوه فصل ۰۲: سه سؤال زمینه
+TREND_N = 20            # از ۲۰ کندل اخیر ...
+TREND_FRAC = 0.75       # ... حداقل ۷۵٪ (۱۵ کندل) یک طرف EMA20 بسته شده باشند
+EMA_SLOPE_N = 10        # شیب EMA در ۱۰ کندل ...
+EMA_SLOPE_MIN = 1.0     # ... حداقل یک کندل متوسط
+STRUCT_N = 40           # سقف و کف پایین‌تر (یا بالاتر) در ۴۰ کندل اخیر
+
+# رنج واقعی — جزوه فصل ۰۶
+RANGE_MIN_BARS = 10     # رنج باید حداقل ۱۰ کندل عمر داشته باشد
+FLAT_N = 20             # EMA در ۲۰ کندل ...
+FLAT_MAX = 1.5          # ... حداکثر ۱.۵ کندل متوسط جابه‌جا شده باشد (تقریباً صاف)
+CROSS_N = 30            # در ۳۰ کندل اخیر ...
+CROSS_MIN = 2           # ... حداقل ۲ بار بسته‌شدن از این طرف EMA به آن طرف
+BARBWIRE = 3.0          # ارتفاع رنج ≤ ۳ کندل متوسط = رنج تنگ (Barbwire): معامله نکن
+EDGE = 0.25             # لبه‌ی رنج = ربع پایینی/بالایی
 
 NAMES = {RANGE: "TRADING RANGE", SPIKE: "SPIKE", CHANNEL: "CHANNEL", TEST: "CHANNEL UNDER TEST"}
 
@@ -177,12 +197,98 @@ class CycleEngine:
             if first is not None and (hi is None or self._beyond(s, self.c[i], hi if s > 0 else lo)):
                 self._to_spike(i, s, first, broken=(hi if s > 0 else lo) if hi is not None else None)
                 return None
+        side = self._always_in(i)                    # روند بدون اسپایک
+        if side:
+            self._to_trend_channel(i, side)
+            return None
         self._range_update(i)
         w = inf.get("watch")
         if w and not inf["reversal"] and self._beyond(-w["side"], self.c[i], w["level"]):
             inf["reversal"] = True
             return "reversal"
         return None
+
+    # ------------------------------------------------------------ Always In
+    def _swings(self, a, i, w=2):
+        """سوئینگ‌های تأییدشده بین a و i (هر طرف w کندل)."""
+        hs, ls = [], []
+        for j in range(max(a, w), i - w + 1):
+            if self.h[j] == max(self.h[j - w:j + w + 1]):
+                hs.append((j, self.h[j]))
+            if self.l[j] == min(self.l[j - w:j + w + 1]):
+                ls.append((j, self.l[j]))
+        return hs, ls
+
+    def _always_in(self, i):
+        """+1/-1 اگر بازار بدون اسپایک هم آشکارا در روند است، وگرنه 0.
+
+        ال بروکس (Always In) و جزوه فصل ۰۲: (۱) سقف و کف بالاتر/پایین‌تر، (۲) شیب EMA20 و
+        سمت قیمت، (۳) کندل‌های ۲۰ تای اخیر در هم نرفته‌اند. هر سه باید برقرار باشند.
+        """
+        if i < STRUCT_N or self.avg[i] is None:
+            return 0
+        closes = self.c[i - TREND_N + 1:i + 1]
+        emas = self.ema[i - TREND_N + 1:i + 1]
+        above = sum(c > e for c, e in zip(closes, emas)) / TREND_N
+        slope = self.ema[i] - self.ema[i - EMA_SLOPE_N]
+        hs, ls = self._swings(i - STRUCT_N, i)
+        if len(hs) < 2 or len(ls) < 2:
+            return 0
+        for side in (1, -1):
+            frac = above if side > 0 else 1 - above
+            if frac < TREND_FRAC or slope * side < EMA_SLOPE_MIN * self.avg[i]:
+                continue
+            (_, h1), (_, h2) = hs[-2], hs[-1]
+            (_, l1), (_, l2) = ls[-2], ls[-1]
+            if (h2 - h1) * side > 0 and (l2 - l1) * side > 0:
+                return side
+        return 0
+
+    def _to_trend_channel(self, i, s):
+        """رنج ← کانال بدون اسپایک. شروع کانال = دورترین نقطه‌ی مخالف در ۴۰ کندل اخیر."""
+        a0 = i - STRUCT_N
+        arr = self.l if s > 0 else self.h
+        pick = min if s > 0 else max
+        anchor = pick(arr[a0:i + 1])
+        anchor_i = max(j for j in range(a0, i + 1) if arr[j] == anchor)
+        ext_arr = self.h if s > 0 else self.l
+        ext = (max if s > 0 else min)(ext_arr[anchor_i:i + 1])
+        ext_i = max(j for j in range(anchor_i, i + 1) if ext_arr[j] == ext)
+        self._set(i, CHANNEL, s, {"spike_start": anchor, "spike_i": anchor_i, "spike_ext": ext,
+                                  "high": ext, "high_i": ext_i, "anchor_i": anchor_i, "anchor": anchor,
+                                  "forming": False, "wrong_ema": 0, "pb_run": 0, "pb_max": 0,
+                                  "broken": None, "spike_id": None, "level_lost": False, "via": "always_in"})
+        self.last_channel_start = {"price": anchor, "time": self.t[anchor_i], "side": s, "i": anchor_i}
+        self._fit_line(i)
+
+    # ------------------------------------------------------------ رنج واقعی
+    def _range_quality(self, i):
+        """(واقعی؟، Barbwire؟، تست‌های کف، تست‌های سقف) — جزوه فصل ۰۶ و ۰۵."""
+        inf = self.info
+        hi, lo, avg = inf.get("hi"), inf.get("lo"), self.avg[i]
+        if hi is None or avg is None or hi <= lo:
+            return False, False, [], []
+        height = hi - lo
+        tight = height <= BARBWIRE * avg
+        flat = i >= FLAT_N and abs(self.ema[i] - self.ema[i - FLAT_N]) <= FLAT_MAX * avg
+        a = max(1, i - CROSS_N + 1)
+        sides = [self.c[j] > self.ema[j] for j in range(a - 1, i + 1)]
+        crosses = sum(x != y for x, y in zip(sides, sides[1:]))
+        old_enough = i - self.since + 1 >= RANGE_MIN_BARS
+        valid = old_enough and flat and crosses >= CROSS_MIN and not tight
+        start = max(self.since, i - RANGE_LOOKBACK + 1)
+        bottom, top = [], []
+        for zone_hit, out, pick in ((lambda j: self.l[j] <= lo + EDGE * height, bottom, self.l),
+                                    (lambda j: self.h[j] >= hi - EDGE * height, top, self.h)):
+            prev = False
+            for j in range(start, i + 1):
+                hit = zone_hit(j)
+                if hit and not prev:
+                    out.append(pick[j])
+                elif hit and prev:
+                    out[-1] = min(out[-1], pick[j]) if pick is self.l else max(out[-1], pick[j])
+                prev = hit
+        return valid, tight, bottom, top
 
     # ------------------------------------------------------------ SPIKE
     def _on_spike(self, i):
@@ -392,9 +498,11 @@ class CycleEngine:
         if self.state == RANGE:
             hi, lo = inf["hi"], inf["lo"]
             pos = (self.c[i] - lo) / (hi - lo) if hi and hi > lo else 0.5
+            valid, tight, bottom, top = self._range_quality(i)
             snap.update(hi=hi, lo=lo, mid=(hi + lo) / 2 if hi else None, pos=pos,
                         magnet=inf.get("magnet"), why=inf.get("why", ""), from_side=inf.get("from_side", 0),
-                        reversal=inf.get("reversal"), watch=inf.get("watch"))
+                        reversal=inf.get("reversal"), watch=inf.get("watch"),
+                        valid=valid, tight=tight, bottom_tests=bottom, top_tests=top)
         elif self.state == SPIKE:
             size = abs(inf["extreme"] - inf["start_price"]) / self.avg[i]
             snap.update(start_price=inf["start_price"], extreme=inf["extreme"], size=size,
@@ -403,6 +511,7 @@ class CycleEngine:
             snap["bars"] = i - inf["anchor_i"] + 1          # از شروع کانال (بعد از ادامه هم)
             snap.update(spike_start=inf["spike_start"], start_price=inf["anchor"],
                         start_time=self.t[inf["anchor_i"]], high=inf["high"], forming=inf["forming"],
+                        via=inf.get("via", "spike"),
                         broken=inf.get("broken"), spike_id=inf.get("spike_id"),
                         level_lost=inf.get("level_lost", False),
                         # اولین پولبک بعد از اسپایکی که از رنج بیرون زده و سطح شکسته‌شده هنوز حفظ شده

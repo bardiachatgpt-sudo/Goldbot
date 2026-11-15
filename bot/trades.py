@@ -1,30 +1,44 @@
-"""ستاپ‌های ورود. زمینه: چرخه‌ی M5. ماشه: M1.
+"""ستاپ‌های ورود به روش ال بروکس (و جزوه‌ی چینی).
 
-📦 RANGE (چرخه‌ی M5 در حالت رنج)
-   پین‌بار رنج روی M1 (کف/سقف ۱۰ کندل را رد کرده) در ربع پایینی رنج برای خرید، ربع بالایی برای فروش
-   ورود: Buy Stop روی سقف پین‌بار / Sell Stop روی کف آن، حداکثر ORDER_BARS کندل M1
-   لغو: عبور قیمت از سایه‌ی پین‌بار قبل از ورود، یا تمام شدن ORDER_BARS
+کندل سیگنال روی M5 (مثل خود ال بروکس)؛ ورود با سفارش Stop روی سقف/کف کندل سیگنال؛ حد ضرر پشت سر دیگر
+کندل سیگنال ± اسپرد؛ حد سود = ورود ± RR × ریسک. کندل‌های M1 و قیمت زنده فقط برای اینکه دقیق بفهمیم
+ورود / حد ضرر / حد سود کدام اول خورد.
 
-🚀 SPIKE (اولین پولبک بعد از اسپایک M5 که از رنج بیرون زده)
-   پنجره: تا وقتی چرخه‌ی M5 در «پولبک معتبر» است (سطح شکسته‌شده‌ی رنج حفظ شده و سقف اسپایک هنوز رد نشده)
-   پین‌بار پولبک روی M1 در جهت اسپایک که آن طرف سطح شکسته‌شده بسته شود
-   سپس Key bar در همان جهت، حداکثر ORDER_BARS کندل بعد از پین‌بار
-   ورود: شروع کندل بعد از Key bar (= بسته‌شدن Key bar)
-   لغو: عبور قیمت از سایه‌ی پین‌بار قبل از Key bar، یا تمام شدن ORDER_BARS
-   فقط یک ورود برای هر اسپایک
+📈 TREND — معامله در جهت روند (جزوه فصل ۰۳–۰۴؛ «در روند فقط در جهت روند»)
+   زمینه: کانال M5 (از اسپایک یا Always In)، سمت = جهت کانال
+   کندل سیگنال: کندل پولبک (سقف پایین‌تر از کندل قبل در کانال صعودی) که قوی بسته شده (نیمه‌ی بالایی)
+   H1 کافی است در کانال تنگ؛ در کانال باز H2 لازم است (ورود دوم، فصل ۰۴). حداکثر H3.
+   پولبک سالم: حداکثر ۶۲٪ حرکت از شروع کانال تا سقف (فصل ۰۳)
 
-هر دو: حد ضرر = پشت سایه‌ی پین‌بار ± اسپرد، حد سود = ورود ± RR × ریسک. یک معامله در هر لحظه برای هر نماد.
+🚀 SPIKE — اولین پولبک بعد از اسپایکی که از رنج بیرون زده (همان قاعده‌ی TREND، با H1)
+   تا وقتی پولبک روی M5 به داخل رنج قبلی بسته نشده و سقف اسپایک دوباره رد نشده
 
-ترتیب رسیدن قیمت به سطح‌ها (ورود رنج / سایه / حد ضرر / حد سود):
-   - با قیمت زنده (on_price): همان ترتیبی که در بازار رخ داد
-   - برای دقیقه‌ای که قیمت زنده نداشتیم: از شکل کندل M1
-       صعودی: باز ← کف ← سقف ← بسته     نزولی: باز ← سقف ← کف ← بسته
+📦 RANGE — بالا بفروش، پایین بخر (فصل ۰۶) — فقط در «رنج واقعی»:
+   EMA تقریباً صاف، قیمت از دو طرف EMA عبور کرده، و رنج تنگ (Barbwire) نیست
+   کندل سیگنال صعودی در ربع پایینی رنج، که بیرون رنج بسته نشده باشد
+   ورود دوم (فصل ۰۴ و ۰۵): کف رنج قبلاً یک بار تست شده و این تست کف قبلی را بیش از یک کندل
+   متوسط نشکسته (Double Bottom). برعکس برای فروش در سقف.
+
+ترمز (فصل ۰۸): دو ضرر پشت‌سرهم در یک جهت ← آن جهت تا تغییر زمینه‌ی M5 بسته می‌شود.
+لغو: قیمت قبل از ورود از سر دیگر کندل سیگنال رد شود، یا ORDER_BARS کندل M5 بگذرد.
+سفارش در انتظار با کندل سیگنال تازه‌تر در همان جهت جابه‌جا می‌شود (ال بروکس سفارش را دنبال می‌کند).
+یک معامله در هر لحظه برای هر نماد.
+
+ترتیب داخل کندل وقتی قیمت زنده نداریم: صعودی باز ← کف ← سقف ← بسته، نزولی باز ← سقف ← کف ← بسته.
 """
+from collections import deque
+
 import pandas as pd
 
-from .config import ORDER_BARS, RANGE_EDGE, RR, spread
+from .config import ORDER_BARS, RR, spread
 
-RANGE, SPIKE = "RANGE", "SPIKE"
+RANGE, SPIKE, TREND = "RANGE", "SPIKE", "TREND"
+SIGNAL_TF = 5               # کندل سیگنال M5
+PULLBACK_MAX = 0.62         # پولبک سالم حداکثر ۶۲٪ (فصل ۰۳)
+MAX_H = 3                   # حداکثر H3 / L3
+SECOND_TEST_SLACK = 1.0     # تست دوم کف قبلی را حداکثر یک کندل متوسط بشکند
+EDGE = 0.25
+LOSS_BRAKE = 2
 
 
 def candle_path(o, h, l, c):
@@ -35,9 +49,8 @@ def candle_path(o, h, l, c):
 def walk(path, levels):
     """اولین سطحی که مسیر قیمت به آن می‌رسد.
 
-    levels: {نام: (قیمت، جهت)} — جهت +1 یعنی «رسیدن از پایین یا بالاتر بودن» (قیمت ≥ سطح)،
-    -1 یعنی قیمت ≤ سطح. برمی‌گرداند (نام، قیمت اجرا، باقی‌مانده‌ی مسیر) یا None.
-    اگر قیمت از همان اول آن طرف سطح باشد (گپ)، اجرا با همان قیمت اول است.
+    levels: {نام: (قیمت، جهت)} — جهت +1 یعنی قیمت ≥ سطح، -1 یعنی قیمت ≤ سطح.
+    برمی‌گرداند (نام، قیمت اجرا، باقی‌مانده‌ی مسیر) یا None. گپ: اجرا با همان قیمت اول.
     """
     def beyond(p, lvl, d):
         return p >= lvl if d > 0 else p <= lvl
@@ -57,22 +70,40 @@ def walk(path, levels):
     return None
 
 
+def signal_bar(side, o, h, l, c):
+    """کندل سیگنال ال بروکس: در جهت معامله نزدیک انتهایش بسته شده (نیمه‌ی بالایی برای خرید)
+    یا سایه‌ی بلند خلاف جهت دارد (پین‌بار)."""
+    r = h - l
+    if r <= 0:
+        return False
+    cp = (c - l) / r
+    if side > 0:
+        return cp >= 0.5 and (c >= o or (min(o, c) - l) >= 0.5 * r)
+    return cp <= 0.5 and (c <= o or (h - max(o, c)) >= 0.5 * r)
+
+
 class TradeManager:
-    def __init__(self, sym):
+    def __init__(self, sym, signal_tf=SIGNAL_TF):
         self.sym = sym
-        self.last = None          # آخرین کندل M1 پردازش‌شده (زمان شروع)
-        self.pending = None       # ستاپ منتظر ورود
-        self.open = None          # معامله‌ی باز
-        self.used_spikes = set()  # یک ورود برای هر اسپایک
+        self.signal_tf = signal_tf    # دقیقه‌ی کندل سیگنال (M5)
+        self.pending = None
+        self.open = None
+        self.used_spikes = set()
+        self.live_from = None
+        self.last1 = None             # آخرین کندل M1 پردازش‌شده
+        self.last5 = None             # آخرین کندل M5 پردازش‌شده
+        self.prev5 = None             # کندل M5 قبلی (برای پولبک)
+        self.ranges = deque(maxlen=20)
+        self.trend = None             # شمارش H/L در کانال فعلی
+        self.losses = {1: 0, -1: 0}
+        self.blocked = {}             # جهت → زمینه‌ای که در آن بسته شد
         self.n = 0
-        self.live_from = None     # از این زمان، قیمت زنده‌ی این نماد بی‌وقفه دریافت شده
 
     def busy(self):
         return self.pending is not None or self.open is not None
 
     def needs_live(self):
-        """قیمت زنده فقط وقتی لازم است که سفارش رنج یا معامله‌ی باز داریم."""
-        return self.open is not None or (self.pending is not None and self.pending["mode"] == RANGE)
+        return self.busy()
 
     # ------------------------------------------------------------ قیمت زنده
     def live_started(self, t):
@@ -83,70 +114,42 @@ class TradeManager:
         self.live_from = None
 
     def on_price(self, price, t):
-        """یک قیمت زنده: سفارش رنج (ورود/شکستن سایه) و حد ضرر/سود معامله‌ی باز."""
         self.live_started(t)
         price = float(price)
         if self.open is not None:
-            return self._exit_on(self.open, [price], t, live=True)
-        if self.pending is not None and self.pending["mode"] == RANGE:
-            return self._range_fill_on(self.pending, [price], t, live=True)
+            return self._exit_on([price], t, live=True)
+        if self.pending is not None:
+            return self._fill_on([price], t, live=True)
         return []
 
     def _covered(self, bar_start):
         return self.live_from is not None and self.live_from <= bar_start
 
-    # ------------------------------------------------------------ کندل‌ها
-    def process(self, d, ctx=None, bar_minutes=1):
-        """d: analyze(m1, cycle=False)["df"]؛ ctx: snapshot چرخه‌ی M5 (تا آخرین کندل بسته‌شده)."""
-        if d is None or d.empty:
-            return []
-        if self.last is None:                     # اولین اجرا: فقط نقطه‌ی شروع
-            self.last = d["date"].iloc[-1]
-            return []
-        rows = d[d["date"] > self.last]
-        out = []
-        for _, row in rows.iterrows():
-            self.n += 1
-            out += self._step(row, ctx, bar_minutes)
-        if len(rows):
-            self.last = rows["date"].iloc[-1]
-        return out
-
-    # ------------------------------------------------------------ ابزار
+    # ------------------------------------------------------------ ورود / خروج روی مسیر قیمت
     def _ev(self, kind, t, time, price, **extra):
-        return {"kind": kind, "sym": self.sym, "setup": "TRADE", "time": time, "price": float(price),
-                **t, **extra}
+        return {**t, **extra, "kind": kind, "sym": self.sym, "setup": "TRADE", "time": time,
+                "price": float(price)}
 
-    def _levels(self, side, pin, entry):
-        sp = spread(self.sym)
-        sl = pin["low"] - sp if side > 0 else pin["high"] + sp
-        risk = abs(entry - sl)
-        tp = entry + RR * risk if side > 0 else entry - RR * risk
-        return sl, tp, risk
-
-    @staticmethod
-    def _pin(row):
-        return {"time": row["date"], "high": float(row["high"]), "low": float(row["low"]),
-                "close": float(row["close"])}
-
-    def _exit_on(self, t, path, time, live=False):
-        """حد ضرر / حد سود روی مسیر قیمت."""
+    def _exit_on(self, path, time, live=False):
+        t = self.open
         s = t["side"]
         hit = walk(path, {"SL": (t["sl"], -s), "TP": (t["tp"], s)})
         if not hit:
             return []
-        name, _, _ = hit
+        name = hit[0]
         lvl = t["sl"] if name == "SL" else t["tp"]
         self.open = None
-        return [self._ev("TRADE_CLOSED", t, time, lvl, result=name, r=RR if name == "TP" else -1.0,
-                         exit=lvl, bars=self.n - t["opened_n"], live=live)]
+        win = name == "TP"
+        self._record(s, win, t)
+        return [self._ev("TRADE_CLOSED", t, time, lvl, result=name, r=RR if win else -1.0, exit=lvl,
+                         bars=t.get("bars_open", 0), live=live)]
 
-    def _range_fill_on(self, t, path, time, live=False):
-        """سفارش Stop رنج روی مسیر قیمت: اول ورود یا اول شکستن سایه؟ بعد از ورود، بقیه‌ی همان مسیر."""
-        s, pin = t["side"], t["pin"]
-        trig = pin["high"] if s > 0 else pin["low"]
-        tail = pin["low"] if s > 0 else pin["high"]
-        # شکستن سایه = رفتن آن طرف سایه (برابر بودن هنوز شکستن نیست)
+    def _fill_on(self, path, time, live=False):
+        """سفارش Stop: اول ورود یا اول شکستن سر دیگر کندل سیگنال؟ بعد از ورود، بقیه‌ی همان مسیر."""
+        t = self.pending
+        s, sig = t["side"], t["signal"]
+        trig = sig["high"] if s > 0 else sig["low"]
+        tail = sig["low"] if s > 0 else sig["high"]
         tail_lvl = tail - 1e-12 * max(1.0, abs(tail)) * s
         hit = walk(path, {"ENTRY": (trig, s), "TAIL": (tail_lvl, -s)})
         if not hit:
@@ -155,75 +158,185 @@ class TradeManager:
         if name == "TAIL":
             self.pending = None
             return [self._ev("TRADE_CANCELLED", t, time, price, reason="tail", live=live)]
-        entry = price if (price - trig) * s > 0 else trig      # گپ از روی سطح: اجرا با قیمت گپ
-        out = [self._open(t, time, entry, live=live)]
-        out += self._exit_on(self.open, [entry] + rest[1:], time, live=live)
+        entry = price if (price - trig) * s > 0 else trig       # گپ: اجرا با قیمت گپ
+        out = [self._open(time, entry, live)]
+        out += self._exit_on([entry] + rest[1:], time, live)
         return out
 
-    # ------------------------------------------------------------ هر کندل M1
-    def _step(self, row, ctx, bar_minutes):
-        o, h, l, c = (float(row[k]) for k in ("open", "high", "low", "close"))
-        start = row["date"]
-        end = start + pd.Timedelta(minutes=bar_minutes)
-        live = self._covered(start)                  # این دقیقه را قیمت زنده پوشش داده؟
-        path = candle_path(o, h, l, c)
-
-        # ۱) معامله‌ی باز
-        if self.open is not None:
-            return [] if live else self._exit_on(self.open, path, end)
-
-        # ۲) ستاپ در انتظار
-        if self.pending is not None:
-            t = self.pending
-            s, pin = t["side"], t["pin"]
-            t["waited"] += 1
-            if t["mode"] == RANGE:
-                if not live:
-                    res = self._range_fill_on(t, path, end)
-                    if res:
-                        return res
-            else:                                          # اسپایک: منتظر Key bar
-                if (l < pin["low"]) if s > 0 else (h > pin["high"]):
-                    self.pending = None
-                    return [self._ev("TRADE_CANCELLED", t, end, c, reason="tail")]
-                if int(row["key_bar"]) == s:
-                    t["key"] = self._pin(row)
-                    return [self._open(t, end, c)]
-            if self.pending is not None and t["waited"] >= ORDER_BARS:
-                self.pending = None
-                return [self._ev("TRADE_CANCELLED", t, end, c, reason="expired")]
-            return []
-
-        # ۳) ستاپ تازه
-        if not ctx:
-            return []
-        pin = self._pin(row)
-        if ctx.get("state") == "CHANNEL" and ctx.get("pullback") and ctx.get("spike_id") not in self.used_spikes:
-            s = ctx["side"]
-            if int(row.get("pin_pullback", 0)) == s and \
-                    (pin["close"] > ctx["broken"] if s > 0 else pin["close"] < ctx["broken"]):
-                self.used_spikes.add(ctx["spike_id"])
-                return [self._pending(SPIKE, s, pin, end, level=ctx["broken"], spike_id=ctx["spike_id"],
-                                      spike_high=ctx.get("high"))]
-        pin_side = int(row["pin_bar"])
-        if pin_side and ctx.get("state") == "RANGE" and ctx.get("hi") is not None and ctx["hi"] > ctx["lo"]:
-            top, bot = ctx["hi"], ctx["lo"]
-            edge = RANGE_EDGE * (top - bot)
-            if (pin_side > 0 and pin["low"] <= bot + edge) or (pin_side < 0 and pin["high"] >= top - edge):
-                return [self._pending(RANGE, pin_side, pin, end, range_high=top, range_low=bot)]
-        return []
-
-    def _pending(self, mode, side, pin, time, **extra):
-        planned = (pin["high"] if side > 0 else pin["low"]) if mode == RANGE else pin["close"]
-        sl, tp, risk = self._levels(side, pin, planned)
-        self.pending = {"mode": mode, "side": side, "pin": pin, "waited": 0, "planned_entry": planned,
-                        "sl": sl, "tp": tp, "risk": risk, "spread": spread(self.sym), **extra}
-        return self._ev("TRADE_PENDING", self.pending, time, pin["close"])
-
-    def _open(self, t, time, entry, live=False):
-        sl, tp, risk = self._levels(t["side"], t["pin"], entry)
-        t.update(entry=entry, sl=sl, tp=tp, risk=risk, opened=time, opened_n=self.n)
+    def _open(self, time, entry, live=False):
+        t = self.pending
+        sl, tp, risk = self._levels(t["side"], t["signal"], entry)
+        t.update(entry=entry, sl=sl, tp=tp, risk=risk, opened=time, bars_open=0)
         if t["mode"] == RANGE:
             t["tp_beyond_range"] = bool(tp > t["range_high"] if t["side"] > 0 else tp < t["range_low"])
         self.pending, self.open = None, t
         return self._ev("TRADE_OPEN", t, time, entry, live=live)
+
+    def _levels(self, side, sig, entry):
+        sp = spread(self.sym)
+        sl = sig["low"] - sp if side > 0 else sig["high"] + sp
+        risk = abs(entry - sl)
+        tp = entry + RR * risk if side > 0 else entry - RR * risk
+        return sl, tp, risk
+
+    def _record(self, side, win, t):
+        self.losses[side] = 0 if win else self.losses[side] + 1
+        if self.losses[side] >= LOSS_BRAKE:
+            self.blocked[side] = t.get("ctx_key")
+
+    # ------------------------------------------------------------ کندل M1: اجرا
+    def on_m1(self, row, bar_minutes=1):
+        o, h, l, c = (float(row[k]) for k in ("open", "high", "low", "close"))
+        start = row["date"]
+        end = start + pd.Timedelta(minutes=bar_minutes)
+        if self.open is not None:
+            self.open["bars_open"] = self.open.get("bars_open", 0) + 1
+        if self.pending is not None and start >= self.pending["valid_until"]:
+            t, self.pending = self.pending, None
+            return [self._ev("TRADE_CANCELLED", t, t["valid_until"], o, reason="expired")]
+        if self._covered(start):                       # قیمت زنده این دقیقه را دیده
+            return []
+        path = candle_path(o, h, l, c)
+        if self.open is not None:
+            return self._exit_on(path, end)
+        if self.pending is not None:
+            return self._fill_on(path, end)
+        return []
+
+    # ------------------------------------------------------------ کندل M5: ستاپ
+    def on_m5_close(self, row, ctx):
+        """row: کندل M5 تازه بسته‌شده (با ema20)؛ ctx: snapshot چرخه بعد از همین کندل."""
+        o, h, l, c = (float(row[k]) for k in ("open", "high", "low", "close"))
+        end = row["date"] + pd.Timedelta(minutes=self.signal_tf)
+        avg = sum(self.ranges) / len(self.ranges) if len(self.ranges) >= 5 else None
+        self.ranges.append(h - l)
+        prev, self.prev5 = self.prev5, {"high": h, "low": l}
+        if not ctx or avg is None or prev is None:
+            return []
+        key = (ctx.get("state"), ctx.get("side"), ctx.get("since"))
+        for side in list(self.blocked):                # ترمز تا تغییر زمینه
+            if self.blocked[side] != key:
+                del self.blocked[side]
+                self.losses[side] = 0
+        self._count_pushes(ctx, h, l, prev)
+        if self.open is not None:
+            return []
+        sig = {"time": row["date"], "high": h, "low": l, "close": c}
+        setup = self._trend_setup(ctx, sig, o, h, l, c, prev) or self._range_setup(ctx, sig, o, h, l, c, avg)
+        if not setup:
+            return []
+        mode, side, extra = setup
+        if side in self.blocked:
+            return []
+        if self.pending is not None and self.pending["side"] != side:
+            return []                                  # یک ستاپ در هر لحظه
+        moved = self.pending is not None
+        planned = h if side > 0 else l
+        sl, tp, risk = self._levels(side, sig, planned)
+        self.pending = {"mode": mode, "side": side, "signal": sig, "pin": sig, "planned_entry": planned,
+                        "sl": sl, "tp": tp, "risk": risk, "spread": spread(self.sym), "ctx_key": key,
+                        "valid_until": end + pd.Timedelta(minutes=self.signal_tf * ORDER_BARS), **extra}
+        if mode == SPIKE:
+            self.used_spikes.add(ctx.get("spike_id"))
+        return [self._ev("TRADE_PENDING", self.pending, end, c, moved=moved)]
+
+    def _count_pushes(self, ctx, h, l, prev):
+        """شمارش H1/H2/H3 (L1/L2/L3) در کانال: هر بار که قیمت از سقف کندل قبل رد شود ولی سقف تازه
+        نسازد، یک تلاش شکست‌خورده است؛ با سقف تازه صفر می‌شود."""
+        if ctx.get("state") != "CHANNEL":
+            self.trend = None
+            return
+        s = ctx["side"]
+        key = (s, ctx.get("start_time"))
+        ext = h if s > 0 else l
+        if self.trend is None or self.trend["key"] != key:
+            self.trend = {"key": key, "ext": ctx.get("high", ext), "pushes": 0, "in_pb": False}
+        tr = self.trend
+        if (ext - tr["ext"]) * s > 0:                  # سقف تازه
+            tr.update(ext=ext, pushes=0, in_pb=False)
+            return
+        hp = prev["high"] if s > 0 else prev["low"]
+        if (ext - hp) * s < 0:                          # کندل پولبک
+            tr["in_pb"] = True
+        elif (ext - hp) * s > 0 and tr["in_pb"]:        # تلاشی که سقف تازه نساخت
+            tr["pushes"] += 1
+            tr["in_pb"] = False
+
+    def _trend_setup(self, ctx, sig, o, h, l, c, prev):
+        if ctx.get("state") != "CHANNEL" or self.trend is None:
+            return None
+        s = ctx["side"]
+        forming = ctx.get("forming")
+        if forming and not ctx.get("pullback"):
+            return None                                # اسپایکی که از رنج نبوده یا سطحش از دست رفته
+        if forming and ctx.get("spike_id") in self.used_spikes:
+            return None
+        ext = h if s > 0 else l
+        hp = prev["high"] if s > 0 else prev["low"]
+        if (ext - hp) * s >= 0 or not signal_bar(s, o, h, l, c):
+            return None                                # کندل پولبک با بسته‌شدن قوی
+        n_h = self.trend["pushes"] + 1                  # ورود بعدی = H{n}
+        need = 1 if forming or ctx.get("kind") == "tight" else 2
+        if n_h < need or n_h > MAX_H:
+            return None
+        start = ctx.get("start_price")
+        back = l if s > 0 else h
+        if start is not None and abs(self.trend["ext"] - start) > 0:
+            depth = (self.trend["ext"] - back) * s / abs(self.trend["ext"] - start)
+            if depth > PULLBACK_MAX:
+                return None
+        if forming:
+            back_close = c
+            if (back_close - ctx["broken"]) * s <= 0:   # کندل سیگنال باید آن طرف سطح شکسته‌شده بسته شود
+                return None
+            return SPIKE, s, {"level": ctx["broken"], "spike_id": ctx.get("spike_id"), "n_h": n_h}
+        return TREND, s, {"n_h": n_h, "channel_kind": ctx.get("kind"), "trend_line": ctx.get("trend_line")}
+
+    def _range_setup(self, ctx, sig, o, h, l, c, avg):
+        if ctx.get("state") != "RANGE" or not ctx.get("valid") or ctx.get("tight"):
+            return None
+        top, bot = ctx["hi"], ctx["lo"]
+        height = top - bot
+        for s, tests in ((1, ctx.get("bottom_tests") or []), (-1, ctx.get("top_tests") or [])):
+            near = l <= bot + EDGE * height if s > 0 else h >= top - EDGE * height
+            inside = c >= bot if s > 0 else c <= top
+            if not (near and inside and signal_bar(s, o, h, l, c)) or len(tests) < 2:
+                continue
+            first, cur = tests[-2], tests[-1]
+            if (first - cur) * s > SECOND_TEST_SLACK * avg:
+                continue                               # تست دوم کف اول را خیلی شکسته: رنج دارد می‌شکند
+            return RANGE, s, {"range_high": top, "range_low": bot, "first_test": first}
+        return None
+
+    # ------------------------------------------------------------ برای اسکنر زنده
+    def process(self, d1, d5, ctx):
+        """کندل‌های تازه‌ی M1 و M5 به ترتیب زمان. ctx: snapshot چرخه بعد از آخرین کندل M5."""
+        out = []
+        if self.last1 is None or self.last5 is None:   # اولین اجرا: فقط نقطه‌ی شروع
+            if d1 is not None and len(d1):
+                self.last1 = d1["date"].iloc[-1]
+            if d5 is not None and len(d5):
+                self.last5 = d5["date"].iloc[-1]
+                for _, r in d5.tail(25).iterrows():
+                    self.ranges.append(float(r["high"] - r["low"]))
+                    self.prev5 = {"high": float(r["high"]), "low": float(r["low"])}
+            return out
+        new1 = d1[d1["date"] > self.last1] if d1 is not None else d1
+        new5 = d5[d5["date"] > self.last5] if d5 is not None else d5
+        closes = [] if new5 is None else [(r["date"] + pd.Timedelta(minutes=self.signal_tf), r)
+                                          for _, r in new5.iterrows()]
+        rows1 = [] if new1 is None else [r for _, r in new1.iterrows()]
+        k = 0
+        for t5, r5 in closes:
+            while k < len(rows1) and rows1[k]["date"] < t5:
+                out += self.on_m1(rows1[k])
+                k += 1
+            out += self.on_m5_close(r5, ctx)
+        while k < len(rows1):
+            out += self.on_m1(rows1[k])
+            k += 1
+        if new1 is not None and len(new1):
+            self.last1 = new1["date"].iloc[-1]
+        if new5 is not None and len(new5):
+            self.last5 = new5["date"].iloc[-1]
+        return out

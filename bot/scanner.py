@@ -3,7 +3,7 @@
 هر دقیقه برای هر نماد:
   - M5 (زمینه): چرخه‌ی بازار. هر تغییر برای فالوکننده‌ها؛ «🚀 اسپایک، منتظر پولبک» برای همه.
     هشدارهای اطلاعاتی M5 (H2/L2، پین‌بار، وج) فقط اگر در ALERT_SETUPS روشن شده باشند.
-  - M1 (ماشه): ستاپ ورود، ورود، حد سود/ضرر (trades.py) برای همه.
+  - ستاپ ورود (trades.py) برای همه: کندل سیگنال روی M5 به روش ال بروکس، ورود و خروج روی M1 و قیمت زنده.
 قیمت زنده (live.py) فقط برای نمادهایی که سفارش رنج یا معامله‌ی باز دارند.
 """
 import threading
@@ -16,7 +16,7 @@ from .config import (ALERT_CHARTS, ALERT_SETUPS, BARS, CONTEXT_TF, LIVE_PRICES, 
 from .cycle import RANGE, SPIKE, CycleEngine
 from .data import get_closed_candles, source
 from .messages import build_alert, build_cycle_alert, build_spike_alert, build_trade_alert
-from .strategy import analyze, new_events
+from .strategy import analyze, from_tradingview, new_events
 from .trades import TradeManager
 
 
@@ -38,7 +38,7 @@ class Scanner:
         self.seen = {}                                    # نماد → آخرین کندل M5 پردازش‌شده
         self.cycles = {}                                  # نماد → موتور چرخه‌ی زنده
         self.trades = {s: TradeManager(s) for s in SYMBOLS}
-        self.m1_res = {}                                  # آخرین تحلیل M1 هر نماد (برای عکس هشدار زنده)
+        self.last_m5 = {}                                 # آخرین کندل‌های M5 هر نماد (برای عکس هشدار)
         self.lock = threading.RLock()                     # تلگرام و قیمت زنده هم این‌ها را می‌خوانند
         self.stream = None
 
@@ -48,8 +48,11 @@ class Scanner:
 
     def on_price(self, sym, price, ts):
         with self.lock:
-            for ev in self.trades[sym].on_price(price, ts):
-                self.send(build_trade_alert(ev), _chart(trade_chart, sym, self.m1_res.get(sym), ev))
+            events = self.trades[sym].on_price(price, ts)
+            if events:
+                res5 = self._res5(sym)
+                for ev in events:
+                    self.send(build_trade_alert(ev), _chart(trade_chart, sym, res5, ev))
             self._update_stream()
 
     def on_live_up(self, sym, ts):
@@ -76,21 +79,35 @@ class Scanner:
             if m5 is None:
                 continue
             with self.lock:
-                self._trades(sym, m1)                     # اول M1، با چرخه‌ی M5 تا آخرین کندل بسته‌شده
-                self._cycle(sym, m5)
+                self._cycle(sym, m5)                      # اول چرخه‌ی M5، بعد کندل سیگنال M5 و اجرای M1
+                self._trades(sym, m1, m5)
                 self._m5_setups(sym, m5)
             with self.lock:
                 self._update_stream()
 
-    def _trades(self, sym, m1):
+    def _trades(self, sym, m1, m5):
+        """کندل سیگنال روی M5 (زمینه = چرخه‌ی M5)، ورود و خروج روی M1 و قیمت زنده."""
         if "TRADE" not in ALERT_SETUPS or m1 is None or len(m1) < MIN_BARS:
             return
-        res = analyze(m1, cycle=False)
-        self.m1_res[sym] = res
         eng = self.cycles.get(sym)
-        ctx = eng.snapshot() if eng is not None else None
-        for ev in self.trades[sym].process(res["df"], ctx):
-            self.send(build_trade_alert(ev), _chart(trade_chart, sym, res, ev))
+        ctx = eng.snapshot() if eng is not None and eng.n >= MIN_BARS else None
+        self.last_m5[sym] = m5
+        events = self.trades[sym].process(from_tradingview(m1), from_tradingview(m5), ctx)
+        if events:
+            res5 = self._res5(sym)
+            for ev in events:
+                self.send(build_trade_alert(ev), _chart(trade_chart, sym, res5, ev))
+
+    def _res5(self, sym):
+        """تحلیل M5 برای عکس هشدار معامله."""
+        m5 = self.last_m5.get(sym)
+        if not ALERT_CHARTS or m5 is None:
+            return None
+        try:
+            return analyze(m5, engine=self.cycles.get(sym))
+        except Exception as e:
+            print("analysis error:", e)
+            return None
 
     def _cycle(self, sym, df):
         eng = self.cycles.get(sym)

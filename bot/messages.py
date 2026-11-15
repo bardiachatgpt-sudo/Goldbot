@@ -166,6 +166,13 @@ def cycle_block(sym, snap):
             return "\n".join(out)
         out.append(f"   Top {p(snap['hi'])} · Mid {p(snap['mid'])} · Bottom {p(snap['lo'])}")
         out.append(f"   Price {_where(snap['pos'])} ({snap['pos'] * 100:.0f}% of the range)")
+        if snap.get("tight"):
+            out.append("   🚧 Tight range (barbwire) · Brooks: don't trade, wait")
+        elif snap.get("valid"):
+            out.append(f"   ✅ Real range: flat EMA, two-sided · tests: bottom {len(snap.get('bottom_tests') or [])}, "
+                       f"top {len(snap.get('top_tests') or [])}")
+        else:
+            out.append("   ⏳ Not a clean range yet (EMA still sloping or one-sided) · no range trades")
         if snap.get("why"):
             out.append(f"   Formed by: {_why(snap['why'], snap.get('from_side', 0))}")
         if snap.get("magnet"):
@@ -189,6 +196,10 @@ def cycle_block(sym, snap):
         out.append(f"   Beyond {p(snap['high'])} → channel confirmed · "
                    f"back beyond {p(snap['spike_start'])} → trading range")
     elif st == "CHANNEL":
+        if snap.get("via") == "always_in":
+            out.append(f"   Trend without a spike: "
+                       f"{'higher highs and higher lows' if up else 'lower highs and lower lows'}, "
+                       f"price {'above' if up else 'below'} a sloping EMA (Always In {'long' if up else 'short'})")
         out.append(f"   Major trend line now: <b>{p(snap['trend_line'])}</b>")
         out.append(f"   Channel line now: <b>{p(snap['channel_line'])}</b>")
         pos = snap["pos"]
@@ -197,9 +208,9 @@ def cycle_block(sym, snap):
         out.append(f"   Channel start {p(snap['start_price'])} · Brooks: usually tested later")
         out.append(f"   Close {'below' if up else 'above'} the trend line → channel under test")
         if snap.get("kind") == "tight":
-            out.append("   <i>Tight channel: Brooks trades only with the trend</i>")
+            out.append(f"   <i>Tight channel: trade only with the trend · {'H1' if up else 'L1'} is enough</i>")
         else:
-            out.append("   <i>Broad channel: two-sided, behaves like a sloped range</i>")
+            out.append(f"   <i>Broad channel: two-sided · wait for the second entry ({'H2' if up else 'L2'})</i>")
     else:
         strength = "strong break" if snap["strong"] else "weak break"
         out.append(f"   Major trend line broken ({strength}) · line now {p(snap['trend_line'])}")
@@ -233,56 +244,62 @@ def build_cycle_alert(ev):
 
 # ---------------------------------------------------------------- معامله
 def build_trade_alert(ev):
-    """ستاپ ورود / ورود / بسته شدن / لغو."""
+    """ستاپ (سفارش Stop) / ورود / حد سود یا ضرر / لغو."""
     from .config import ORDER_BARS, RR
-    sym, s, k = ev["sym"], ev["side"], ev["kind"]
+    sym, s, k, mode = ev["sym"], ev["side"], ev["kind"], ev["mode"]
     p = lambda x: fmt_price(sym, x)
     buy = s > 0
     side = "BUY 📈" if buy else "SELL 📉"
-    where = ("📦 Range trade" if ev["mode"] == "RANGE" else "🚀 Spike pullback trade")
-    pin = ev["pin"]
+    hl = "H" if buy else "L"
+    sig = ev["signal"]
+    if mode == "RANGE":
+        where = "📦 Range · second entry"
+        why = (f"second test of the range {'bottom' if buy else 'top'} held "
+               f"(first test {p(ev['first_test'])}) · buy low, sell high")
+    elif mode == "SPIKE":
+        where = f"🚀 First pullback after the spike · {hl}{ev['n_h']}"
+        why = f"pullback held the broken range level {p(ev['level'])}"
+    else:
+        kind = ev.get("channel_kind") or ""
+        where = f"📈 With the trend · {hl}{ev['n_h']}" + (f" · {kind} channel" if kind else "")
+        why = (f"pullback in a {'bull' if buy else 'bear'} channel · "
+               f"{'second entry' if ev['n_h'] >= 2 else 'first entry'} ({hl}{ev['n_h']})")
     lines = []
-
     if k == "TRADE_PENDING":
-        if ev["mode"] == "RANGE":
-            head = f"🎯 <b>SETUP · {side}</b> · pin bar at the range {'bottom' if buy else 'top'}"
-            how = (f"⏳ {'Buy' if buy else 'Sell'} stop at <b>{p(ev['planned_entry'])}</b> "
-                   f"(pin bar {'high' if buy else 'low'}) · valid {ORDER_BARS} M1 bars")
-        else:
-            head = f"🎯 <b>SETUP · {side}</b> · pin bar ends the first pullback after the M5 spike"
-            how = (f"⏳ Waiting for an M1 key bar ({ORDER_BARS} bars max) · "
-                   f"entry at the open of the next bar\n"
-                   f"🧱 Broken range level {p(ev['level'])} held by the pullback")
-        lines = [how,
-                 f"🛑 Stop loss: <b>{p(ev['sl'])}</b> (pin {'low' if buy else 'high'} "
+        head = (f"🔁 <b>ORDER MOVED · {side}</b>" if ev.get("moved") else f"🎯 <b>SETUP · {side}</b>")
+        lines = [f"🧠 {why}",
+                 f"⏳ {'Buy' if buy else 'Sell'} stop at <b>{p(ev['planned_entry'])}</b> "
+                 f"(M5 signal bar {'high' if buy else 'low'}) · valid {ORDER_BARS} M5 bars",
+                 f"🛑 Stop loss: <b>{p(ev['sl'])}</b> (signal bar {'low' if buy else 'high'} "
                  f"{'−' if buy else '+'} spread {p(ev['spread'])})",
-                 f"✅ Take profit: <b>{p(ev['tp'])}</b> (1:{RR:g}, from the planned entry)",
-                 f"❌ Cancelled if price goes {'below' if buy else 'above'} {p(pin['low'] if buy else pin['high'])} first"]
+                 f"✅ Take profit: <b>{p(ev['tp'])}</b> (1:{RR:g})",
+                 f"❌ Cancelled if price goes {'below' if buy else 'above'} "
+                 f"{p(sig['low'] if buy else sig['high'])} first"]
+        if mode == "RANGE" and ((ev["tp"] > ev["range_high"]) if buy else (ev["tp"] < ev["range_low"])):
+            edge = ev["range_high"] if buy else ev["range_low"]
+            lines.append(f"⚠️ Target is beyond the range {'top' if buy else 'bottom'} ({p(edge)})")
     elif k == "TRADE_OPEN":
         head = f"🚀 <b>ENTRY · {side}</b>"
-        why = (f"price broke the pin bar {'high' if buy else 'low'}" if ev["mode"] == "RANGE"
-               else "M1 key bar closed · entry at the next bar's open")
-        lines = [f"➡️ Entry: <b>{p(ev['entry'])}</b> · {why}",
+        lines = [f"➡️ Entry: <b>{p(ev['entry'])}</b> · price broke the M5 signal bar {'high' if buy else 'low'}",
                  f"🛑 Stop loss: <b>{p(ev['sl'])}</b>   ✅ Take profit: <b>{p(ev['tp'])}</b>",
                  f"📏 Risk {p(ev['risk'])} · Reward {p(ev['risk'] * RR)} · 1:{RR:g}"]
         if ev.get("tp_beyond_range"):
             edge = ev["range_high"] if buy else ev["range_low"]
             lines.append(f"⚠️ Take profit is beyond the range {'top' if buy else 'bottom'} ({p(edge)}) · "
-                         f"Brooks: ranges often hold, consider it")
+                         f"Brooks: ranges often hold")
     elif k == "TRADE_CLOSED":
         win = ev["result"] == "TP"
         head = (f"🏆 <b>TAKE PROFIT · +{ev['r']:g}R</b>" if win else f"🛑 <b>STOP LOSS · {ev['r']:g}R</b>")
         lines = [f"{side} from {p(ev['entry'])} → exit {p(ev['exit'])}",
-                 f"⏱ {ev['bars']} M1 bars in the trade"]
+                 f"⏱ {ev.get('bars', 0)} minutes in the trade"]
     else:
-        reason = (f"price went {'below' if buy else 'above'} the pin bar tail before entry"
-                  if ev["reason"] == "tail" else f"no entry within {ORDER_BARS} M1 bars")
+        reason = (f"price went {'below' if buy else 'above'} the signal bar before entry"
+                  if ev["reason"] == "tail" else f"no entry within {ORDER_BARS} M5 bars")
         head = f"✖️ <b>SETUP CANCELLED · {side}</b>"
         lines = [f"<i>{reason}</i>"]
-
     if ev.get("live"):
         lines.append("⚡ <i>Live price</i>")
-    return (f"{head}\n<b>{label(sym)}</b>  ·  {where}  ·  M5 context → M1 trigger\n{LINE}\n"
+    return (f"{head}\n<b>{label(sym)}</b>  ·  {where}\n{LINE}\n"
             + "\n".join(lines) + f"\n{LINE}\n{_times(ev['time'], exact=True)}")
 
 
