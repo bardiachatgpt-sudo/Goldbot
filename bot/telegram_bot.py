@@ -20,10 +20,12 @@ from .strategy import analyze
 HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / channel / under test) "
         "with levels and chart.\n"
         "⭐ Follow a pair to also get every cycle change for it.\n"
+        "📐 Structure: the last 500 M5 candles with only the structure (spike / channel / range).\n"
         "🧪 Backtest: tap the button (pair → timeframe → period) to replay recent days with the same rules "
         "on a $1,000 account.\n\n"
-        "/status XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest")
+        "/status XAUUSD · /structure XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest")
 BACKTEST_MAX_DAYS = 10
+STRUCTURE_BARS = 500
 
 
 CAPTION_LIMIT = 1024
@@ -86,7 +88,8 @@ class Telegram:
         kb = types.InlineKeyboardMarkup(row_width=3)
         kb.add(*[types.InlineKeyboardButton(("⭐ " if is_following(self.state, chat_id, n) else "") + label(n),
                                             callback_data="st:" + n) for n in SYMBOLS])
-        kb.row(types.InlineKeyboardButton("🧪 Backtest", callback_data="bt"))
+        kb.row(types.InlineKeyboardButton("📐 Structure", callback_data="sx"),
+               types.InlineKeyboardButton("🧪 Backtest", callback_data="bt"))
         return kb
 
     def pair_keyboard(self, chat_id, sym):
@@ -97,7 +100,39 @@ class Telegram:
             follow = types.InlineKeyboardButton("⭐ Follow", callback_data="fo:" + sym)
         kb.add(follow, types.InlineKeyboardButton("🔄 Refresh", callback_data="st:" + sym),
                types.InlineKeyboardButton("📋 All pairs", callback_data="home"))
+        kb.row(types.InlineKeyboardButton("📐 Structure", callback_data="sxp:" + sym))
         return kb
+
+    # ------------------------------------------------------------ ساختار (فقط نمایش)
+    def structure_pairs(self):
+        kb = types.InlineKeyboardMarkup(row_width=3)
+        kb.add(*[types.InlineKeyboardButton(label(n), callback_data="sxp:" + n) for n in SYMBOLS])
+        return kb
+
+    def send_structure(self, chat_id, sym):
+        """نمودار M5 آخرین STRUCTURE_BARS کندل، فقط ساختار: سوئینگ‌ها، خط روند، خط موازی، مستطیل هر فاز."""
+        from .structure import render
+        try:
+            self.bot.send_chat_action(chat_id, "upload_photo")
+        except Exception:
+            pass
+        df = get_closed_candles(sym, STRUCTURE_BARS + 1, MIN_BARS, "5")
+        if df is None:
+            self.bot.send_message(chat_id, f"⚠️ {sym}: could not fetch candles, try again in a minute.")
+            return
+        df = df.tail(STRUCTURE_BARS)
+        png, phases, now = render(sym, df)
+        names = {("SPIKE", 1): "🚀 Spike up", ("SPIKE", -1): "🚀 Spike down", ("CHANNEL", 1): "📈 Bull channel",
+                 ("CHANNEL", -1): "📉 Bear channel", ("RANGE", 0): "📦 Trading range"}
+        recent = " → ".join(names[(p["type"], p["side"])] for p in phases[-6:]) or "-"
+        cap = (f"📐 <b>{label(sym)} · M5 structure</b> · last {len(df)} candles\n"
+               f"Now: <b>{names.get(now, '❔ unclear') if now else '❔ unclear (waiting for two new lows and highs)'}</b>\n"
+               f"Recent phases: {recent}\n"
+               f"<i>Lines drawn like a trader: through two lows (or highs) + a parallel line. Rough version.</i>")
+        kb = types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="sxp:" + sym),
+               types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
+        self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
 
     # ------------------------------------------------------------ وضعیت
     def send_status(self, chat_id, sym):
@@ -199,6 +234,16 @@ class Telegram:
                     return
             self.backtests.run(m.chat.id, sym, "5-1", days)
 
+        @bot.message_handler(commands=["structure", "sx"])
+        def on_structure(m):
+            sym = pick(m)
+            if sym is False:
+                return
+            if sym is None:
+                bot.send_message(m.chat.id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
+                return
+            self.send_structure(m.chat.id, sym)
+
         @bot.message_handler(commands=["following"])
         def on_following(m):
             bot.send_message(m.chat.id, self.following_text(m.chat.id),
@@ -210,6 +255,14 @@ class Telegram:
             action, _, sym = c.data.partition(":")
             if action in ("bt", "btp", "btt", "btd"):          # بک‌تست مرحله‌به‌مرحله
                 self.backtests.on_callback(c)
+                return
+            if action == "sx":                                  # ساختار: انتخاب جفت
+                bot.answer_callback_query(c.id)
+                bot.send_message(chat_id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
+                return
+            if action == "sxp" and sym in SYMBOLS:
+                bot.answer_callback_query(c.id, f"Drawing {sym}…")
+                self.send_structure(chat_id, sym)
                 return
             if action == "home":
                 bot.answer_callback_query(c.id)

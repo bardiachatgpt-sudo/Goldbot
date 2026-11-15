@@ -164,7 +164,7 @@ class TestFollowStorage(unittest.TestCase):
         names = [b.text for row in tg.pairs_keyboard(1).keyboard for b in row]
         self.assertIn("⭐ 🥇🇺🇸 XAUUSD", names)
         btns = [b.callback_data for row in tg.pair_keyboard(1, "XAUUSD").keyboard for b in row]
-        self.assertEqual(btns, ["uf:XAUUSD", "st:XAUUSD", "home"])
+        self.assertEqual(btns, ["uf:XAUUSD", "st:XAUUSD", "home", "sxp:XAUUSD"])
         btns = [b.callback_data for row in tg.pair_keyboard(1, "EURUSD").keyboard for b in row]
         self.assertEqual(btns[0], "fo:EURUSD")
 
