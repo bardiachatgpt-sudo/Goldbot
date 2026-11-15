@@ -1,0 +1,8 @@
+websocket-client==1.8.0
+pandas>=2.0
+numpy
+pytz
+matplotlib>=3.8
+pyTelegramBotAPI>=4.14
+flask>=3.0
+psycopg[binary]>=3.1
