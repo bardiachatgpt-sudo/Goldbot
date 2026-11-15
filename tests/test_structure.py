@@ -86,6 +86,16 @@ class TestStructure(unittest.TestCase):
         self.assertEqual(now, ("CHANNEL", 1))
 
 
+class TestStructureV2(unittest.TestCase):
+    def test_v2_runs_and_keeps_v1_unchanged(self):
+        df = fake_market(57730)
+        v1 = sequence(df)
+        phases, state, _, _ = structure.detect(df["Open"], df["High"], df["Low"], df["Close"], v2=True)
+        self.assertTrue(phases)
+        self.assertEqual(sequence(df), v1)                              # نسخه‌ی ۱ دست‌نخورده
+        self.assertIn(("CHANNEL", 1), [(p["type"], p["side"]) for p in phases])
+
+
 class TestStructureButton(unittest.TestCase):
     def test_button_sends_last_500_candles_with_caption(self):
         st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
@@ -102,10 +112,12 @@ class TestStructureButton(unittest.TestCase):
         with mock.patch.object(telegram_bot, "get_closed_candles", fake):
             tg.send_structure(7, "XAUUSD")
         self.assertEqual(calls, [("XAUUSD", 501, "5")])
-        args, kw = tg.bot.send_photo.call_args
-        self.assertEqual(args[1][:4], b"\x89PNG")
-        self.assertIn("M5 structure", kw["caption"])
-        self.assertIn("last 500 candles", kw["caption"])
+        photos = tg.bot.send_photo.call_args_list
+        self.assertEqual(len(photos), 2)                                 # نسخه‌ی ۱ و نسخه‌ی ۲
+        for call in photos:
+            self.assertEqual(call.args[1][:4], b"\x89PNG")
+        self.assertIn("last 500 candles", photos[0].kwargs["caption"])
+        self.assertIn("v2 (test)", photos[1].kwargs["caption"])
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
 

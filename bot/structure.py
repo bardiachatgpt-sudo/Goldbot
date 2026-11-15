@@ -22,6 +22,31 @@ FLAT = 1.0          # دو کف (یا دو سقف) با اختلاف کمتر ا
 TOL = 0.5           # شکستن خط: بسته‌شدن بیش از نیم کندل متوسط آن طرف خط
 BREAKOUT_N = 20     # اسپایک = بریک‌اوت: بیرون محدوده‌ی ۲۰ کندل قبل از شروعش بسته شود
 
+# ---- نسخه‌ی ۲ (v2=True): رفتار کندل‌ها هم، نه فقط خط‌ها
+V2_SPIKE_BODY = 0.55     # اسپایک: میانگین بدنه ≥ ۵۵٪ کندل (ماروبوزو) ...
+V2_SPIKE_OVERLAP = 0.40  # ... و میانگین همپوشانی با کندل قبل ≤ ۴۰٪
+V2_STRONG = 1.0          # شکستن خط: یک بسته‌شدن ≥ یک کندل متوسط آن طرف خط، یا دو بسته‌شدن پشت‌سرهم
+V2_RANGE_N = 20          # رنج از روی رفتار: در ۲۰ کندل آخر ...
+V2_RANGE_EFF = 0.15      # ... پیشرفت خالص ≤ ۱۵٪ مسیر طی‌شده ...
+V2_RANGE_OVERLAP = 0.45  # ... و میانگین همپوشانی ≥ ۴۵٪
+V2_SIDEWAYS = 5          # گذار کانال → رنج: ۵ کندل افقی ...
+V2_SIDEWAYS_EFF = 0.35   # ... (پیشرفت خالص ≤ ۳۵٪) و بعد سقف/کف تازه‌ای که بلافاصله برمی‌گردد
+
+
+def _overlap(h, l):
+    """همپوشانی هر کندل با کندل قبل، نسبت به اندازه‌ی خودش (اسپایک ≈ ۰، رنج زیاد)."""
+    ov = np.zeros(len(h))
+    for t in range(1, len(h)):
+        r = max(h[t] - l[t], 1e-12)
+        ov[t] = max(0.0, min(h[t], h[t - 1]) - max(l[t], l[t - 1])) / r
+    return ov
+
+
+def _efficiency(c, a, b):
+    """پیشرفت خالص / مسیر طی‌شده بین a و b (۱ = کاملاً یک‌طرفه، ۰ = درجا)."""
+    path = np.abs(np.diff(c[a:b + 1])).sum()
+    return abs(c[b] - c[a]) / path if path > 0 else 0.0
+
 
 def _avg(h, l):
     r = h - l
@@ -70,11 +95,19 @@ def zigzag(h, l, avg):
     return piv
 
 
-def detect(o, h, l, c):
-    """فازها: [{type: SPIKE/CHANNEL/RANGE, side, start, end, lines}] و حالت هر کندل."""
+def detect(o, h, l, c, v2=False):
+    """فازها: [{type: SPIKE/CHANNEL/RANGE, side, start, end, lines}] و حالت هر کندل.
+
+    v2=True: علاوه بر خط‌ها، رفتار کندل‌ها (متن ال بروکس درباره‌ی درجه‌ی کنترل):
+      - اسپایک فقط با بدنه‌ی بزرگ و همپوشانی کم
+      - شکستن خط (کانال یا رنج) با یک بسته‌شدن قوی یا دو بسته‌شدن پشت‌سرهم؛ اولین پولبک عمیق شکست نیست
+      - گذار زودتر کانال → رنج: چند کندل افقی و بعد سقف/کف تازه‌ای که بلافاصله برمی‌گردد
+      - رنج از روی رفتار (همپوشانی زیاد، پیشرفت کم) حتی قبل از دو کف و دو سقف تازه
+    """
     o, h, l, c = (np.asarray(x, dtype=float) for x in (o, h, l, c))
     n = len(c)
     avg = _avg(h, l)
+    ov = _overlap(h, l)
     piv = zigzag(h, l, avg)
     phases = []
     state = [None] * n
@@ -94,6 +127,45 @@ def detect(o, h, l, c):
             broke = c[i] < lo - TOL * a or c[i] > hi + TOL * a
             if cur["type"] == "CHANNEL":                 # در کانال فقط شکستن خط روند (سایه/عبور از خط کانال نه)
                 broke = (c[i] < lo - TOL * a) if cur["side"] > 0 else (c[i] > hi + TOL * a)
+            if v2:
+                if cur["type"] == "CHANNEL":
+                    dist = (lo - c[i]) if cur["side"] > 0 else (c[i] - hi)
+                else:
+                    dist = max(lo - c[i], c[i] - hi)
+                if broke and dist < V2_STRONG * a and not cur.get("pending"):
+                    cur["pending"] = True                # اولین بسته‌شدن ضعیف آن طرف خط: هنوز نه
+                    broke = False
+                elif not broke:
+                    cur["pending"] = False
+                if not broke and cur["type"] == "CHANNEL" and _sideways_fail(o, h, l, c, i, cur, a):
+                    j = i - V2_SIDEWAYS                  # کانال خسته شد: رنج از شروع حرکت افقی
+                    cur["end"] = max(cur["start"], j - 1)
+                    top, bot = h[j:i + 1].max(), l[j:i + 1].min()
+                    cur = {"type": "RANGE", "side": 0, "start": j, "end": i,
+                           "lines": {"x0": j, "y0": bot, "slope": 0.0, "off": top - bot}}
+                    phases.append(cur)
+                    for t in range(j, i + 1):
+                        state[t] = ("RANGE", 0)
+                    trend_side = 0
+                    continue
+            if v2 and not broke and cur.get("via") == "behaviour":
+                pts = [p for p in known if p[0] >= floor]
+                lows = [p for p in pts if p[1] == "L"][-2:]
+                highs = [p for p in pts if p[1] == "H"][-2:]
+                ch = _build(lows, highs, h, l, a, i) if len(lows) >= 2 and len(highs) >= 2 else None
+                if ch is not None and ch["type"] == "CHANNEL":
+                    clo, chi = _bounds(ch, i)
+                    if clo - TOL * a <= c[i] <= chi + TOL * a:     # خط‌های کانال حالا کشیده شده‌اند
+                        cur["end"] = max(cur["start"], ch["start"] - 1) if ch["start"] > cur["start"] else cur["start"]
+                        if ch["start"] <= cur["end"]:
+                            ch["start"] = cur["end"] + 1
+                        ch["end"] = i
+                        phases.append(ch)
+                        for t in range(ch["start"], i + 1):
+                            state[t] = ("CHANNEL", ch["side"])
+                        cur = ch
+                        trend_side = ch["side"]
+                        continue
             if not broke:
                 cur["end"] = i
                 state[i] = (cur["type"], cur["side"])
@@ -102,7 +174,7 @@ def detect(o, h, l, c):
             cur = None
             floor = known[-1][0] if known else i
         # ---- اسپایک: چند کندل آخر (۳ تا ۱۲) از پایین‌ترین/بالاترین نقطه‌شان تند و یک‌طرفه رفته‌اند
-        spike = _spike_run(o, h, l, c, i, a)
+        spike = _spike_run(o, h, l, c, i, a, ov if v2 else None)
         if spike and (cur is None or cur["type"] != "SPIKE") and trend_side == spike[0]:
             spike = None                                        # ادامه‌ی همان روند، نه اسپایک تازه
         if spike:
@@ -123,14 +195,14 @@ def detect(o, h, l, c):
         pts = [p for p in known if p[0] >= floor]
         lows = [p for p in pts if p[1] == "L"][-2:]
         highs = [p for p in pts if p[1] == "H"][-2:]
-        if len(lows) < 2 or len(highs) < 2:
-            continue
-        cur = _build(lows, highs, h, l, a, i)
+        cur = _build(lows, highs, h, l, a, i) if len(lows) >= 2 and len(highs) >= 2 else None
+        if cur is not None:
+            lo, hi = _bounds(cur, i)
+            if c[i] < lo - TOL * a or c[i] > hi + TOL * a:   # همین الان بیرون خط‌هاست
+                cur = None
+        if cur is None and v2:                            # رنج از روی رفتار، قبل از دو کف و دو سقف تازه
+            cur = _behaviour_range(h, l, c, ov, i)
         if cur is None:
-            continue
-        lo, hi = _bounds(cur, i)
-        if c[i] < lo - TOL * a or c[i] > hi + TOL * a:   # همین الان بیرون خط‌هاست
-            cur = None
             continue
         if phases and cur["start"] <= phases[-1]["end"]:
             cur["start"] = phases[-1]["end"] + 1
@@ -143,8 +215,38 @@ def detect(o, h, l, c):
     return phases, state, piv, avg
 
 
-def _spike_run(o, h, l, c, i, a):
-    """(جهت، شروع) اگر یکی از اجراهای ۳ تا ۱۲ کندل آخر اسپایک باشد، وگرنه None."""
+def _sideways_fail(o, h, l, c, i, cur, a):
+    """گذار کانال → رنج: V2_SIDEWAYS کندل افقی، بعد این کندل از سقف (کف) خود کانال رد می‌شود و همان‌جا
+    زیرش (رویش) بسته می‌شود — یک شکست ناموفق کوچک در انتهای کانال."""
+    j = i - V2_SIDEWAYS
+    a0 = cur["start"]
+    if j < 1 or j <= a0:
+        return False
+    if _efficiency(c, j, i - 1) > V2_SIDEWAYS_EFF:
+        return False
+    if cur["side"] > 0:
+        top = h[a0:i].max()                       # بالاترین سقف کانال تا قبل از این کندل
+        return h[i] > top and c[i] < top
+    bot = l[a0:i].min()
+    return l[i] < bot and c[i] > bot
+
+
+def _behaviour_range(h, l, c, ov, i):
+    """رنج از روی رفتار کندل‌ها در V2_RANGE_N کندل آخر: همپوشانی زیاد و پیشرفت خالص کم."""
+    j = i - V2_RANGE_N + 1
+    if j < 1:
+        return None
+    if _efficiency(c, j, i) > V2_RANGE_EFF or ov[j:i + 1].mean() < V2_RANGE_OVERLAP:
+        return None
+    top, bot = h[j:i + 1].max(), l[j:i + 1].min()
+    return {"type": "RANGE", "side": 0, "start": j, "end": i,
+            "lines": {"x0": j, "y0": bot, "slope": 0.0, "off": top - bot}, "via": "behaviour"}
+
+
+def _spike_run(o, h, l, c, i, a, ov=None):
+    """(جهت، شروع) اگر یکی از اجراهای ۳ تا ۱۲ کندل آخر اسپایک باشد، وگرنه None.
+
+    ov (نسخه‌ی ۲): همپوشانی کندل‌ها؛ اسپایک فقط با بدنه‌ی بزرگ و همپوشانی کم."""
     for k in range(3, 13):
         j = i - k
         if j < 0:
@@ -162,6 +264,11 @@ def _spike_run(o, h, l, c, i, a):
             prior = range(j0 - BREAKOUT_N, j0)
             outside = c[i] > max(h[t] for t in prior) if s > 0 else c[i] < min(l[t] for t in prior)
             if outside and move >= SPIKE_SIZE * a and move / bars >= SPIKE_SPEED * a and same >= SPIKE_SAME:
+                if ov is not None:
+                    run = range(j0 + 1, i + 1)
+                    body = np.mean([abs(c[t] - o[t]) / max(h[t] - l[t], 1e-12) for t in run])
+                    if body < V2_SPIKE_BODY or np.mean([ov[t] for t in run]) > V2_SPIKE_OVERLAP:
+                        continue
                 return s, j0
     return None
 
@@ -196,7 +303,7 @@ def _bounds(cur, i):
 
 
 # ---------------------------------------------------------------- نمودار
-def render(sym, df, title_extra=""):
+def render(sym, df, title_extra="", v2=False):
     """df: ستون‌های Open/High/Low/Close (مثل data.py). PNG: کندل‌ها، سوئینگ‌ها، خط‌ها، مستطیل رنگی هر فاز."""
     import io
 
@@ -206,7 +313,7 @@ def render(sym, df, title_extra=""):
     import matplotlib.pyplot as plt
 
     o, h, l, c = (df[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
-    phases, state, piv, avg = detect(o, h, l, c)
+    phases, state, piv, avg = detect(o, h, l, c, v2=v2)
     n = len(c)
     COL = {("SPIKE", 1): "#FACC15", ("SPIKE", -1): "#FACC15", ("CHANNEL", 1): "#10B981",
            ("CHANNEL", -1): "#EF4444", ("RANGE", 0): "#60A5FA"}
@@ -260,7 +367,8 @@ def render(sym, df, title_extra=""):
     now = state[-1]
     now_txt = NAME.get(now, "unclear (waiting for two new lows and highs)") if now else \
         "unclear (waiting for two new lows and highs)"
-    ax.set_title(f"{sym} M5 · last {n} candles · structure only{title_extra}\nNow: {now_txt}",
+    ver = " · v2 (new: candle behaviour + lines)" if v2 else " · v1 (lines only)"
+    ax.set_title(f"{sym} M5 · last {n} candles · structure only{ver}{title_extra}\nNow: {now_txt}",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_xlim(-2, n + 2)
     ax.set_ylim(l.min() - pad * 3, h.max() + pad * 4)

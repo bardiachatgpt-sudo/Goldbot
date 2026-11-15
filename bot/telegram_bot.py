@@ -129,10 +129,24 @@ class Telegram:
                f"Now: <b>{names.get(now, '❔ unclear') if now else '❔ unclear (waiting for two new lows and highs)'}</b>\n"
                f"Recent phases: {recent}\n"
                f"<i>Lines drawn like a trader: through two lows (or highs) + a parallel line. Rough version.</i>")
+        self.bot.send_photo(chat_id, png, caption="1️⃣ " + cap, parse_mode="HTML")
+        # نسخه‌ی ۲ برای مقایسه با چشم (همان ۵۰۰ کندل): رفتار کندل‌ها هم، نه فقط خط‌ها
+        try:
+            png2, phases2, now2 = render(sym, df, v2=True)
+            recent2 = " → ".join(names[(p["type"], p["side"])] for p in phases2[-6:]) or "-"
+            cap2 = (f"2️⃣ <b>{label(sym)} · M5 structure · v2 (test)</b>\n"
+                    f"Now: <b>{names.get(now2, '❔ unclear') if now2 else '❔ unclear'}</b>\n"
+                    f"Recent phases: {recent2}\n"
+                    f"<i>Adds candle behaviour: spike = big bodies, little overlap · a channel needs a strong close "
+                    f"or two closes to break · range from heavy overlap · channel → range after a small failed "
+                    f"breakout of the channel's high/low. Compare with 1️⃣ by eye.</i>")
+            self.bot.send_photo(chat_id, png2, caption=cap2, parse_mode="HTML")
+        except Exception as e:
+            print("structure v2 error:", e)
         kb = types.InlineKeyboardMarkup()
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="sxp:" + sym),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
-        self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
+        self.bot.send_message(chat_id, "Which one reads the market better, 1️⃣ or 2️⃣?", reply_markup=kb)
 
     # ------------------------------------------------------------ وضعیت
     def send_status(self, chat_id, sym):
