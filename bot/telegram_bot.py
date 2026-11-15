@@ -131,9 +131,16 @@ class Telegram:
             return
         df = df.tail(STRUCTURE_BARS)
         png, phases, now = render(sym, df, tf=tf_name)
+        if now == ("RANGE", 0) and phases and phases[-1]["type"] == "RANGE" and phases[-1].get("doubt"):
+            now = ("RANGE_DOUBT", 0)
         names = {("SPIKE", 1): "🚀 Spike up", ("SPIKE", -1): "🚀 Spike down", ("CHANNEL", 1): "📈 Bull channel",
-                 ("CHANNEL", -1): "📉 Bear channel", ("RANGE", 0): "📦 Trading range"}
-        recent = " → ".join(names[(p["type"], p["side"])] for p in phases[-6:]) or "-"
+                 ("CHANNEL", -1): "📉 Bear channel", ("RANGE", 0): "📦 Trading range",
+                 ("RANGE_DOUBT", 0): "📦 Range (in doubt)"}
+
+        def name(p):
+            return names["RANGE_DOUBT", 0] if p["type"] == "RANGE" and p.get("doubt") else names[(p["type"], p["side"])]
+
+        recent = " → ".join(name(p) for p in phases[-6:]) or "-"
         cap = (f"📐 <b>{label(sym)} · {tf_name} structure</b> · last {len(df)} candles\n"
                f"Now: <b>{names.get(now, '❔ unclear') if now else '❔ unclear (waiting for two new lows and highs)'}</b>\n"
                f"Recent phases: {recent}\n"

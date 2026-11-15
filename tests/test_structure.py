@@ -86,6 +86,43 @@ class TestStructure(unittest.TestCase):
         self.assertEqual(now, ("CHANNEL", 1))
 
 
+class TestRangeDoubt(unittest.TestCase):
+    """رنج تمیز (دو سقف و دو کف هم‌سطح) در برابر رنج «در شک» (نامنظم)."""
+
+    @staticmethod
+    def phase(top, bot):
+        return {"type": "RANGE", "side": 0, "start": 0, "end": 40,
+                "lines": {"x0": 0, "y0": bot, "slope": 0.0, "off": top - bot}}
+
+    def test_two_touches_each_side_is_a_clean_box(self):
+        ph = self.phase(10.0, 0.0)
+        piv = [(5, "H", 10.0, 7), (10, "L", 0.3, 12), (18, "H", 9.6, 20), (25, "L", 0.0, 27)]
+        structure._mark_doubt([ph], piv, np.ones(50))
+        self.assertFalse(ph["doubt"])
+
+    def test_uneven_touches_is_in_doubt(self):
+        ph = self.phase(14.0, 0.0)
+        piv = [(5, "H", 10.0, 7), (10, "L", 0.3, 12), (18, "H", 14.0, 20), (25, "L", 0.0, 27)]   # یک سقف دور
+        structure._mark_doubt([ph], piv, np.ones(50))
+        self.assertTrue(ph["doubt"])
+
+    def test_clean_fake_ranges_are_boxes_and_random_walks_have_doubt(self):
+        for seed in (57730, 1234):
+            df = fake_market(seed)
+            phases, _, _, _ = structure.detect(df["Open"], df["High"], df["Low"], df["Close"])
+            self.assertTrue(all(not p["doubt"] for p in phases if p["type"] == "RANGE"), seed)
+        doubts = 0
+        for seed in range(4):
+            rnd = np.random.default_rng(seed)
+            mid = 4000 + rnd.normal(0, 2.2, 500).cumsum()
+            o = np.r_[mid[0], mid[:-1]]
+            h = np.maximum(o, mid) + np.abs(rnd.normal(0, 1.2, 500))
+            l = np.minimum(o, mid) - np.abs(rnd.normal(0, 1.2, 500))
+            phases, _, _, _ = structure.detect(o, h, l, mid)
+            doubts += sum(1 for p in phases if p["type"] == "RANGE" and p["doubt"])
+        self.assertGreater(doubts, 0)
+
+
 class TestStructureV2(unittest.TestCase):
     def test_v2_runs_and_keeps_v1_unchanged(self):
         df = fake_market(57730)

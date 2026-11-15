@@ -6,6 +6,8 @@
 - 📈 کانال صعودی: دو کف آخر بالاروند و دو سقف آخر بالاروند — خط روند از کف ۱ به کف ۲، خط موازی از
      بلندترین سقف بین آن‌ها. 📉 کانال نزولی برعکس.
 - 📦 رنج: بقیه حالت‌ها (خط‌ها تقریباً صاف یا هم‌جهت نیستند) — سقف و کف از دو سقف و دو کف آخر
+     رنج تمیز (جعبه): دو سقف هم‌سطح و دو کف هم‌سطح (هر خط افقی دو بار لمس شده)
+     رنج «در شک»: بقیه (نامنظم؛ ال بروکس: «اگر شک داری، رنج است») — کم‌رنگ‌تر کشیده می‌شود
 - خط‌ها تا وقتی کندلی بیش از TOL کندل متوسط آن طرفشان بسته نشده ثابت می‌مانند (سایه‌ها مهم نیستند)
 - بعد از شکستن، تا وقتی دو کف و دو سقف تازه شکل نگرفته، ساختار نامشخص است
 
@@ -214,6 +216,7 @@ def detect(o, h, l, c, v2=False):
         for t in range(cur["start"], i + 1):
             if state[t] is None:
                 state[t] = (cur["type"], cur["side"])
+    _mark_doubt(phases, piv, avg)
     return phases, state, piv, avg
 
 
@@ -297,6 +300,21 @@ def _build(lows, highs, h, l, a, i):
             "lines": {"x0": min(jl1, jh1), "y0": bot, "slope": 0.0, "off": top - bot}}
 
 
+def _mark_doubt(phases, piv, avg):
+    """رنج تمیز (جعبه): در کل طول رنج، حداقل دو سقف سوئینگ نزدیک خط بالا و دو کف نزدیک خط پایین
+    (تا یک کندل متوسط). بقیه = «اگر شک داری، رنج است» (نامنظم). فقط سوئینگ‌های تأییدشده تا پایان رنج."""
+    for ph in phases:
+        if ph["type"] != "RANGE":
+            continue
+        ln = ph["lines"]
+        bot, top = ln["y0"], ln["y0"] + ln["off"]
+        a0, a1 = min(ph["start"], ln["x0"]), ph["end"]
+        inside = [p for p in piv if a0 <= p[0] <= a1 and p[3] <= a1]
+        tops = sum(1 for j, t, p, _ in inside if t == "H" and p >= top - FLAT * avg[j])
+        bots = sum(1 for j, t, p, _ in inside if t == "L" and p <= bot + FLAT * avg[j])
+        ph["doubt"] = not (tops >= 2 and bots >= 2)
+
+
 def _bounds(cur, i):
     ln = cur["lines"]
     base = ln["y0"] + ln["slope"] * (i - ln["x0"])
@@ -334,11 +352,13 @@ def render(sym, df, title_extra="", v2=False, tf="M5"):
         key = (ph["type"], ph["side"])
         a0, a1 = ph["start"], ph["end"]
         y0, y1 = l[a0:a1 + 1].min(), h[a0:a1 + 1].max()
-        ax.add_patch(patches.Rectangle((a0 - 0.5, y0), a1 - a0 + 1, y1 - y0, facecolor=COL[key], alpha=0.13,
-                                       edgecolor=COL[key], lw=1.4, zorder=1))
+        doubt = bool(ph.get("doubt"))                    # رنج نامنظم: کم‌رنگ‌تر، لبه‌ی نقطه‌چین
+        ax.add_patch(patches.Rectangle((a0 - 0.5, y0), a1 - a0 + 1, y1 - y0, facecolor=COL[key],
+                                       alpha=0.06 if doubt else 0.13, edgecolor=COL[key], lw=1.4,
+                                       ls=":" if doubt else "-", zorder=1))
         if a1 - a0 >= 3 or ph["type"] == "SPIKE":
-            ax.text((a0 + a1) / 2, y1, NAME[key], color=COL[key], ha="center", va="bottom", fontsize=9,
-                    fontweight="bold", zorder=6)
+            ax.text((a0 + a1) / 2, y1, "RANGE (in doubt)" if doubt else NAME[key], color=COL[key],
+                    ha="center", va="bottom", fontsize=9, fontweight="bold", alpha=0.75 if doubt else 1.0, zorder=6)
         ln = ph["lines"]
         if ln:
             xs = np.array([max(ln["x0"], a0 - 3), a1 + 1])
@@ -367,6 +387,9 @@ def render(sym, df, title_extra="", v2=False, tf="M5"):
         except Exception:
             pass
     now = state[-1]
+    if now == ("RANGE", 0) and phases and phases[-1]["type"] == "RANGE" and phases[-1].get("doubt"):
+        now = ("RANGE_DOUBT", 0)
+    NAME[("RANGE_DOUBT", 0)] = "TRADING RANGE (in doubt: irregular, no clean box)"
     now_txt = NAME.get(now, "unclear (waiting for two new lows and highs)") if now else \
         "unclear (waiting for two new lows and highs)"
     ver = " · v2 (new: candle behaviour + lines)" if v2 else " · v1 (lines only)"
