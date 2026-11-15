@@ -20,6 +20,9 @@
               - ۲۰ کندل بدون سقف تازه ← رنج
             اگر بعداً در رنج، کف شکست هم شکسته شود ← «احتمال برگشت».
 اسپایک قوی مخالف در هر حالتی ← اسپایک مخالف.
+
+اسپایکی که از رنج بیرون می‌زند سطح شکسته‌شده را به خاطر می‌سپارد. اولین پولبک بعدش تا وقتی آن طرف این
+سطح بسته نشده «پولبک معتبر» است (snapshot["pullback"]) و ستاپ ورود اسپایک فقط در همین پنجره فعال است.
 """
 RANGE, SPIKE, CHANNEL, TEST = "RANGE", "SPIKE", "CHANNEL", "TEST"
 
@@ -142,12 +145,14 @@ class CycleEngine:
         self.segments.append({"state": state, "side": side, "start": i, "end": None})
         self.state, self.side, self.since, self.info = state, side, i, info
 
-    def _to_spike(self, i, s, first):
+    def _to_spike(self, i, s, first, broken=None):
+        """broken: سطح رنجی که اسپایک شکست (سقف برای صعودی، کف برای نزولی)؛ فقط برای اسپایک از رنج."""
         self.segments[-1]["end"] = first - 1
         self.segments.append({"state": SPIKE, "side": s, "start": first, "end": None})
         self.state, self.side, self.since = SPIKE, s, first
         self.info = {"start_price": self._back(s, first), "start_i": first,
-                     "extreme": self._ext(s, i), "extreme_i": i}
+                     "extreme": self._ext(s, i), "extreme_i": i, "broken": broken,
+                     "spike_id": self.t[first]}
 
     def _to_range(self, i, hi=None, lo=None, watch=None, why=""):
         prev_side = self.side
@@ -170,7 +175,7 @@ class CycleEngine:
         for s in (1, -1):
             first = self._spike_start(i, s)
             if first is not None and (hi is None or self._beyond(s, self.c[i], hi if s > 0 else lo)):
-                self._to_spike(i, s, first)
+                self._to_spike(i, s, first, broken=(hi if s > 0 else lo) if hi is not None else None)
                 return None
         self._range_update(i)
         w = inf.get("watch")
@@ -197,10 +202,18 @@ class CycleEngine:
         self._set(i, CHANNEL, s, {"spike_start": sp["start_price"], "spike_i": sp["start_i"],
                                   "spike_ext": sp["extreme"], "high": sp["extreme"], "high_i": sp["extreme_i"],
                                   "anchor_i": i, "anchor": self._back(s, i), "forming": True,
-                                  "wrong_ema": 0, "pb_run": 0, "pb_max": 0})
+                                  "wrong_ema": 0, "pb_run": 0, "pb_max": 0,
+                                  "broken": sp["broken"], "spike_id": sp["spike_id"], "level_lost": False})
+        self._check_level(i)
         return None
 
     # ------------------------------------------------------------ CHANNEL
+    def _check_level(self, i):
+        """پولبک بعد از اسپایک: بسته‌شدن آن طرف سطح شکسته‌شده‌ی رنج = بریک‌اوت شکست خورد (بدون معامله)."""
+        inf = self.info
+        if inf.get("broken") is not None and self._beyond(-self.side, self.c[i], inf["broken"]):
+            inf["level_lost"] = True
+
     def line_at(self, k, inf=None):
         """قیمت خط روند اصلی روی کندل k."""
         inf = inf or self.info
@@ -262,6 +275,7 @@ class CycleEngine:
             inf["pb_run"] = 0
 
         if inf["forming"]:
+            self._check_level(i)
             if self._beyond(-s, self._back(s, i), inf["anchor"]):
                 inf["anchor"], inf["anchor_i"] = self._back(s, i), i
             if self._beyond(-s, self.c[i], inf["spike_start"]):
@@ -383,11 +397,17 @@ class CycleEngine:
                         reversal=inf.get("reversal"), watch=inf.get("watch"))
         elif self.state == SPIKE:
             size = abs(inf["extreme"] - inf["start_price"]) / self.avg[i]
-            snap.update(start_price=inf["start_price"], extreme=inf["extreme"], size=size)
+            snap.update(start_price=inf["start_price"], extreme=inf["extreme"], size=size,
+                        broken=inf.get("broken"), spike_id=inf.get("spike_id"))
         elif self.state == CHANNEL:
             snap["bars"] = i - inf["anchor_i"] + 1          # از شروع کانال (بعد از ادامه هم)
             snap.update(spike_start=inf["spike_start"], start_price=inf["anchor"],
-                        start_time=self.t[inf["anchor_i"]], high=inf["high"], forming=inf["forming"])
+                        start_time=self.t[inf["anchor_i"]], high=inf["high"], forming=inf["forming"],
+                        broken=inf.get("broken"), spike_id=inf.get("spike_id"),
+                        level_lost=inf.get("level_lost", False),
+                        # اولین پولبک بعد از اسپایکی که از رنج بیرون زده و سطح شکسته‌شده هنوز حفظ شده
+                        pullback=bool(inf["forming"] and inf.get("broken") is not None
+                                      and not inf.get("level_lost")))
             if not inf["forming"] and "slope" in inf:
                 tl = self.line_at(i)
                 cl = tl + inf["offset"]

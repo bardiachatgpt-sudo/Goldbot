@@ -11,20 +11,22 @@ BARS = int(os.environ.get("BARS", "500"))          # تعداد کندل برا�
 MIN_BARS = 60                                      # کمتر از این تحلیل نمی‌شود
 CHART_BARS = 120                                   # تعداد کندل در تصویر نمودار
 
-# بریک‌اوت چندتایم‌فریمی: زمینه روی TIMEFRAME (M5)، ماشه روی TRIGGER_TF (M1)
+# زمینه روی TIMEFRAME (M5: اسپایک / کانال / رنج)، ماشه روی TRIGGER_TF (M1: ورود)
 CONTEXT_TF = TIMEFRAME
 TRIGGER_TF = os.environ.get("TRIGGER_TF", "1")
 TRIGGER_BARS = int(os.environ.get("TRIGGER_BARS", "300"))   # تعداد کندل M1 در هر بررسی
-HOLD_BARS = 10          # اگر قیمت این تعداد کندل M1 بیرون سطح بماند → تأیید
-BO_COOLDOWN = 15        # بعد از پایان یک تلاش، تا این تعداد کندل M1 تلاش جدید روی همان رنج شروع نشود
 
-# ستاپ‌هایی که هشدار زنده می‌فرستند:
-#   روی M5: H1,H2,L1,L2,WEDGE,PIN و (بدون M1) WEDGE_BO,RANGE_BO
-#   M5→M1: MTF_BO  (آماده باش / تأیید شد / شکست خورد)
-#   M1: TRADE  (ستاپ ورود، ورود، حد سود/ضرر)
+# پیام‌هایی که برای همه (و کانال) فرستاده می‌شوند:
+#   TRADE  ستاپ ورود، ورود، حد سود/ضرر، لغو
+#   SPIKE  اسپایک M5 از رنج بیرون زد، منتظر پولبک باشید
+#   اطلاعاتی M5 (پیش‌فرض خاموش): H1,H2,L1,L2,WEDGE,PIN,WEDGE_BO,RANGE_BO
+# تغییرات چرخه همیشه برای کسانی که نماد را فالو کرده‌اند فرستاده می‌شود.
 ALERT_SETUPS = {s.strip().upper() for s in
-                os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE,PIN,MTF_BO,TRADE").split(",")
+                os.environ.get("ALERT_SETUPS", "TRADE,SPIKE").split(",")
                 if s.strip()}
+
+# قیمت زنده برای سفارش‌ها و معامله‌های باز (ترتیب واقعی رسیدن به ورود / حد ضرر / حد سود)
+LIVE_PRICES = os.environ.get("LIVE_PRICES", "1") not in ("0", "false", "no")
 
 # ---------------------------------------------------------------- معامله (روی M1)
 RR = float(os.environ.get("RR", "2"))                 # ریسک به ریوارد

@@ -1,7 +1,7 @@
 """عکس لحظه‌ی هر هشدار: کندل سیگنال پررنگ و برچسب‌خورده، با سطح‌های همان هشدار.
 
 - هشدارهای M5 (H2/L2، پین‌بار، وج، بریک‌اوت M5، تغییر چرخه): نمودار M5 با خط روند و کانال
-- هشدارهای M5→M1 (آماده باش / تأیید شد / شکست خورد): نمودار M1 با سطح M5 که شکسته شده
+- هشدارهای معامله (ستاپ / ورود / حد سود و ضرر / لغو): نمودار M1 با خطوط ورود، حد ضرر و حد سود
 """
 from .chart import render_chart
 from .messages import fmt_price
@@ -33,6 +33,8 @@ def _cycle_focus(sym, ev):
             f["levels"].append(_lv(sym, w["level"], "Break " + ("low" if w["side"] > 0 else "high"), "#F472B6", ":"))
     elif st == "SPIKE":
         f["levels"] = [_lv(sym, snap["start_price"], "Spike start", "#FACC15", ":")]
+        if snap.get("broken") is not None:
+            f["levels"].append(_lv(sym, snap["broken"], "Broken range level", "#60A5FA", "--"))
     return f
 
 
@@ -62,25 +64,6 @@ def m5_alert_chart(sym, res, ev):
     return render_chart(sym, res, n=M5_BARS, focus=_m5_focus(sym, ev))
 
 
-def m1_alert_chart(sym, res_m1, ev):
-    """res_m1: analyze(m1, cycle=False)."""
-    k, side = ev["kind"], ev["side"]
-    text = {"BO_READY": "KEY BAR · BREAKOUT", "BO_CONFIRMED": "CONFIRMED", "BO_FAILED": "FAILED"}[k]
-    what = "Range" if ev["ctx"] == "RANGE" else "Wedge"
-    title = {"BO_READY": f"Get ready · {what} breakout", "BO_CONFIRMED": f"{what} breakout confirmed",
-             "BO_FAILED": f"{what} breakout failed"}[k]
-    focus = {"time": ev["time"], "text": text, "side": side if k != "BO_FAILED" else -side, "title": title,
-             "levels": [_lv(sym, ev["level"], "M5 level")]}
-    if ev["ctx"] == "RANGE" and ev.get("range_high") is not None:
-        focus["zone"] = (ev["range_low"], ev["range_high"])
-        other = ev["range_low"] if side > 0 else ev["range_high"]
-        focus["levels"].append(_lv(sym, other, "M5 range " + ("bottom" if side > 0 else "top"), "#60A5FA", "--"))
-    if k != "BO_READY" and ev["started"] != ev["time"]:
-        focus["marks"] = [{"time": ev["started"], "text": "KEY BAR"}]
-    res_m1 = {**res_m1, "market_cycle": "", "cycle": None}
-    return render_chart(sym, res_m1, n=M1_BARS, focus=focus, tf="1", clean=True)
-
-
 def trade_chart(sym, res_m1, ev):
     """نمودار M1 معامله: پین‌بار پررنگ، Key bar، و خطوط ورود / حد ضرر / حد سود."""
     k, side = ev["kind"], ev["side"]
@@ -90,19 +73,26 @@ def trade_chart(sym, res_m1, ev):
             "TRADE_CANCELLED": "CANCELLED"}[k]
     title = {"TRADE_PENDING": "Setup", "TRADE_OPEN": "Entry", "TRADE_CLOSED": "Trade closed",
              "TRADE_CANCELLED": "Setup cancelled"}[k]
-    title += " · " + ("Range" if ev["mode"] == "RANGE" else "Breakout") + (" BUY" if side > 0 else " SELL")
-    focus = {"time": ev["time"], "text": text, "side": side, "title": title,
+    title += " · " + ("Range" if ev["mode"] == "RANGE" else "Spike pullback") + (" BUY" if side > 0 else " SELL")
+    # زمان رویداد = بسته‌شدن کندل (یا لحظه‌ی قیمت زنده)؛ کندلی که باید پررنگ شود
+    import pandas as pd
+    t = pd.Timestamp(ev["time"])
+    bar = t - pd.Timedelta(minutes=1) if t == t.floor("min") else t.floor("min")
+    dates = set(res_m1["df"]["date"])
+    if bar not in dates:
+        bar = res_m1["df"]["date"].iloc[-1]
+    focus = {"time": bar, "text": text, "side": side, "title": title,
              "levels": [_lv(sym, entry, "Entry", "#E5E7EB", "--"),
                         _lv(sym, ev["sl"], "Stop loss", "#EF4444"),
                         _lv(sym, ev["tp"], "Take profit", "#10B981")]}
     if ev["mode"] == "RANGE" and ev.get("range_high") is not None:
         focus["zone"] = (ev["range_low"], ev["range_high"])
-    if ev["mode"] == "BREAKOUT" and ev.get("level") is not None:
-        focus["levels"].append(_lv(sym, ev["level"], "M5 level", "#FDE047", ":"))
+    if ev["mode"] == "SPIKE" and ev.get("level") is not None:
+        focus["levels"].append(_lv(sym, ev["level"], "Broken range level (M5)", "#FDE047", ":"))
     marks = []
-    if pin["time"] != ev["time"]:
+    if pin["time"] != bar:
         marks.append({"time": pin["time"], "text": "PIN BAR"})
-    if ev.get("key") and ev["key"]["time"] != ev["time"]:
+    if ev.get("key") and ev["key"]["time"] != bar:
         marks.append({"time": ev["key"]["time"], "text": "KEY BAR"})
     focus["marks"] = marks
     res_m1 = {**res_m1, "market_cycle": "", "cycle": None}

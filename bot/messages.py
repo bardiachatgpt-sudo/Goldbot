@@ -24,62 +24,16 @@ def fmt_time(ts, tz):
     return ts.tz_convert(tz).strftime("%A %Y-%m-%d %H:%M")
 
 
-def _times(t, tf=None):
-    t = t + bar_delta(tf)        # زمان بسته‌شدن کندل
+def _times(t, tf=None, exact=False):
+    if not exact:
+        t = t + bar_delta(tf)    # زمان بسته‌شدن کندل
     return (f"🕒 <b>{fmt_time(t, TEHRAN)}</b> Tehran\n"
             f"🕒 <b>{fmt_time(t, LONDON)}</b> London\n"
             f"🌍 {session_at(t)}")
 
 
-def _context_line(ev):
-    sym = ev["sym"]
-    if ev["ctx"] == "RANGE":
-        return f"📦 M5 range: {fmt_price(sym, ev['range_low'])} – {fmt_price(sym, ev['range_high'])}"
-    pts = " → ".join(fmt_price(sym, p) for p in ev["points"])
-    return f"📐 M5 {ev['type']}: {pts}"
-
-
-def build_mtf_alert(ev):
-    """بریک‌اوت M5→M1: آماده باش / تأیید شد / شکست خورد."""
-    sym, s = ev["sym"], ev["side"]
-    p = lambda x: fmt_price(sym, x)
-    side = "BULLISH📈" if s > 0 else "BEARISH📉"
-    where = "above" if s > 0 else "below"
-    what = "range" if ev["ctx"] == "RANGE" else "wedge"
-    mins = int((ev["time"] - ev["started"]).total_seconds() // 60)
-
-    if ev["kind"] == "BO_READY":
-        head = f"⚡ <b>GET READY · {what.upper()} BREAKOUT · {side}</b>"
-        detail = (f"🚪 M1 key bar closed {where} {p(ev['level'])}\n"
-                  f"<i>Breakout attempt started · waiting for M1 confirmation or failure</i>")
-    elif ev["kind"] == "BO_CONFIRMED":
-        head = f"✅ <b>BREAKOUT CONFIRMED · {side}</b>"
-        if ev["reason"] == "follow":
-            ext = p(ev["key_high"] if s > 0 else ev["key_low"])
-            why = f"M1 follow-through: closed {where} the key bar {'high' if s > 0 else 'low'} ({ext})"
-        else:
-            why = f"Price held {where} {p(ev['level'])} on M1"
-        detail = f"🚪 Level {p(ev['level'])} · {why}\n⏱ {mins} min after the breakout bar"
-    else:
-        head = f"❌ <b>BREAKOUT FAILED · {side}</b>"
-        back = "below" if s > 0 else "above"
-        opp = "BEARISH" if s > 0 else "BULLISH"
-        detail = (f"🚪 M1 closed back {back} {p(ev['level'])}, inside the {what}\n"
-                  f"⏱ {mins} min after the breakout bar\n"
-                  f"<i>Failed breakout · trapped traders · watch for a {opp} move</i>")
-
-    return (f"{head}\n"
-            f"<b>{label(sym)}</b>  ·  M5 context → M1 trigger\n{LINE}\n"
-            f"💰 Price: <b>{p(ev['price'])}</b>\n"
-            f"{_context_line(ev)}\n"
-            f"{detail}\n{LINE}\n"
-            f"{_times(ev['time'], ev['tf'])}")
-
-
 def build_alert(ev):
     """هشدار زنده برای ستاپ H/L، Wedge، پین‌بار و بریک‌اوت."""
-    if ev["kind"].startswith("BO_"):
-        return build_mtf_alert(ev)
     sym, s = ev["sym"], ev["side"]
     side = "BULLISH📈" if s > 0 else "BEARISH📉"
     icon = "🟢" if s > 0 else "🔴"
@@ -285,7 +239,7 @@ def build_trade_alert(ev):
     p = lambda x: fmt_price(sym, x)
     buy = s > 0
     side = "BUY 📈" if buy else "SELL 📉"
-    where = ("📦 Range trade" if ev["mode"] == "RANGE" else "💥 Breakout trade")
+    where = ("📦 Range trade" if ev["mode"] == "RANGE" else "🚀 Spike pullback trade")
     pin = ev["pin"]
     lines = []
 
@@ -295,9 +249,10 @@ def build_trade_alert(ev):
             how = (f"⏳ {'Buy' if buy else 'Sell'} stop at <b>{p(ev['planned_entry'])}</b> "
                    f"(pin bar {'high' if buy else 'low'}) · valid {ORDER_BARS} M1 bars")
         else:
-            head = f"🎯 <b>SETUP · {side}</b> · pin bar after a confirmed breakout"
+            head = f"🎯 <b>SETUP · {side}</b> · pin bar ends the first pullback after the M5 spike"
             how = (f"⏳ Waiting for an M1 key bar ({ORDER_BARS} bars max) · "
-                   f"entry at the open of the next bar")
+                   f"entry at the open of the next bar\n"
+                   f"🧱 Broken range level {p(ev['level'])} held by the pullback")
         lines = [how,
                  f"🛑 Stop loss: <b>{p(ev['sl'])}</b> (pin {'low' if buy else 'high'} "
                  f"{'−' if buy else '+'} spread {p(ev['spread'])})",
@@ -325,5 +280,23 @@ def build_trade_alert(ev):
         head = f"✖️ <b>SETUP CANCELLED · {side}</b>"
         lines = [f"<i>{reason}</i>"]
 
-    return (f"{head}\n<b>{label(sym)}</b>  ·  {where}  ·  M1\n{LINE}\n"
-            + "\n".join(lines) + f"\n{LINE}\n{_times(ev['time'], '1')}")
+    if ev.get("live"):
+        lines.append("⚡ <i>Live price</i>")
+    return (f"{head}\n<b>{label(sym)}</b>  ·  {where}  ·  M5 context → M1 trigger\n{LINE}\n"
+            + "\n".join(lines) + f"\n{LINE}\n{_times(ev['time'], exact=True)}")
+
+
+def build_spike_alert(ev):
+    """اسپایک M5 از رنج بیرون زد: آماده‌ی اولین پولبک باشید."""
+    sym, snap = ev["sym"], ev["snap"]
+    p = lambda x: fmt_price(sym, x)
+    up = snap["side"] > 0
+    side = "BULLISH📈" if up else "BEARISH📉"
+    return (f"🚀 <b>M5 SPIKE · {side}</b>\n<b>{label(sym)}</b>  ·  breakout from the trading range\n{LINE}\n"
+            f"💰 Price: <b>{p(ev['price'])}</b>\n"
+            f"🧱 Broke the range {'top' if up else 'bottom'} {p(snap['broken'])}\n"
+            f"📏 Spike {p(snap['start_price'])} → {p(snap['extreme'])} ({snap['size']:.1f}× average bar)\n"
+            f"⏳ <b>Wait for the first pullback</b>: M1 pin bar {'above' if up else 'below'} "
+            f"{p(snap['broken'])}, then a key bar → entry\n"
+            f"❌ Pullback closing back {'below' if up else 'above'} {p(snap['broken'])} on M5 = failed breakout, no trade\n"
+            f"{LINE}\n{_times(ev['time'])}")

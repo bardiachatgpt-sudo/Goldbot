@@ -359,38 +359,3 @@ def new_events(sym, res, since):
                            "ema20": float(row["ema20"])})
     return events
 
-
-def breakout_levels(res):
-    """سطح‌هایی که الان روی تایم‌فریم زمینه (M5) ارزش زیر نظر گرفتن دارند.
-
-    - رنج فعلی: سقف (بریک‌اوت صعودی) و کف (بریک‌اوت نزولی)
-    - وج‌های تأییدشده‌ای که هنوز نه باطل شده‌اند و نه از آن‌ها بریک‌اوت شده
-    """
-    if "df" not in res:
-        return []
-    df = res["df"]
-    n = len(df)
-    levels = []
-    tr = res.get("trading_range")
-    if tr:
-        for side, lvl in ((1, tr["high"]), (-1, tr["low"])):
-            levels.append({"key": ("RANGE", side), "kind": "RANGE", "side": side, "level": lvl,
-                           "range_high": tr["high"], "range_low": tr["low"]})
-    seen = set()
-    for w in reversed(res["all_wedges"]):
-        c, side = w["trigger_index"], w["side"]
-        if c + SWING_WINDOW > n - 1 or n - 1 - c > WEDGE_BO_BARS:
-            continue
-        level, extreme = wedge_level(df, w), w["points"][2]["price"]
-        after = df.iloc[c + 1:]
-        if side > 0 and ((after["low"] < extreme).any() or (after["close"] > level).any()):
-            continue
-        if side < 0 and ((after["high"] > extreme).any() or (after["close"] < level).any()):
-            continue
-        if (side, round(level, 10)) in seen:
-            continue
-        seen.add((side, round(level, 10)))
-        levels.append({"key": ("WEDGE", w["trigger_date"], side), "kind": "WEDGE", "side": side,
-                       "level": level, "extreme": extreme, "type": w["type"],
-                       "points": [p["price"] for p in w["points"]]})
-    return levels

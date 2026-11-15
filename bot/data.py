@@ -78,12 +78,20 @@ def fetch_candles(tv_symbol, interval="1", n_bars=1000, timeout=20):
         return None, f"{tv_symbol}: {str(e)[:80]}"
 
 
+LAST_SOURCE = {}   # نماد → منبع TradingView که آخرین بار داده داد (برای قیمت زنده)
+
+
+def source(name):
+    return LAST_SOURCE.get(name, SYMBOLS[name][0])
+
+
 def get_closed_candles(name, n_bars, min_bars, interval=None):
     """فقط کندل‌های بسته‌شده؛ ردیف آخر (کندل در حال تشکیل) حذف می‌شود."""
     errors = []
     for tv_symbol in SYMBOLS[name]:
         df, err = fetch_candles(tv_symbol, interval or TIMEFRAME, n_bars)
         if df is not None and len(df) > min_bars:
+            LAST_SOURCE[name] = tv_symbol
             return df.iloc[:-1]
         errors.append(err or f"{tv_symbol}: too few bars")
     print(f"[{name}] fetch failed: {' | '.join(errors)}")
