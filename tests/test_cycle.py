@@ -55,7 +55,8 @@ class TestHandBuilt(unittest.TestCase):
         e = CycleEngine()
         e.feed(_bars(rows))
         self.assertEqual(e.state, RANGE)
-        self.assertEqual(e.snapshot()["why"], "spike erased")
+        self.assertEqual(e.snapshot()["why"], "spike_erased")
+        self.assertIn("Formed by: the spike was fully erased", cycle_block("XAUUSD", e.snapshot()))
 
     def test_flat_market_stays_range(self):
         e = CycleEngine()
