@@ -164,8 +164,15 @@ class Telegram:
         # 3️⃣ فقط کندل‌ها، برای کشیدن خط با دست و مقایسه
         try:
             from .structure import render_plain
+            span = ""
+            try:
+                from .config import TEHRAN
+                d = df.index.tz_convert(TEHRAN)
+                span = f" · {d[0]:%d %b %H:%M} → {d[-1]:%d %b %H:%M} Tehran"
+            except Exception:
+                pass
             self.bot.send_photo(chat_id, render_plain(df),
-                                caption=f"3️⃣ {label(sym)} · {tf_name} · plain candles (same {len(df)} candles) — "
+                                caption=f"3️⃣ {label(sym)} · {tf_name} · plain candles (same {len(df)} candles){span} — "
                                         f"draw your own lines and compare",
                                 reply_markup=kb)
         except Exception as e:

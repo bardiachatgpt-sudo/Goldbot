@@ -352,7 +352,7 @@ def core_lines(ph, piv, avg):
 
 
 def render_plain(df):
-    """فقط کندل‌ها: بدون عنوان، برچسب، محور، سوئینگ یا خط — برای اینکه خود تریدر خط بکشد و مقایسه کند.
+    """فقط کندل‌ها و ساعت/تاریخ: بدون عنوان، محور قیمت، سوئینگ یا خط — برای اینکه خود تریدر خط بکشد و مقایسه کند.
     اندازه و مقیاس همان render است تا سه عکس روی هم بیفتند."""
     import io
 
@@ -373,7 +373,24 @@ def render_plain(df):
     pad = (h.max() - l.min()) * 0.015
     ax.set_xlim(-2, n + 2)
     ax.set_ylim(l.min() - pad * 3, h.max() + pad * 4)
-    ax.axis("off")
+    # فقط ساعت و تاریخ (به وقت تهران) زیر نمودار؛ بدون محور قیمت، خط یا نوشته‌ی دیگر
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color("#3F3F46")
+    ax.set_yticks([])
+    ax.set_xticks([])
+    if hasattr(df.index, "tz_convert"):
+        try:
+            from .config import TEHRAN
+            dates = df.index.tz_convert(TEHRAN)
+            step = max(1, n // 24)
+            ax.set_xticks(range(0, n, step))
+            ax.set_xticklabels([d.strftime("%d %b %H:%M") for d in dates[::step]],
+                               rotation=45, ha="right", fontsize=8, color="#D4D4D8")
+            ax.tick_params(axis="x", colors="#71717A")
+            ax.set_xlabel("Tehran time", color="#9CA3AF")
+        except Exception:
+            pass
     plt.tight_layout()
     buf = io.BytesIO()
     fig.savefig(buf, format="png", facecolor="#121214")
