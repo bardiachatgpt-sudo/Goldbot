@@ -71,7 +71,7 @@ class TestCycleRules(unittest.TestCase):
     def test_rules_hold(self):
         seen = set()
         for seed in range(6):
-            e = CycleEngine("XAUUSD")
+            e = CycleEngine("XAUUSD", always_in=True)       # همه‌ی گذارها، از جمله Always In
             prev = (RANGE, 0)
             test_start = None
             for ts, r in candles(n=1500, seed=seed).iterrows():

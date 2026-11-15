@@ -34,6 +34,17 @@ LIVE_PRICES = os.environ.get("LIVE_PRICES", "1") not in ("0", "false", "no")
 STRATEGY = os.environ.get("STRATEGY", "pin").strip().lower()
 if STRATEGY not in ("pin", "brooks"):
     STRATEGY = "pin"
+
+# Always In (روند بدون اسپایک، از جزوه‌ی چینی فصل ۰۲) در چرخه‌ی M5.
+# پیش‌فرض: خاموش برای pin (دقیقاً مثل نسخه‌ی اول؛ با روشن بودنش بک‌تست طلا از +7R به −5R رسید)،
+# روشن برای brooks (که بر اساس آن طراحی شده). با ALWAYS_IN=1 یا 0 می‌شود هر کدام را تحمیل کرد.
+_ALWAYS_IN_ENV = os.environ.get("ALWAYS_IN", "").strip()
+
+
+def always_in_for(strategy=None):
+    if _ALWAYS_IN_ENV:
+        return _ALWAYS_IN_ENV not in ("0", "false", "no")
+    return (strategy or STRATEGY) == "brooks"
 RR = float(os.environ.get("RR", "2"))                 # ریسک به ریوارد
 ORDER_BARS = int(os.environ.get("ORDER_BARS", "3"))   # سفارش/انتظار Key bar حداکثر این تعداد کندل M1
 ARM_BARS = 20           # پین‌بار باید تا این تعداد کندل M1 بعد از تأیید بریک‌اوت بیاید

@@ -72,8 +72,10 @@ def describe_state(state, side, sub=None):
 
 
 class CycleEngine:
-    def __init__(self, sym=""):
+    def __init__(self, sym="", always_in=None):
+        from .config import always_in_for
         self.sym = sym
+        self.use_always_in = always_in_for() if always_in is None else always_in
         self.t, self.o, self.h, self.l, self.c, self.ema, self.avg = [], [], [], [], [], [], []
         self.state, self.side, self.since = RANGE, 0, 0
         self.info = {"hi": None, "lo": None, "magnet": None, "watch": None, "reversal": False}
@@ -197,7 +199,7 @@ class CycleEngine:
             if first is not None and (hi is None or self._beyond(s, self.c[i], hi if s > 0 else lo)):
                 self._to_spike(i, s, first, broken=(hi if s > 0 else lo) if hi is not None else None)
                 return None
-        side = self._always_in(i)                    # روند بدون اسپایک
+        side = self._always_in(i) if self.use_always_in else 0     # روند بدون اسپایک
         if side:
             self._to_trend_channel(i, side)
             return None

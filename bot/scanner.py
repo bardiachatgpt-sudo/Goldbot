@@ -11,6 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 from .alert_chart import m5_alert_chart, pin_trade_chart, trade_chart
+from .config import always_in_for
 from .config import (ALERT_CHARTS, ALERT_SETUPS, BARS, CONTEXT_TF, LIVE_PRICES, MIN_BARS, STRATEGY,
                      SYMBOLS, TRIGGER_BARS, TRIGGER_TF, WORKERS)
 from .cycle import RANGE, SPIKE, CycleEngine
@@ -134,7 +135,7 @@ class Scanner:
     def _cycle(self, sym, df):
         eng = self.cycles.get(sym)
         if eng is None or df.index[0] > eng.t[-1]:        # اولین اجرا یا شکاف در داده: بازسازی بی‌صدا
-            eng = CycleEngine(sym)
+            eng = CycleEngine(sym, always_in=always_in_for(self.strategy))
             eng.feed(df)
             self.cycles[sym] = eng
             return

@@ -56,10 +56,11 @@ def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
 
 def run_pin(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
     """نسخه‌ی اول: هر کندل M1 فقط با کندل‌های M5 که قبل از شروعش بسته شده‌اند تصمیم می‌گیرد."""
+    from .config import always_in_for
     from .trades_pin import TradeManager as PinTradeManager
     ctx = to_tf(trig, ctx_min) if ctx is None else ctx
     d = analyze(trig, cycle=False)["df"]
-    eng = CycleEngine(sym)
+    eng = CycleEngine(sym, always_in=always_in_for("pin"))
     tm = PinTradeManager(sym)
     ctx_end = ctx.index + pd.Timedelta(minutes=ctx_min)
     k = 0
@@ -88,7 +89,8 @@ def run_brooks(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1):
     ctx = to_tf(trig, ctx_min) if ctx is None else ctx
     d1 = from_tradingview(trig)
     d5 = from_tradingview(ctx)
-    eng = CycleEngine(sym)
+    from .config import always_in_for
+    eng = CycleEngine(sym, always_in=always_in_for("brooks"))
     tm = TradeManager(sym, signal_tf=ctx_min)
     rows5 = list(d5.itertuples(index=False))
     step5 = pd.Timedelta(minutes=ctx_min)
