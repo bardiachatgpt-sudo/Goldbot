@@ -111,7 +111,7 @@ class TestStructureButton(unittest.TestCase):
 
         with mock.patch.object(telegram_bot, "get_closed_candles", fake):
             tg.send_structure(7, "XAUUSD")
-        self.assertEqual(calls, [("XAUUSD", 501, "5")])
+        self.assertEqual(calls, [("XAUUSD", 501, "5")])            # پیش‌فرض: M5
         photos = tg.bot.send_photo.call_args_list
         self.assertEqual(len(photos), 1)                                 # فقط نسخه‌ی ۱
         self.assertEqual(photos[0].args[1][:4], b"\x89PNG")
@@ -119,6 +119,27 @@ class TestStructureButton(unittest.TestCase):
         self.assertNotIn("v2", photos[0].kwargs["caption"])
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
+
+    def test_choose_one_or_five_minutes(self):
+        st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
+        tg = telegram_bot.Telegram(None, st)
+        tg.bot = mock.MagicMock()
+        tf_buttons = [b.callback_data for row in tg.structure_tf_keyboard("XAUUSD").keyboard for b in row]
+        self.assertEqual(tf_buttons, ["sxt:XAUUSD:1", "sxt:XAUUSD:5"])
+        calls = []
+        df = fake_market(1234)
+
+        def fake(sym, n, m, interval=None):
+            calls.append(interval)
+            return df
+
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake):
+            tg.send_structure(7, "XAUUSD", "1")
+        self.assertEqual(calls, ["1"])
+        kw = tg.bot.send_photo.call_args.kwargs
+        self.assertIn("M1 structure", kw["caption"])
+        btns = [b.callback_data for row in kw["reply_markup"].keyboard for b in row]
+        self.assertEqual(btns, ["sxt:XAUUSD:1", "sxt:XAUUSD:5", "sx"])      # تازه کردن، تایم‌فریم دیگر، جفت دیگر
 
 
 if __name__ == "__main__":

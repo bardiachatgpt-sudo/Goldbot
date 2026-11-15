@@ -20,12 +20,13 @@ from .strategy import analyze
 HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / channel / under test) "
         "with levels and chart.\n"
         "⭐ Follow a pair to also get every cycle change for it.\n"
-        "📐 Structure: the last 500 M5 candles with only the structure (spike / channel / range).\n"
+        "📐 Structure: the last 500 candles (M1 or M5) with only the structure (spike / channel / range).\n"
         "🧪 Backtest: tap the button (pair → timeframe → period) to replay recent days with the same rules "
         "on a $1,000 account.\n\n"
         "/status XAUUSD · /structure XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest")
 BACKTEST_MAX_DAYS = 10
 STRUCTURE_BARS = 500
+STRUCTURE_TFS = {"1": "M1", "5": "M5"}
 
 
 CAPTION_LIMIT = 1024
@@ -109,28 +110,38 @@ class Telegram:
         kb.add(*[types.InlineKeyboardButton(label(n), callback_data="sxp:" + n) for n in SYMBOLS])
         return kb
 
-    def send_structure(self, chat_id, sym):
-        """نمودار M5 آخرین STRUCTURE_BARS کندل، فقط ساختار: سوئینگ‌ها، خط روند، خط موازی، مستطیل هر فاز."""
+    def structure_tf_keyboard(self, sym):
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        kb.add(types.InlineKeyboardButton("⏱ 1 minute", callback_data=f"sxt:{sym}:1"),
+               types.InlineKeyboardButton("⏱ 5 minutes", callback_data=f"sxt:{sym}:5"))
+        return kb
+
+    def send_structure(self, chat_id, sym, tf="5"):
+        """نمودار آخرین STRUCTURE_BARS کندل (M1 یا M5)، فقط ساختار: سوئینگ‌ها، خط روند، خط موازی، مستطیل هر فاز."""
+        tf = tf if tf in STRUCTURE_TFS else "5"
+        tf_name = STRUCTURE_TFS[tf]
         from .structure import render
         try:
             self.bot.send_chat_action(chat_id, "upload_photo")
         except Exception:
             pass
-        df = get_closed_candles(sym, STRUCTURE_BARS + 1, MIN_BARS, "5")
+        df = get_closed_candles(sym, STRUCTURE_BARS + 1, MIN_BARS, tf)
         if df is None:
             self.bot.send_message(chat_id, f"⚠️ {sym}: could not fetch candles, try again in a minute.")
             return
         df = df.tail(STRUCTURE_BARS)
-        png, phases, now = render(sym, df)
+        png, phases, now = render(sym, df, tf=tf_name)
         names = {("SPIKE", 1): "🚀 Spike up", ("SPIKE", -1): "🚀 Spike down", ("CHANNEL", 1): "📈 Bull channel",
                  ("CHANNEL", -1): "📉 Bear channel", ("RANGE", 0): "📦 Trading range"}
         recent = " → ".join(names[(p["type"], p["side"])] for p in phases[-6:]) or "-"
-        cap = (f"📐 <b>{label(sym)} · M5 structure</b> · last {len(df)} candles\n"
+        cap = (f"📐 <b>{label(sym)} · {tf_name} structure</b> · last {len(df)} candles\n"
                f"Now: <b>{names.get(now, '❔ unclear') if now else '❔ unclear (waiting for two new lows and highs)'}</b>\n"
                f"Recent phases: {recent}\n"
                f"<i>Lines drawn like a trader: through two lows (or highs) + a parallel line. Rough version.</i>")
-        kb = types.InlineKeyboardMarkup()
-        kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="sxp:" + sym),
+        other = "1" if tf == "5" else "5"
+        kb = types.InlineKeyboardMarkup(row_width=3)
+        kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data=f"sxt:{sym}:{tf}"),
+               types.InlineKeyboardButton(f"⏱ {STRUCTURE_TFS[other]}", callback_data=f"sxt:{sym}:{other}"),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
         self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
 
@@ -242,7 +253,13 @@ class Telegram:
             if sym is None:
                 bot.send_message(m.chat.id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
                 return
-            self.send_structure(m.chat.id, sym)
+            parts = m.text.split()
+            tf = parts[2] if len(parts) > 2 else None              # /structure XAUUSD 1
+            if tf in STRUCTURE_TFS:
+                self.send_structure(m.chat.id, sym, tf)
+            else:
+                bot.send_message(m.chat.id, f"📐 {label(sym)} · last {STRUCTURE_BARS} candles on which timeframe?",
+                                 reply_markup=self.structure_tf_keyboard(sym))
 
         @bot.message_handler(commands=["following"])
         def on_following(m):
@@ -260,9 +277,18 @@ class Telegram:
                 bot.answer_callback_query(c.id)
                 bot.send_message(chat_id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
                 return
-            if action == "sxp" and sym in SYMBOLS:
-                bot.answer_callback_query(c.id, f"Drawing {sym}…")
-                self.send_structure(chat_id, sym)
+            if action == "sxp" and sym in SYMBOLS:                # ساختار: انتخاب تایم‌فریم
+                bot.answer_callback_query(c.id)
+                bot.send_message(chat_id, f"📐 {label(sym)} · last {STRUCTURE_BARS} candles on which timeframe?",
+                                 reply_markup=self.structure_tf_keyboard(sym))
+                return
+            if action == "sxt":
+                sym, _, tf = sym.partition(":")
+                if sym in SYMBOLS and tf in STRUCTURE_TFS:
+                    bot.answer_callback_query(c.id, f"Drawing {sym} {STRUCTURE_TFS[tf]}…")
+                    self.send_structure(chat_id, sym, tf)
+                else:
+                    bot.answer_callback_query(c.id)
                 return
             if action == "home":
                 bot.answer_callback_query(c.id)

@@ -305,7 +305,7 @@ def _bounds(cur, i):
 
 
 # ---------------------------------------------------------------- نمودار
-def render(sym, df, title_extra="", v2=False):
+def render(sym, df, title_extra="", v2=False, tf="M5"):
     """df: ستون‌های Open/High/Low/Close (مثل data.py). PNG: کندل‌ها، سوئینگ‌ها، خط‌ها، مستطیل رنگی هر فاز."""
     import io
 
@@ -370,7 +370,7 @@ def render(sym, df, title_extra="", v2=False):
     now_txt = NAME.get(now, "unclear (waiting for two new lows and highs)") if now else \
         "unclear (waiting for two new lows and highs)"
     ver = " · v2 (new: candle behaviour + lines)" if v2 else " · v1 (lines only)"
-    ax.set_title(f"{sym} M5 · last {n} candles · structure only{ver}{title_extra}\nNow: {now_txt}",
+    ax.set_title(f"{sym} {tf} · last {n} candles · structure only{ver}{title_extra}\nNow: {now_txt}",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_xlim(-2, n + 2)
     ax.set_ylim(l.min() - pad * 3, h.max() + pad * 4)
