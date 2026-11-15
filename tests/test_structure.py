@@ -113,11 +113,10 @@ class TestStructureButton(unittest.TestCase):
             tg.send_structure(7, "XAUUSD")
         self.assertEqual(calls, [("XAUUSD", 501, "5")])
         photos = tg.bot.send_photo.call_args_list
-        self.assertEqual(len(photos), 2)                                 # نسخه‌ی ۱ و نسخه‌ی ۲
-        for call in photos:
-            self.assertEqual(call.args[1][:4], b"\x89PNG")
+        self.assertEqual(len(photos), 1)                                 # فقط نسخه‌ی ۱
+        self.assertEqual(photos[0].args[1][:4], b"\x89PNG")
         self.assertIn("last 500 candles", photos[0].kwargs["caption"])
-        self.assertIn("v2 (test)", photos[1].kwargs["caption"])
+        self.assertNotIn("v2", photos[0].kwargs["caption"])
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
 
