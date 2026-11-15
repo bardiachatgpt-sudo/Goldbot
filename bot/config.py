@@ -20,16 +20,41 @@ CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()
 
 STATE_FILE = "bot_state.json"
 
+WORKERS = 5             # تعداد نمادهایی که هم‌زمان دریافت می‌شوند
+
+
+def _chain(base):
+    return [f"OANDA:{base}", f"FOREXCOM:{base}", f"FX:{base}"]
+
+
 # نماد → فهرست منابع TradingView به ترتیب اولویت
 SYMBOLS = {
     "XAUUSD": ["OANDA:XAUUSD", "FOREXCOM:XAUUSD", "FX_IDC:XAUUSD"],
+    "EURUSD": _chain("EURUSD"),
+    "GBPUSD": _chain("GBPUSD"),
+    "USDJPY": _chain("USDJPY"),
+    "USDCHF": _chain("USDCHF"),
+    "USDCAD": _chain("USDCAD"),
+    "AUDUSD": _chain("AUDUSD"),
+    "NZDUSD": _chain("NZDUSD"),
+    "BTCUSD": ["BINANCE:BTCUSDT", "COINBASE:BTCUSD"],
 }
 
 FLAGS = {
     "XAUUSD": "🥇🇺🇸",
+    "EURUSD": "🇪🇺🇺🇸",
+    "GBPUSD": "🇬🇧🇺🇸",
+    "USDJPY": "🇺🇸🇯🇵",
+    "USDCHF": "🇺🇸🇨🇭",
+    "USDCAD": "🇺🇸🇨🇦",
+    "AUDUSD": "🇦🇺🇺🇸",
+    "NZDUSD": "🇳🇿🇺🇸",
+    "BTCUSD": "₿🇺🇸",
 }
 
+# تعداد رقم اعشار قیمت؛ نمادهای ذکرنشده: ین 3 رقم، بقیه 5 رقم
 DECIMALS = {
+    "BTCUSD": 0,
     "XAUUSD": 2,
 }
 

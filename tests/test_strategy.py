@@ -50,6 +50,7 @@ class TestStrategy(unittest.TestCase):
 
         with mock.patch.object(scanner, "get_closed_candles", fake), \
              mock.patch.object(scanner, "BARS", 10_000), \
+             mock.patch.object(scanner, "SYMBOLS", {"XAUUSD": []}), \
              mock.patch.object(scanner, "ALERT_SETUPS", {"H1", "H2", "L1", "L2", "WEDGE"}), \
              mock.patch.object(scanner, "build_alert", lambda ev: ev):
             seen = {}
@@ -74,3 +75,27 @@ class TestStrategy(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSymbols(unittest.TestCase):
+    def test_all_symbols_scanned_independently(self):
+        """هر نماد داده‌ی خودش را می‌گیرد و هشدارهایش با نام همان نماد ارسال می‌شود."""
+        from bot.config import SYMBOLS
+        data = {s: candles(seed=i, p0=1.1 if s != "BTCUSD" else 68000.0) for i, s in enumerate(SYMBOLS)}
+        feed = {"n": 400}
+        out = []
+
+        def fake(sym, n_bars, min_bars, interval=None):
+            return data[sym].iloc[:feed["n"]]
+
+        with mock.patch.object(scanner, "get_closed_candles", fake), \
+             mock.patch.object(scanner, "build_alert", lambda ev: ev):
+            seen = {}
+            scanner.scan_once(seen, out.append)
+            self.assertEqual(set(seen), set(SYMBOLS))
+            for _ in range(150):
+                feed["n"] += 1
+                scanner.scan_once(seen, out.append)
+        self.assertEqual({e["sym"] for e in out}, set(SYMBOLS))
+        for e in out[:20]:
+            self.assertIn(e["sym"], build_alert(e))
