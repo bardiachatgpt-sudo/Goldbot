@@ -98,7 +98,7 @@ class TestTrendTrades(unittest.TestCase):
         self.assertEqual(kinds(ev), ["TRADE_PENDING"])
         p = ev[0]
         self.assertEqual((p["mode"], p["n_h"], p["planned_entry"]), ("TREND", 1, 109.8))
-        self.assertAlmostEqual(p["sl"], 108.9 - SP)
+        self.assertAlmostEqual(p["sl"], 108.8 - SP)               # پشت کف پولبک (Swing stop)
         sim.m1((109.6, 109.9, 109.5, 109.85))                   # ورود روی سقف کندل سیگنال
         sim.m1((109.85, 112.5, 109.8, 112.4))                   # حد سود
         self.assertEqual(kinds(sim.ev)[1:], ["TRADE_OPEN", "TRADE_CLOSED"])
@@ -127,7 +127,27 @@ class TestTrendTrades(unittest.TestCase):
         sim.m5((91.0, 91.2, 90.0, 90.1), ctx)
         ev = sim.m5((90.4, 91.1, 90.2, 90.4), ctx)
         self.assertEqual((ev[0]["side"], ev[0]["planned_entry"]), (-1, 90.2))
-        self.assertAlmostEqual(ev[0]["sl"], 91.1 + SP)
+        self.assertAlmostEqual(ev[0]["sl"], 91.2 + SP)
+
+    def test_pullback_must_reach_the_ema(self):
+        sim, ctx = self.setup()
+        far = {**ctx, "ema": 105.0}                               # کف پولبک 108.9، خیلی بالای EMA
+        self.assertEqual(sim.m5((109.6, 109.8, 108.9, 109.6), far), [])
+        near = {**ctx, "ema": 108.6}
+        self.assertEqual(kinds(sim.m5((109.6, 109.75, 108.9, 109.6), near)), ["TRADE_PENDING"])
+
+    def test_no_entry_near_the_channel_line(self):
+        sim, ctx = self.setup()
+        self.assertEqual(sim.m5((109.6, 109.8, 108.9, 109.6), {**ctx, "pos": 0.9}), [])
+
+    def test_stop_at_least_one_average_bar(self):
+        sim = Sim()
+        ctx = chan(high=110.0)
+        sim.m5((109.6, 110.0, 109.5, 109.9), ctx)                 # کف پولبک فقط 0.5 زیر
+        ev = sim.m5((109.75, 109.95, 109.7, 109.9), ctx)
+        p = ev[0]
+        avg = (6 * 1.0 + 0.5) / 7                                # میانگین اندازه‌ی کندل‌های قبلی
+        self.assertAlmostEqual(p["planned_entry"] - p["sl"], avg)     # حداقل یک کندل متوسط
 
     def test_no_trades_when_channel_under_test(self):
         sim, ctx = self.setup()
@@ -162,7 +182,7 @@ class TestRangeTrades(unittest.TestCase):
         sim = Sim()
         ev = sim.m5(self.BULL, RANGE_CTX)
         self.assertEqual((ev[0]["mode"], ev[0]["side"], ev[0]["planned_entry"]), ("RANGE", 1, 101.2))
-        self.assertAlmostEqual(ev[0]["sl"], 100.3 - SP)
+        self.assertAlmostEqual(ev[0]["sl"], 100.2 - SP)          # پشت Double Bottom
         self.assertIn("second entry", build_trade_alert(ev[0]))
 
     def test_first_test_only_is_skipped(self):
@@ -256,7 +276,7 @@ class TestTradeOutput(unittest.TestCase):
 
 class TestScannerWiring(unittest.TestCase):
     def test_spike_alert_and_trades_run_end_to_end(self):
-        m1 = candles(n=3300, vol=0.0005, freq="1min", seed=5)
+        m1 = candles(n=3300, vol=0.0005, freq="1min", seed=1)
         feed = {"n": 2800}
         alerts, fol = [], []
 

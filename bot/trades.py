@@ -1,14 +1,15 @@
 """ستاپ‌های ورود به روش ال بروکس (و جزوه‌ی چینی).
 
-کندل سیگنال روی M5 (مثل خود ال بروکس)؛ ورود با سفارش Stop روی سقف/کف کندل سیگنال؛ حد ضرر پشت سر دیگر
-کندل سیگنال ± اسپرد؛ حد سود = ورود ± RR × ریسک. کندل‌های M1 و قیمت زنده فقط برای اینکه دقیق بفهمیم
+کندل سیگنال روی M5 (مثل خود ال بروکس)؛ ورود با سفارش Stop روی سقف/کف کندل سیگنال؛ حد ضرر پشت ساختار
+(کف پولبک، یا Double Bottom در رنج) ± اسپرد و حداقل یک کندل متوسط M5؛ حد سود = ورود ± RR × ریسک. کندل‌های M1 و قیمت زنده فقط برای اینکه دقیق بفهمیم
 ورود / حد ضرر / حد سود کدام اول خورد.
 
 📈 TREND — معامله در جهت روند (جزوه فصل ۰۳–۰۴؛ «در روند فقط در جهت روند»)
    زمینه: کانال M5 (از اسپایک یا Always In)، سمت = جهت کانال
    کندل سیگنال: کندل پولبک (سقف پایین‌تر از کندل قبل در کانال صعودی) که قوی بسته شده (نیمه‌ی بالایی)
    H1 کافی است در کانال تنگ؛ در کانال باز H2 لازم است (ورود دوم، فصل ۰۴). حداکثر H3.
-   پولبک سالم: حداکثر ۶۲٪ حرکت از شروع کانال تا سقف (فصل ۰۳)
+   پولبک سالم: حداکثر ۶۲٪ حرکت از شروع کانال تا سقف، و تا نزدیک EMA20 برگشته باشد (فصل ۰۳)
+   در ربع بیرونی کانال (نزدیک خط کانال) ورود نمی‌شود
 
 🚀 SPIKE — اولین پولبک بعد از اسپایکی که از رنج بیرون زده (همان قاعده‌ی TREND، با H1)
    تا وقتی پولبک روی M5 به داخل رنج قبلی بسته نشده و سقف اسپایک دوباره رد نشده
@@ -39,6 +40,9 @@ MAX_H = 3                   # حداکثر H3 / L3
 SECOND_TEST_SLACK = 1.0     # تست دوم کف قبلی را حداکثر یک کندل متوسط بشکند
 EDGE = 0.25
 LOSS_BRAKE = 2
+VALUE_ZONE = 0.5            # پولبک در جهت روند باید تا نیم کندل متوسط از EMA20 برسد (فصل ۰۳)
+CHANNEL_EDGE = 0.75         # ورود در جهت روند در ربع بیرونی کانال (نزدیک خط کانال) ممنوع
+MIN_RISK = 1.0              # حد ضرر حداقل یک کندل متوسط M5 از ورود
 
 
 def candle_path(o, h, l, c):
@@ -165,16 +169,19 @@ class TradeManager:
 
     def _open(self, time, entry, live=False):
         t = self.pending
-        sl, tp, risk = self._levels(t["side"], t["signal"], entry)
+        sl, tp, risk = self._levels(t["side"], t["stop_ref"], entry, t["min_risk"])
         t.update(entry=entry, sl=sl, tp=tp, risk=risk, opened=time, bars_open=0)
         if t["mode"] == RANGE:
             t["tp_beyond_range"] = bool(tp > t["range_high"] if t["side"] > 0 else tp < t["range_low"])
         self.pending, self.open = None, t
         return self._ev("TRADE_OPEN", t, time, entry, live=live)
 
-    def _levels(self, side, sig, entry):
+    def _levels(self, side, stop_ref, entry, min_risk=0.0):
+        """حد ضرر پشت stop_ref ± اسپرد، و حداقل min_risk از ورود (تا داخل نویز نباشد)."""
         sp = spread(self.sym)
-        sl = sig["low"] - sp if side > 0 else sig["high"] + sp
+        sl = stop_ref - sp if side > 0 else stop_ref + sp
+        if abs(entry - sl) < min_risk:
+            sl = entry - min_risk if side > 0 else entry + min_risk
         risk = abs(entry - sl)
         tp = entry + RR * risk if side > 0 else entry - RR * risk
         return sl, tp, risk
@@ -222,7 +229,7 @@ class TradeManager:
         if self.open is not None:
             return []
         sig = {"time": row["date"], "high": h, "low": l, "close": c}
-        setup = self._trend_setup(ctx, sig, o, h, l, c, prev) or self._range_setup(ctx, sig, o, h, l, c, avg)
+        setup = self._trend_setup(ctx, sig, o, h, l, c, prev, avg) or self._range_setup(ctx, sig, o, h, l, c, avg)
         if not setup:
             return []
         mode, side, extra = setup
@@ -232,8 +239,11 @@ class TradeManager:
             return []                                  # یک ستاپ در هر لحظه
         moved = self.pending is not None
         planned = h if side > 0 else l
-        sl, tp, risk = self._levels(side, sig, planned)
+        stop_ref = extra.pop("stop_ref")
+        min_risk = MIN_RISK * avg
+        sl, tp, risk = self._levels(side, stop_ref, planned, min_risk)
         self.pending = {"mode": mode, "side": side, "signal": sig, "pin": sig, "planned_entry": planned,
+                        "stop_ref": stop_ref, "min_risk": min_risk,
                         "sl": sl, "tp": tp, "risk": risk, "spread": spread(self.sym), "ctx_key": key,
                         "valid_until": end + pd.Timedelta(minutes=self.signal_tf * ORDER_BARS), **extra}
         if mode == SPIKE:
@@ -249,12 +259,14 @@ class TradeManager:
         s = ctx["side"]
         key = (s, ctx.get("start_time"))
         ext = h if s > 0 else l
+        back = l if s > 0 else h
         if self.trend is None or self.trend["key"] != key:
-            self.trend = {"key": key, "ext": ctx.get("high", ext), "pushes": 0, "in_pb": False}
+            self.trend = {"key": key, "ext": ctx.get("high", ext), "pushes": 0, "in_pb": False, "pb_back": back}
         tr = self.trend
         if (ext - tr["ext"]) * s > 0:                  # سقف تازه
-            tr.update(ext=ext, pushes=0, in_pb=False)
+            tr.update(ext=ext, pushes=0, in_pb=False, pb_back=back)
             return
+        tr["pb_back"] = min(tr["pb_back"], back) if s > 0 else max(tr["pb_back"], back)   # کف پولبک
         hp = prev["high"] if s > 0 else prev["low"]
         if (ext - hp) * s < 0:                          # کندل پولبک
             tr["in_pb"] = True
@@ -262,7 +274,7 @@ class TradeManager:
             tr["pushes"] += 1
             tr["in_pb"] = False
 
-    def _trend_setup(self, ctx, sig, o, h, l, c, prev):
+    def _trend_setup(self, ctx, sig, o, h, l, c, prev, avg):
         if ctx.get("state") != "CHANNEL" or self.trend is None:
             return None
         s = ctx["side"]
@@ -285,12 +297,21 @@ class TradeManager:
             depth = (self.trend["ext"] - back) * s / abs(self.trend["ext"] - start)
             if depth > PULLBACK_MAX:
                 return None
+        swing = self.trend["pb_back"]                   # حد ضرر پشت کف پولبک (Swing stop)
         if forming:
-            back_close = c
-            if (back_close - ctx["broken"]) * s <= 0:   # کندل سیگنال باید آن طرف سطح شکسته‌شده بسته شود
+            if (c - ctx["broken"]) * s <= 0:            # کندل سیگنال باید آن طرف سطح شکسته‌شده بسته شود
                 return None
-            return SPIKE, s, {"level": ctx["broken"], "spike_id": ctx.get("spike_id"), "n_h": n_h}
-        return TREND, s, {"n_h": n_h, "channel_kind": ctx.get("kind"), "trend_line": ctx.get("trend_line")}
+            return SPIKE, s, {"level": ctx["broken"], "spike_id": ctx.get("spike_id"), "n_h": n_h,
+                              "stop_ref": swing, "stop_note": "pullback " + ("low" if s > 0 else "high")}
+        # ناحیه‌ی ارزش: پولبک باید تا نزدیک EMA20 برگشته باشد (فصل ۰۳: «قیمت به خط روند/EMA برمی‌گردد»)
+        ema = ctx.get("ema")
+        if ema is not None and (back - ema) * s > VALUE_ZONE * avg:
+            return None
+        # نزدیک خط کانال جای برگشت است، نه ورود در جهت روند
+        if ctx.get("pos") is not None and ctx["pos"] >= CHANNEL_EDGE:
+            return None
+        return TREND, s, {"n_h": n_h, "channel_kind": ctx.get("kind"), "trend_line": ctx.get("trend_line"),
+                          "stop_ref": swing, "stop_note": "pullback " + ("low" if s > 0 else "high")}
 
     def _range_setup(self, ctx, sig, o, h, l, c, avg):
         if ctx.get("state") != "RANGE" or not ctx.get("valid") or ctx.get("tight"):
@@ -305,7 +326,9 @@ class TradeManager:
             first, cur = tests[-2], tests[-1]
             if (first - cur) * s > SECOND_TEST_SLACK * avg:
                 continue                               # تست دوم کف اول را خیلی شکسته: رنج دارد می‌شکند
-            return RANGE, s, {"range_high": top, "range_low": bot, "first_test": first}
+            dbl = min(first, cur, l) if s > 0 else max(first, cur, h)     # حد ضرر پشت Double Bottom/Top
+            return RANGE, s, {"range_high": top, "range_low": bot, "first_test": first, "stop_ref": dbl,
+                              "stop_note": "double " + ("bottom" if s > 0 else "top")}
         return None
 
     # ------------------------------------------------------------ برای اسکنر زنده

@@ -270,8 +270,8 @@ def build_trade_alert(ev):
         lines = [f"🧠 {why}",
                  f"⏳ {'Buy' if buy else 'Sell'} stop at <b>{p(ev['planned_entry'])}</b> "
                  f"(M5 signal bar {'high' if buy else 'low'}) · valid {ORDER_BARS} M5 bars",
-                 f"🛑 Stop loss: <b>{p(ev['sl'])}</b> (signal bar {'low' if buy else 'high'} "
-                 f"{'−' if buy else '+'} spread {p(ev['spread'])})",
+                 f"🛑 Stop loss: <b>{p(ev['sl'])}</b> (behind the {ev.get('stop_note', 'signal bar')} "
+                 f"{'−' if buy else '+'} spread, at least one average M5 bar)",
                  f"✅ Take profit: <b>{p(ev['tp'])}</b> (1:{RR:g})",
                  f"❌ Cancelled if price goes {'below' if buy else 'above'} "
                  f"{p(sig['low'] if buy else sig['high'])} first"]

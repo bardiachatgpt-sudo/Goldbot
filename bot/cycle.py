@@ -494,7 +494,7 @@ class CycleEngine:
         s, inf = self.side, self.info
         snap = {"state": self.state, "side": s, "label": self.label(), "price": self.c[i],
                 "time": self.t[i], "bars": i - self.since + 1, "since": self.t[self.since],
-                "avg": self.avg[i]}
+                "avg": self.avg[i], "ema": self.ema[i]}
         if self.state == RANGE:
             hi, lo = inf["hi"], inf["lo"]
             pos = (self.c[i] - lo) / (hi - lo) if hi and hi > lo else 0.5

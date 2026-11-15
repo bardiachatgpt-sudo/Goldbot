@@ -105,7 +105,8 @@ def summary(sym, events, start, end, balance=DEFAULT_BALANCE):
            "cancelled": sum(e["kind"] == "TRADE_CANCELLED" for e in events), "trades": len(closed),
            "wins": len(wins), "losses": len(closed) - len(wins), "net_r": net_r, "open": still_open,
            "by_mode": {}, "closed": closed, "accounts": {}}
-    for mode in ("RANGE", "SPIKE"):
+    res["avg_risk"] = sum(e["risk"] for e in closed) / len(closed) if closed else 0.0
+    for mode in ("TREND", "RANGE", "SPIKE"):
         c = [e for e in closed if e["mode"] == mode]
         res["by_mode"][mode] = (len(c), sum(e["r"] > 0 for e in c), sum(e["r"] for e in c))
     for rp in RISKS:
@@ -173,9 +174,11 @@ def report_text(res, balance=DEFAULT_BALANCE):
              f"🎯 Setups: {res['setups']} · cancelled: {res['cancelled']}",
              f"📊 Closed trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate {wr:.0f}%",
              f"📈 Net: <b>{res['net_r']:+g}R</b>  (each win +{RR:g}R, each loss −1R)"]
-    for mode, name in (("RANGE", "📦 Range"), ("SPIKE", "🚀 Spike pullback")):
+    for mode, name in (("TREND", "📈 With the trend"), ("RANGE", "📦 Range"), ("SPIKE", "🚀 Spike pullback")):
         n, w, r = res["by_mode"][mode]
         lines.append(f"   {name}: {n} trades, {w} wins, {r:+g}R")
+    if res["trades"]:
+        lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
         lines.append(f"   ⏳ {res['open']} trade still open at the end (not counted)")
     lines.append(LINE)
@@ -189,7 +192,9 @@ def report_text(res, balance=DEFAULT_BALANCE):
         for e in res["closed"][-15:]:
             icon = "🏆" if e["r"] > 0 else "🛑"
             side = "BUY" if e["side"] > 0 else "SELL"
-            mode = "Range" if e["mode"] == "RANGE" else "Spike"
+            mode = {"RANGE": "Range", "SPIKE": "Spike", "TREND": "Trend"}[e["mode"]]
+            if e.get("n_h"):
+                mode += f" {'H' if e['side'] > 0 else 'L'}{e['n_h']}"
             lines.append(f"{icon} {e['opened']:%d %b %H:%M} {mode} {side} {p(e['entry'])} → {p(e['exit'])} "
                          f"({e['r']:+g}R)")
         if len(res["closed"]) > 15:
