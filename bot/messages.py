@@ -40,6 +40,26 @@ def build_alert(ev):
         head = f"{icon} <b>{ev['type'].upper()} · {side}</b>"
         pts = " → ".join(fmt_price(sym, p) for p in ev["points"])
         detail = f"🔺 3 pushes: {pts}\n<i>Possible trend reversal</i>"
+    elif ev["kind"] == "WEDGE_BO":
+        head = f"💥 <b>WEDGE BREAKOUT · {side}</b>" + ("  ⚡ <b>KEY BAR</b>" if ev["strong"] else "")
+        pts = " → ".join(fmt_price(sym, p) for p in ev["points"])
+        where = "above" if s > 0 else "below"
+        detail = (f"📐 {ev['type']}: {pts}\n"
+                  f"🚪 Closed {where} {fmt_price(sym, ev['level'])}\n"
+                  f"<i>Breakout out of the wedge · reversal entry</i>")
+    elif ev["kind"] == "RANGE_BO":
+        head = f"💥 <b>RANGE BREAKOUT · {side}</b>  ⚡ <b>KEY BAR</b>"
+        detail = (f"📦 Range: {fmt_price(sym, ev['range_low'])} – {fmt_price(sym, ev['range_high'])}\n"
+                  f"<i>Strong bar closed {'above' if s > 0 else 'below'} the trading range · "
+                  f"watch next bar for follow-through</i>")
+    elif ev["kind"] == "PIN":
+        head = f"{icon} <b>PIN BAR · {side}</b>"
+        if s > 0:
+            detail = (f"📍 Long lower tail rejected a new low ({fmt_price(sym, ev['low'])})\n"
+                      f"<i>Reversal signal bar · entry above its high ({fmt_price(sym, ev['high'])})</i>")
+        else:
+            detail = (f"📍 Long upper tail rejected a new high ({fmt_price(sym, ev['high'])})\n"
+                      f"<i>Reversal signal bar · entry below its low ({fmt_price(sym, ev['low'])})</i>")
     else:
         head = f"{icon} <b>{ev['setup']} · {side}</b>"
         detail = f"<i>{SETUP_DESC.get(ev['setup'], ev['setup'] + ' pullback entry')}</i>"
@@ -74,6 +94,22 @@ def build_report(sym, res):
     sl = [p(x["price"]) for x in res["swing_lows"][-3:]]
     lines.append(f"{LINE}\n🔻 Swing highs (resistance): {', '.join(sh) or '-'}")
     lines.append(f"🔺 Swing lows (support): {', '.join(sl) or '-'}")
+
+    tr = res.get("trading_range")
+    lines.append(f"📦 Trading range now: {p(tr['low'])} – {p(tr['high'])}" if tr
+                 else "📦 Not inside a tight trading range")
+
+    df = res["df"]
+    events = []
+    for col, name in (("range_bo", "Range breakout"), ("wedge_bo", "Wedge breakout"), ("pin_bar", "Pin bar")):
+        hits = df.index[df[col] != 0]
+        if len(hits):
+            i = hits[-1]
+            events.append((i, name, int(df.at[i, col])))
+    for i, name, side in sorted(events, reverse=True):
+        icon = "🟢" if side > 0 else "🔴"
+        ago = len(df) - 1 - i
+        lines.append(f"{icon} Last {name} @ {p(df.at[i, 'close'])} · {ago} bars ago")
 
     if res["wedges"]:
         w = res["wedges"][-1]

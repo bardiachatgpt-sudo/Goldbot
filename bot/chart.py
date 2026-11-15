@@ -41,6 +41,26 @@ def render_chart(sym, res, n=CHART_BARS):
             ax.text(i, h + pad, f"L{int(r['l_setup'])}", color=BEAR, fontsize=8,
                     fontweight="bold", ha="center", va="bottom")
 
+        if r["pin_bar"]:
+            up = r["pin_bar"] > 0
+            ax.text(i, (l - pad * 4) if up else (h + pad * 4), "PIN", color=BULL if up else BEAR,
+                    fontsize=7, ha="center", va="top" if up else "bottom")
+        if r["range_bo"] or r["wedge_bo"]:
+            up = (r["range_bo"] or r["wedge_bo"]) > 0
+            ax.annotate("BO", xy=(i, h if up else l), xytext=(i, (h + pad * 6) if up else (l - pad * 6)),
+                        color="#FACC15", fontsize=8, fontweight="bold", ha="center",
+                        arrowprops=dict(arrowstyle="->", color="#FACC15"))
+        if r["range_bo"]:
+            ax.add_patch(patches.Rectangle((i - 20, r["range_lo"]), 20, r["range_hi"] - r["range_lo"],
+                                           facecolor="#FACC15", alpha=0.07, edgecolor="#FACC15",
+                                           linestyle=":", linewidth=0.8))
+
+    tr = res.get("trading_range")
+    if tr:
+        ax.add_patch(patches.Rectangle((len(df) - 20, tr["low"]), 20, tr["high"] - tr["low"],
+                                       facecolor="#60A5FA", alpha=0.08, edgecolor="#60A5FA",
+                                       linestyle="--", linewidth=0.8))
+
     for s in res["swing_highs"]:
         if s["index"] >= start:
             ax.plot(s["index"] - start, s["price"] + pad * 2.5, marker="v", color="#F43F5E", markersize=5)

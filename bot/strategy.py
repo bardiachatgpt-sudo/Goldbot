@@ -6,6 +6,11 @@
   - شمارش پولبک H1/H2 در روند صعودی و L1/L2 در روند نزولی
   - الگوی Wedge (سه فشار): Wedge Bottom و Wedge Top
   - تشخیص فاز بازار از روی ۱۵ کندل آخر نسبت به EMA 20
+
+اضافه‌شده در Goldbot:
+  - پین‌بار (Reversal bar) که یک کف یا سقف تازه را رد می‌کند
+  - بریک‌اوت از وج: بسته‌شدن بیرون از آخرین پولبک داخل وج
+  - بریک‌اوت از تریدینگ رنج: کندل بریک‌اوت قوی (Key bar) که بیرون رنج بسته می‌شود
 """
 import numpy as np
 import pandas as pd
@@ -13,6 +18,16 @@ import pandas as pd
 SWING_WINDOW = 3        # تعداد کندل هر طرف برای تأیید سوئینگ
 WEDGE_MAX_BARS = 40     # حداکثر فاصله‌ی فشار اول تا سوم
 CYCLE_BARS = 15         # کندل‌های آخر برای تشخیص فاز بازار
+
+AVG_BARS = 20           # میانگین اندازه‌ی کندل‌ها از این تعداد کندل قبلی
+PIN_TAIL = 0.6          # پین‌بار: سایه ≥ ۶۰٪ رنج کندل
+PIN_LOOKBACK = 10       # پین‌بار باید کف/سقف این تعداد کندل قبلی را بشکند و رد کند
+STRONG_BODY = 0.5       # کندل بریک‌اوت قوی: بدنه ≥ ۵۰٪ رنج
+STRONG_SIZE = 1.2       # و رنج ≥ ۱.۲ برابر میانگین
+STRONG_CLOSE = 0.25     # و بسته‌شدن نزدیک انتها (سایه‌ی سمت بسته‌شدن ≤ ۲۵٪)
+RANGE_BARS = 20         # پنجره‌ی تشخیص تریدینگ رنج
+RANGE_HEIGHT = 6.0      # ارتفاع رنج ≤ ۶ برابر میانگین اندازه‌ی کندل
+WEDGE_BO_BARS = 20      # بریک‌اوت وج باید تا این تعداد کندل بعد از فشار سوم رخ دهد
 
 
 def from_tradingview(df):
@@ -131,6 +146,79 @@ class AlBrooksPAAnalyzer:
         wedges.sort(key=lambda w: w["trigger_index"])
         return wedges
 
+    def detect_pin_bars(self):
+        """+1 پین‌بار صعودی (سایه‌ی پایین بلند روی کف تازه)، -1 نزولی (سایه‌ی بالا روی سقف تازه)."""
+        d = self.df
+        avg = d["range"].rolling(AVG_BARS, min_periods=5).mean().shift(1)
+        big_enough = d["range"] >= 0.8 * avg
+        new_low = d["low"] <= d["low"].rolling(PIN_LOOKBACK).min().shift(1)
+        new_high = d["high"] >= d["high"].rolling(PIN_LOOKBACK).max().shift(1)
+        bull = (d["lower_tail"] >= PIN_TAIL * d["range"]) & new_low & big_enough
+        bear = (d["upper_tail"] >= PIN_TAIL * d["range"]) & new_high & big_enough
+        d["pin_bar"] = np.where(bull, 1, np.where(bear, -1, 0))
+
+    def _strong_bars(self):
+        """کندل بریک‌اوت قوی (Key bar): بدنه‌ی بزرگ، بزرگ‌تر از معمول، بسته‌شدن نزدیک انتها."""
+        d = self.df
+        avg = d["range"].rolling(AVG_BARS, min_periods=5).mean().shift(1)
+        core = (d["body_pct"] >= STRONG_BODY) & (d["range"] >= STRONG_SIZE * avg)
+        bull = core & (d["close"] > d["open"]) & (d["upper_tail"] <= STRONG_CLOSE * d["range"])
+        bear = core & (d["close"] < d["open"]) & (d["lower_tail"] <= STRONG_CLOSE * d["range"])
+        return bull.values, bear.values, avg.values
+
+    def detect_range_breakouts(self):
+        """رنج = RANGE_BARS کندل قبلی با ارتفاع کم که دو طرف EMA20 معامله شده‌اند.
+        بریک‌اوت = کندل قوی که بیرون سقف/کف رنج بسته شود."""
+        d = self.df
+        bull_k, bear_k, avg = self._strong_bars()
+        high, low, close = d["high"].values, d["low"].values, d["close"].values
+        above = (d["close"] > d["ema20"]).values
+        n = len(d)
+        sig = np.zeros(n, dtype=int)
+        r_hi = np.full(n, np.nan)
+        r_lo = np.full(n, np.nan)
+        last_bo = {1: -10**9, -1: -10**9}
+        for i in range(RANGE_BARS, n):
+            if np.isnan(avg[i]):
+                continue
+            hi = high[i - RANGE_BARS:i].max()
+            lo = low[i - RANGE_BARS:i].min()
+            frac = above[i - RANGE_BARS:i].mean()
+            if hi - lo > RANGE_HEIGHT * avg[i] or not 0.25 <= frac <= 0.75:
+                continue
+            side = 1 if close[i] > hi and bull_k[i] else -1 if close[i] < lo and bear_k[i] else 0
+            if side and i - last_bo[side] > RANGE_BARS:
+                sig[i], r_hi[i], r_lo[i] = side, hi, lo
+                last_bo[side] = i
+        d["range_bo"], d["range_hi"], d["range_lo"] = sig, r_hi, r_lo
+
+    def detect_wedge_breakouts(self, wedges):
+        """Wedge Bottom: بسته‌شدن بالای بلندترین سقف بین فشار دوم و سوم (برگشت صعودی).
+        Wedge Top: بسته‌شدن زیر پایین‌ترین کف بین فشار دوم و سوم (برگشت نزولی).
+        اگر قبل از بریک‌اوت، قیمت از فشار سوم عبور کند وج باطل است."""
+        d = self.df
+        bull_k, bear_k, _ = self._strong_bars()
+        high, low, close = d["high"].values, d["low"].values, d["close"].values
+        n = len(d)
+        sig = np.zeros(n, dtype=int)
+        found = {}
+        for w in wedges:
+            b, c = w["points"][1]["index"], w["points"][2]["index"]
+            side = w["side"]
+            level = high[b:c + 1].max() if side > 0 else low[b:c + 1].min()
+            extreme = w["points"][2]["price"]
+            for i in range(c + SWING_WINDOW, min(n, c + WEDGE_BO_BARS + 1)):
+                if (side > 0 and low[i] < extreme) or (side < 0 and high[i] > extreme):
+                    break                                             # وج شکست خورد
+                if (side > 0 and close[i] > level) or (side < 0 and close[i] < level):
+                    if (i, side) not in found:
+                        found[(i, side)] = {"index": i, "side": side, "level": float(level),
+                                            "wedge": w, "strong": bool(bull_k[i] if side > 0 else bear_k[i])}
+                        sig[i] = side
+                    break
+        d["wedge_bo"] = sig
+        return sorted(found.values(), key=lambda x: x["index"])
+
     def run_analysis(self):
         if self.df.empty:
             return {"error": "Empty dataframe"}
@@ -138,6 +226,11 @@ class AlBrooksPAAnalyzer:
         self.count_pullback_setups()
         swing_highs, swing_lows = self.find_swing_points()
         wedges = self.detect_wedges(swing_highs, swing_lows)
+        self.detect_pin_bars()
+        self.detect_range_breakouts()
+        wedge_bos = self.detect_wedge_breakouts(wedges)
+        bull_k, bear_k, _ = self._strong_bars()
+        self.df["key_bar"] = np.where(bull_k, 1, np.where(bear_k, -1, 0))
 
         last_idx = len(self.df) - 1
         last = self.df.iloc[last_idx]
@@ -174,8 +267,24 @@ class AlBrooksPAAnalyzer:
             "swing_lows": swing_lows[-10:],
             "wedges": wedges[-3:],
             "all_wedges": wedges,
+            "wedge_breakouts": wedge_bos,
+            "trading_range": self.current_range(),
             "df": self.df,
         }
+
+
+    def current_range(self):
+        """اگر الان بازار در تریدینگ رنج باشد: سقف و کف آن (برای گزارش)."""
+        d = self.df
+        if len(d) < RANGE_BARS + 5:
+            return None
+        w = d.tail(RANGE_BARS)
+        avg = d["range"].iloc[-RANGE_BARS - AVG_BARS:-RANGE_BARS].mean()
+        frac = (w["close"] > w["ema20"]).mean()
+        hi, lo = float(w["high"].max()), float(w["low"].min())
+        if hi - lo <= RANGE_HEIGHT * avg and 0.25 <= frac <= 0.75:
+            return {"high": hi, "low": lo}
+        return None
 
 
 def analyze(candles):
@@ -199,7 +308,23 @@ def new_events(sym, res, since):
                 events.append({"kind": "SETUP", "sym": sym, "setup": f"{prefix}{row[col]}", "side": side,
                                "time": row["date"], "price": float(row["close"]),
                                "cycle": res["market_cycle"], "ema20": float(row["ema20"])})
+        base = {"sym": sym, "time": row["date"], "price": float(row["close"]),
+                "cycle": res["market_cycle"], "ema20": float(row["ema20"])}
+        if row["pin_bar"]:
+            events.append({**base, "kind": "PIN", "setup": "PIN", "side": int(row["pin_bar"]),
+                           "high": float(row["high"]), "low": float(row["low"])})
+        if row["range_bo"]:
+            events.append({**base, "kind": "RANGE_BO", "setup": "RANGE_BO", "side": int(row["range_bo"]),
+                           "range_high": float(row["range_hi"]), "range_low": float(row["range_lo"])})
     new_set = set(new_idx)
+    for bo in res["wedge_breakouts"]:
+        if bo["index"] in new_set:
+            row = df.loc[bo["index"]]
+            events.append({"kind": "WEDGE_BO", "sym": sym, "setup": "WEDGE_BO", "side": bo["side"],
+                           "type": bo["wedge"]["type"], "level": bo["level"], "strong": bo["strong"],
+                           "points": [p["price"] for p in bo["wedge"]["points"]],
+                           "time": row["date"], "price": float(row["close"]),
+                           "cycle": res["market_cycle"], "ema20": float(row["ema20"])})
     for w in res["all_wedges"]:
         confirm = w["trigger_index"] + SWING_WINDOW
         if confirm in new_set:

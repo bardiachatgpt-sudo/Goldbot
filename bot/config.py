@@ -11,9 +11,10 @@ BARS = int(os.environ.get("BARS", "500"))          # تعداد کندل برا�
 MIN_BARS = 60                                      # کمتر از این تحلیل نمی‌شود
 CHART_BARS = 120                                   # تعداد کندل در تصویر نمودار
 
-# ستاپ‌هایی که هشدار زنده می‌فرستند (H1,H2,L1,L2,WEDGE)
+# ستاپ‌هایی که هشدار زنده می‌فرستند: H1,H2,L1,L2,WEDGE,WEDGE_BO,RANGE_BO,PIN
 ALERT_SETUPS = {s.strip().upper() for s in
-                os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE").split(",") if s.strip()}
+                os.environ.get("ALERT_SETUPS", "H2,L2,WEDGE,WEDGE_BO,RANGE_BO,PIN").split(",")
+                if s.strip()}
 
 # کانال یا گروه تلگرام که هشدارها به آن هم فرستاده می‌شود (مثلاً @mychannel یا -100...)
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "").strip()

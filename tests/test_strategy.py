@@ -51,7 +51,7 @@ class TestStrategy(unittest.TestCase):
         with mock.patch.object(scanner, "get_closed_candles", fake), \
              mock.patch.object(scanner, "BARS", 10_000), \
              mock.patch.object(scanner, "SYMBOLS", {"XAUUSD": []}), \
-             mock.patch.object(scanner, "ALERT_SETUPS", {"H1", "H2", "L1", "L2", "WEDGE"}), \
+             mock.patch.object(scanner, "ALERT_SETUPS", {"H1", "H2", "L1", "L2", "WEDGE", "WEDGE_BO", "RANGE_BO", "PIN"}), \
              mock.patch.object(scanner, "build_alert", lambda ev: ev):
             seen = {}
             scanner.scan_once(seen, live.append)          # اولین اجرا: بی‌صدا
@@ -62,19 +62,80 @@ class TestStrategy(unittest.TestCase):
                 feed["n"] += 1
                 scanner.scan_once(seen, live.append)
 
-        allowed = {"H1", "H2", "L1", "L2", "WEDGE"}
+        allowed = {"H1", "H2", "L1", "L2", "WEDGE", "WEDGE_BO", "RANGE_BO", "PIN"}
         batch = [e for e in new_events("XAUUSD", analyze(self.c), self.c.index[n0 - 1])
                  if e["setup"] in allowed]
         key = lambda e: (e["time"], e["setup"])
         self.assertEqual(sorted(map(key, live)), sorted(map(key, batch)))
         self.assertEqual(len(set(map(key, live))), len(live))
-        self.assertTrue(any(e["kind"] == "WEDGE" for e in live))
+        for kind in ("WEDGE", "WEDGE_BO", "RANGE_BO", "PIN"):
+            self.assertTrue(any(e["kind"] == kind for e in live), kind)
         for ev in live[:5]:
             self.assertIn("XAUUSD", build_alert(ev))
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _bars(rows, start="2026-11-12 00:00"):
+    idx = pd.date_range(start, periods=len(rows), freq="5min", tz="UTC")
+    return pd.DataFrame(rows, index=idx, columns=["Open", "High", "Low", "Close"])
+
+
+def _range_rows(n=60, mid=100.0):
+    """بازار خنثی: کندل‌های کوچک که دور یک قیمت بالا و پایین می‌روند."""
+    rows = []
+    for i in range(n):
+        o = mid + (0.3 if i % 2 else -0.3)
+        c = mid - (0.3 if i % 2 else -0.3)
+        rows.append((o, max(o, c) + 0.2, min(o, c) - 0.2, c))
+    return rows
+
+
+class TestBreakouts(unittest.TestCase):
+    def test_range_breakout_up_on_key_bar(self):
+        rows = _range_rows() + [(100.0, 102.6, 99.9, 102.5)]      # کندل بزرگ صعودی بیرون رنج
+        res = analyze(_bars(rows))
+        last = res["df"].iloc[-1]
+        self.assertEqual(last["range_bo"], 1)
+        self.assertEqual(last["key_bar"], 1)
+        self.assertAlmostEqual(last["range_hi"], 100.5)
+        ev = [e for e in new_events("XAUUSD", res, res["df"]["date"].iloc[-2]) if e["kind"] == "RANGE_BO"]
+        self.assertEqual(len(ev), 1)
+        self.assertIn("RANGE BREAKOUT", build_alert(ev[0]))
+
+    def test_range_breakout_down(self):
+        rows = _range_rows() + [(100.0, 100.1, 97.4, 97.5)]
+        self.assertEqual(analyze(_bars(rows))["df"].iloc[-1]["range_bo"], -1)
+
+    def test_weak_bar_outside_range_is_not_breakout(self):
+        rows = _range_rows() + [(100.2, 100.9, 100.1, 100.6)]     # کندل کوچک کمی بالاتر
+        self.assertEqual(analyze(_bars(rows))["df"].iloc[-1]["range_bo"], 0)
+
+    def test_pin_bar_rejects_new_low(self):
+        rows = _range_rows() + [(100.2, 100.4, 98.0, 100.3)]       # سایه‌ی پایین بلند روی کف تازه
+        res = analyze(_bars(rows))
+        self.assertEqual(res["df"].iloc[-1]["pin_bar"], 1)
+        ev = [e for e in new_events("XAUUSD", res, res["df"]["date"].iloc[-2]) if e["kind"] == "PIN"]
+        self.assertIn("PIN BAR", build_alert(ev[0]))
+
+    def test_pin_bar_rejects_new_high(self):
+        rows = _range_rows() + [(99.8, 102.0, 99.7, 99.75)]
+        self.assertEqual(analyze(_bars(rows))["df"].iloc[-1]["pin_bar"], -1)
+
+    def test_wedge_breakouts_close_beyond_level(self):
+        found = 0
+        for seed in range(5):
+            res = analyze(candles(seed=seed))
+            df = res["df"]
+            for bo in res["wedge_breakouts"]:
+                found += 1
+                c = df.at[bo["index"], "close"]
+                self.assertTrue(c > bo["level"] if bo["side"] > 0 else c < bo["level"])
+                self.assertEqual(bo["side"], bo["wedge"]["side"])
+                self.assertGreaterEqual(bo["index"], bo["wedge"]["trigger_index"] + 3)
+        self.assertGreater(found, 0)
 
 
 class TestSymbols(unittest.TestCase):
