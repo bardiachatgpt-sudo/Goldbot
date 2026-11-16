@@ -12,7 +12,7 @@ from . import backtest
 from .config import SYMBOLS, label
 
 RECOMMENDED_PAIR = "XAUUSD"
-RECOMMENDED_DAYS = {"5-1": 5, "15-3": 10, "60-5": 20}
+RECOMMENDED_DAYS = {"5-1": 5, "15-3": 10, "60-5": 20, "5r": 10}
 STAGES = {
     "start": "Preparing…",
     "fetch_trig": "Downloading trigger candles from TradingView…",

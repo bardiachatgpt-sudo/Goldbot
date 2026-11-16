@@ -26,7 +26,9 @@ TF_PRESETS = {
     "5-1": (5, 1, "M5 → M1", (1, 3, 5, 10)),
     "15-3": (15, 3, "M15 → M3", (3, 5, 10, 20)),
     "60-5": (60, 5, "H1 → M5", (5, 10, 20, 40)),
+    "5r": (5, 5, "📦 M5 · Range edges (buy bottom / sell top)", (5, 10)),
 }
+RANGE_TF = "5r"             # قاعده‌ی رنج کاربر: فقط M5
 LIVE_TF = "5-1"             # تنظیم ربات زنده
 
 
@@ -44,7 +46,9 @@ def to_m5(m1):
 
 
 STRATEGY_NAMES = {"pin": "Pin bar (M1)", "pin_wedge": "Pin bar + wedge confirmation",
-                  "brooks": "Brooks (M5 signal bar)"}
+                  "brooks": "Brooks (M5 signal bar)",
+                  "range3": "Range edges: pin + key bar, stop ½ range from entry, target the other edge",
+                  "range3_edge": "Same, but stop ½ range beyond the range edge"}
 
 
 def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
@@ -55,6 +59,9 @@ def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
         return run_pin(sym, trig, ctx, start, ctx_min, trig_min, wedge_filter=False)
     if strategy == "pin_wedge":
         return run_pin(sym, trig, ctx, start, ctx_min, trig_min, wedge_filter=True)
+    if strategy in ("range3", "range3_edge"):
+        from . import range_trades
+        return range_trades.run(sym, trig, start, "edge" if strategy == "range3_edge" else "entry"), None
     return run_brooks(sym, trig, ctx, start, ctx_min, trig_min)
 
 
@@ -160,7 +167,8 @@ def fetch(sym, days, ctx_min=5, trig_min=1, progress=None):
     """داده‌ی TradingView (روی Render): روزهای معاملاتی اخیر + گرم شدن."""
     from .config import SYMBOLS
     from .data import LAST_SOURCE, fetch_candles
-    n_trig = min(days * 1440 // trig_min + 400, 20000)
+    warm = 700 if trig_min == ctx_min else 400               # رنج: ۵۰۰ کندل قبل از اولین روز لازم است
+    n_trig = min(days * 1440 // trig_min + warm, 20000)
     n_ctx = min(days * 1440 // ctx_min + 600, 5000)
     errors = []
     for tv in dict.fromkeys(([LAST_SOURCE[sym]] if sym in LAST_SOURCE else []) + SYMBOLS[sym]):
@@ -169,7 +177,10 @@ def fetch(sym, days, ctx_min=5, trig_min=1, progress=None):
         trig, e1 = fetch_candles(tv, str(trig_min), n_trig, timeout=90)
         if progress:
             progress("fetch_ctx")
-        ctx, e2 = fetch_candles(tv, str(ctx_min), n_ctx, timeout=60)
+        if ctx_min == trig_min:                                  # یک تایم‌فریم: دوباره نگیر
+            ctx, e2 = trig, None
+        else:
+            ctx, e2 = fetch_candles(tv, str(ctx_min), n_ctx, timeout=60)
         if trig is not None and ctx is not None and len(trig) > MIN_BARS and len(ctx) > MIN_BARS:
             return trig.iloc[:-1], ctx.iloc[:-1], None
         errors.append(e1 or e2 or f"{tv}: too few bars")
@@ -193,18 +204,21 @@ def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, p
     day_list = sorted(set(m1.index.tz_convert("UTC").date))          # روزهایی که داده دارند
     first_day = day_list[-days] if len(day_list) >= days else day_list[0]
     start = pd.Timestamp(first_day, tz="UTC")
-    if (m1.index < start).sum() < 300:                                 # گرم شدن کافی
-        start = m1.index[min(300, len(m1) - 1)]
+    warm = 500 if tf == RANGE_TF else 300
+    if (m1.index < start).sum() < warm:                                # گرم شدن کافی
+        start = m1.index[min(warm, len(m1) - 1)]
     m5 = m5[m5.index <= m1.index[-1]] if m5 is not None else None
     from .config import STRATEGY, WEDGE_FILTER
     strategy = strategy or STRATEGY
-    if strategy == "pin" and WEDGE_FILTER:                              # همان چیزی که ربات زنده اجرا می‌کند
+    if tf == RANGE_TF:
+        strategy = "range3"
+    elif strategy == "pin" and WEDGE_FILTER:                            # همان چیزی که ربات زنده اجرا می‌کند
         strategy = "pin_wedge"
     events, _ = run(sym, m1, m5, start, ctx_min, trig_min, strategy)
     res = summary(sym, events, start, end, balance)
     if compare:                                                         # قاعده‌های دیگر روی همان داده
         res["compare"] = []
-        for other in ("pin", "pin_wedge", "brooks"):
+        for other in (("range3_edge",) if strategy.startswith("range3") else ("pin", "pin_wedge", "brooks")):
             if other == strategy:
                 continue
             ev2, _ = run(sym, m1, m5, start, ctx_min, trig_min, other)
@@ -225,14 +239,22 @@ def report_text(res, balance=DEFAULT_BALANCE):
     lines = [f"🧪 <b>BACKTEST · {label(sym)}</b>",
              f"{res['start']:%d %b %H:%M} → {res['end']:%d %b %H:%M} UTC · "
              f"{res.get('days_covered', '?')} trading days · {res.get('tf_name', 'M5 → M1')} (context → trigger)",
-             f"📐 Rules: <b>{STRATEGY_NAMES.get(res.get('strategy'), res.get('strategy', ''))}</b> (live bot)",
+             f"📐 Rules: <b>{STRATEGY_NAMES.get(res.get('strategy'), res.get('strategy', ''))}</b>"
+             + ("" if str(res.get("strategy", "")).startswith("range3") else " (live bot)"),
              LINE,
              f"🎯 Setups: {res['setups']} · cancelled: {res['cancelled']}",
              f"📊 Closed trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate {wr:.0f}%",
-             f"📈 Net: <b>{res['net_r']:+g}R</b>  (each win +{RR:g}R, each loss −1R)"]
-    for mode, name in (("TREND", "📈 With the trend"), ("RANGE", "📦 Range"), ("SPIKE", "🚀 Spike pullback")):
-        n, w, r = res["by_mode"][mode]
-        lines.append(f"   {name}: {n} trades, {w} wins, {r:+g}R")
+             f"📈 Net: <b>{res['net_r']:+.2f}R</b>  " + (
+                 "(win = reaching the other edge, its R varies; loss = −1R)"
+                 if str(res.get("strategy", "")).startswith("range3") else f"(each win +{RR:g}R, each loss −1R)")]
+    if str(res.get("strategy", "")).startswith("range3"):
+        wins = [e["r"] for e in res["closed"] if e["r"] > 0]
+        if wins:
+            lines.append(f"   🏆 Average win: +{sum(wins) / len(wins):.2f}R")
+    else:
+        for mode, name in (("TREND", "📈 With the trend"), ("RANGE", "📦 Range"), ("SPIKE", "🚀 Spike pullback")):
+            n, w, r = res["by_mode"][mode]
+            lines.append(f"   {name}: {n} trades, {w} wins, {r:+g}R")
     if res["trades"]:
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
@@ -240,7 +262,7 @@ def report_text(res, balance=DEFAULT_BALANCE):
     for cmp in res.get("compare") or []:
         cwr = cmp["wins"] / cmp["trades"] * 100 if cmp["trades"] else 0
         lines.append(f"🔁 {STRATEGY_NAMES[cmp['strategy']]} on the same data: {cmp['trades']} trades, "
-                     f"win rate {cwr:.0f}%, {cmp['net_r']:+g}R")
+                     f"win rate {cwr:.0f}%, {cmp['net_r']:+.2f}R")
     lines.append(LINE)
     lines.append(f"💵 Account ${balance:,.0f}:")
     for rp, a in res["accounts"].items():
@@ -256,10 +278,13 @@ def report_text(res, balance=DEFAULT_BALANCE):
             if e.get("n_h"):
                 mode += f" {'H' if e['side'] > 0 else 'L'}{e['n_h']}"
             lines.append(f"{icon} {e['opened']:%d %b %H:%M} {mode} {side} {p(e['entry'])} → {p(e['exit'])} "
-                         f"({e['r']:+g}R)")
+                         f"({e['r']:+.2f}R)")
         if len(res["closed"]) > 15:
             lines.append(f"<i>… {len(res['closed']) - 15} earlier trades not listed</i>")
     lines.append(LINE)
+    if str(res.get("strategy", "")).startswith("range3"):
+        lines.append("<i>The range is read at every candle from the last 500 closed M5 candles only (no look-ahead), "
+                     "exactly like the 📐 Structure picture at that moment.</i>")
     lines.append(f"<i>Spread {spread(sym):g} in the stop · no commission or slippage · inside each trigger bar the order "
                  f"comes from the candle shape (live trading uses real-time prices) · past results do not "
                  f"predict the future</i>")
@@ -283,7 +308,7 @@ def equity_chart(res, balance=DEFAULT_BALANCE):
         for t, b in a["curve"]:
             ax.plot(t, b, "o", color=colors.get(rp, "#60A5FA"), markersize=4)
     ax.axhline(balance, color="#9CA3AF", linestyle=":", linewidth=1)
-    ax.set_title(f"{res['sym']} {res.get('tf_name', '')} backtest · {res['trades']} trades · {res['net_r']:+g}R",
+    ax.set_title(f"{res['sym']} {res.get('tf_name', '')} backtest · {res['trades']} trades · {res['net_r']:+.2f}R",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_ylabel("Account ($)", color="#9CA3AF")
     ax.tick_params(colors="#9CA3AF")

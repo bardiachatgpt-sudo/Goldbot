@@ -1,0 +1,116 @@
+"""قاعده‌ی رنج کاربر (یکی از سه پایه‌اش) روی M5 — فعلاً فقط بک‌تست.
+
+۱) رنج با ساختار نسخه‌ی ۳ (bot/structure3.py) تشخیص داده می‌شود، فقط با ۵۰۰ کندل M5 که تا همان لحظه بسته
+   شده‌اند (بدون نگاه به آینده). فاز آخر باید رنج باشد، حداقل MIN_RANGE_BARS کندل، و «احتمالاً بریک‌اوت» نباشد.
+۲) کف رنج خرید، سقف رنج فروش: پین‌بار M5 که سایه‌اش در ربع پایینی (خرید) یا بالایی (فروش) رنج است.
+۳) تأیید: Key bar هم‌جهت تا ORDER_BARS کندل بعد از پین‌بار. اگر قبلش قیمت از سایه‌ی پین‌بار رد شود، لغو.
+۴) ورود: باز شدن کندل بعد از Key bar.
+۵) حد ضرر: نصف عرض رنج (+ اسپرد) — از قیمت ورود (پیش‌فرض) یا از لبه‌ی رنج (stop_from="edge").
+۶) حد سود: لبه‌ی مقابل رنج (خرید در کف → سقف رنج).
+یک معامله در هر لحظه. داخل هر کندل ترتیب قیمت از شکل کندل (مثل بقیه‌ی بک‌تست‌ها).
+"""
+import numpy as np
+import pandas as pd
+
+from .config import ORDER_BARS, spread
+from .structure3 import lines, segment
+from .trades_pin import candle_path, walk
+
+WINDOW = 500            # همان ۵۰۰ کندلی که دکمه‌ی 📐 Structure نشان می‌دهد
+MIN_RANGE_BARS = 20     # رنج کوتاه‌تر از این هنوز «تشخیص داده نشده»
+EDGE = 0.25             # سایه‌ی پین‌بار در ربع پایینی/بالایی رنج
+
+
+def range_at(close, t, window=WINDOW):
+    """رنجِ فاز آخر با کندل‌های تا t (شامل t): (سقف، کف، طول) یا None."""
+    a = max(0, t - window + 1)
+    c = np.asarray(close[a:t + 1], float)
+    if len(c) < 100:
+        return None
+    phases, piv = segment(c)
+    ph = phases[-1]
+    if ph["type"] != "RANGE" or ph.get("prov") or ph["end"] - ph["start"] < MIN_RANGE_BARS:
+        return None
+    (_, _, x1, top, _), (_, _, _, bot, _) = lines(ph, c, piv)     # مقدار خط‌ها در آخرین کندل
+    if top <= bot:
+        return None
+    return float(top), float(bot), ph["end"] - ph["start"]
+
+
+def run(sym, m5, start=None, stop_from="entry"):
+    """رویدادها با همان قالب بقیه‌ی بک‌تست‌ها (TRADE_PENDING / OPEN / CLOSED / CANCELLED)."""
+    from .strategy import analyze
+    d = analyze(m5, cycle=False)["df"]
+    o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
+    pin_bar, key_bar = d["pin_bar"].values.astype(int), d["key_bar"].values.astype(int)
+    times = list(d["date"])
+    sp = spread(sym)
+    n = len(d)
+    events, pending, open_t = [], None, None
+
+    def ev(kind, t, i, price, **extra):
+        return {**t, **extra, "kind": kind, "sym": sym, "setup": "TRADE", "mode": "RANGE",
+                "time": times[i] + pd.Timedelta(minutes=5), "price": float(price), "strategy": "range3"}
+
+    for i in range(n):
+        if start is not None and times[i] < start:
+            continue
+        # ۱) معامله‌ی باز: حد ضرر / حد سود روی مسیر این کندل
+        if open_t is not None:
+            s = open_t["side"]
+            path = candle_path(o[i], h[i], l[i], c[i])
+            if open_t.pop("_fresh", False):
+                path = [open_t["entry"]] + path[1:]
+            hit = walk(path, {"SL": (open_t["sl"], -s), "TP": (open_t["tp"], s)})
+            if hit:
+                name = hit[0]
+                lvl = open_t["sl"] if name == "SL" else open_t["tp"]
+                r = (lvl - open_t["entry"]) * s / open_t["risk"]
+                events.append(ev("TRADE_CLOSED", open_t, i, lvl, result=name, r=round(r, 2), exit=lvl,
+                                 bars=i - open_t["opened_i"]))
+                open_t = None
+            continue
+        # ۲) منتظر Key bar
+        if pending is not None:
+            s, pin = pending["side"], pending["pin"]
+            pending["waited"] += 1
+            if (l[i] < pin["low"]) if s > 0 else (h[i] > pin["high"]):
+                events.append(ev("TRADE_CANCELLED", pending, i, c[i], reason="tail"))
+                pending = None
+            elif key_bar[i] == s:
+                if i + 1 >= n:
+                    break
+                entry = o[i + 1] + (sp if s > 0 else 0.0)              # خرید با Ask
+                top, bot = pending["range_high"], pending["range_low"]
+                half = (top - bot) / 2
+                ref = entry if stop_from == "entry" else (bot if s > 0 else top)
+                sl = ref - half - sp if s > 0 else ref + half + sp
+                tp = top if s > 0 else bot
+                risk = abs(entry - sl)
+                if (tp - entry) * s <= 0:                                  # جایی تا لبه‌ی مقابل نمانده
+                    events.append(ev("TRADE_CANCELLED", pending, i, c[i], reason="no_room"))
+                else:
+                    open_t = {**pending, "entry": float(entry), "sl": float(sl), "tp": float(tp), "risk": float(risk),
+                              "opened": times[i + 1], "opened_i": i + 1, "_fresh": True, "key_time": times[i]}
+                    events.append(ev("TRADE_OPEN", open_t, i, entry))
+                pending = None
+            elif pending["waited"] >= ORDER_BARS:
+                events.append(ev("TRADE_CANCELLED", pending, i, c[i], reason="expired"))
+                pending = None
+            continue
+        # ۳) پین‌بار در لبه‌ی رنج
+        s = pin_bar[i]
+        if not s:
+            continue
+        rng = range_at(c, i)
+        if rng is None:
+            continue
+        top, bot, length = rng
+        zone = EDGE * (top - bot)
+        if (s > 0 and l[i] <= bot + zone) or (s < 0 and h[i] >= top - zone):
+            pending = {"side": int(s), "waited": 0, "range_high": top, "range_low": bot, "range_bars": length,
+                       "pin": {"time": times[i], "high": float(h[i]), "low": float(l[i]), "close": float(c[i])}}
+            events.append(ev("TRADE_PENDING", pending, i, c[i]))
+    for e in events:
+        e.pop("_fresh", None)
+    return events
