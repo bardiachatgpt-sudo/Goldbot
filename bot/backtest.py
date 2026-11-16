@@ -29,6 +29,9 @@ TF_PRESETS = {
     "5r": (5, 5, "📦 M5 · Range edges (buy the bottom / sell the top)", (5, 10)),
 }
 RANGE_TF = "5r"             # قاعده‌ی رنج کاربر: فقط M5
+# نسخه‌هایی که کنار قاعده‌ی اصلی رنج روی همان داده گزارش می‌شوند
+RANGE_VARIANTS = ("range3_touch_rr1", "range3_touch_rr2",
+                  "range3_touch_macd", "range3_touch_macd_rr1", "range3_touch_macd_rr2")
 LIVE_TF = "5-1"             # تنظیم ربات زنده
 
 
@@ -49,15 +52,18 @@ STRATEGY_NAMES = {"pin": "Pin bar (M1)", "pin_wedge": "Pin bar + wedge confirmat
                   "brooks": "Brooks (M5 signal bar)",
                   "range3_touch": "Range edges: price reaches the bottom → buy, the top → sell; "
                                   "stop ½ range from entry, target the other edge",
-                  "range3_touch_trend": "Same, but only in the direction of the move before the range "
-                                        "(after a fall: sell the top only; after a rise: buy the bottom only)",
+                  "range3_touch_rr1": "No filter · target 1:1",
+                  "range3_touch_rr2": "No filter · target 1:2",
+                  "range3_touch_macd": "4× MACD filter (histogram positive: buys only, negative: sells only) · target the other edge",
+                  "range3_touch_macd_rr1": "4× MACD filter · target 1:1",
+                  "range3_touch_macd_rr2": "4× MACD filter · target 1:2",
+                  "range3_touch_trend": "Same, but only in the direction of the move before the range",
                   "range3_touch_edge": "Same, but stop ½ range beyond the range edge",
                   "range3": "Same, but only after a pin bar (enter on the next candle)",
-                  "range3_edge": "Same, but stop ½ range beyond the range edge",
                   "range3_key": "Same, but wait for a key bar after the pin bar"}
 
 
-def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
+def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None, cache=None):
     """رویدادهای معامله با قاعده‌های strategy (pin یا brooks؛ پیش‌فرض: تنظیم ربات زنده)."""
     from .config import STRATEGY
     strategy = strategy or STRATEGY
@@ -67,10 +73,12 @@ def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
         return run_pin(sym, trig, ctx, start, ctx_min, trig_min, wedge_filter=True)
     if strategy.startswith("range3"):
         from . import range_trades
+        rr = 1.0 if strategy.endswith("_rr1") else 2.0 if strategy.endswith("_rr2") else None
         return range_trades.run(sym, trig, start, "edge" if strategy.endswith("_edge") else "entry",
                                 "key" if strategy == "range3_key" else "none",
                                 "touch" if strategy.startswith("range3_touch") else "pin",
-                                with_trend=strategy.endswith("_trend")), None
+                                with_trend=strategy.endswith("_trend"), macd="_macd" in strategy, rr=rr,
+                                cache=cache), None
     return run_brooks(sym, trig, ctx, start, ctx_min, trig_min)
 
 
@@ -223,18 +231,18 @@ def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, p
         strategy = "range3_touch"
     elif strategy == "pin" and WEDGE_FILTER:                            # همان چیزی که ربات زنده اجرا می‌کند
         strategy = "pin_wedge"
-    events, _ = run(sym, m1, m5, start, ctx_min, trig_min, strategy)
+    cache = {}                                                          # رنج هر کندل یک بار برای همه‌ی نسخه‌ها
+    events, _ = run(sym, m1, m5, start, ctx_min, trig_min, strategy, cache=cache)
     res = summary(sym, events, start, end, balance)
     if compare:                                                         # قاعده‌های دیگر روی همان داده
         res["compare"] = []
-        for other in (("range3_touch_trend", "range3_touch_edge", "range3") if strategy.startswith("range3")
-                      else ("pin", "pin_wedge", "brooks")):
+        for other in (RANGE_VARIANTS if strategy.startswith("range3") else ("pin", "pin_wedge", "brooks")):
             if other == strategy:
                 continue
-            ev2, _ = run(sym, m1, m5, start, ctx_min, trig_min, other)
-            res["compare"].append({"strategy": other, **{k: v for k, v in summary(sym, ev2, start, end,
-                                                                                  balance).items()
-                                                         if k in ("trades", "wins", "net_r")}})
+            ev2, _ = run(sym, m1, m5, start, ctx_min, trig_min, other, cache=cache)
+            sm = summary(sym, ev2, start, end, balance)
+            res["compare"].append({"strategy": other, "final2": sm["accounts"].get(2.0, {}).get("final"),
+                                   **{k: v for k, v in sm.items() if k in ("trades", "wins", "net_r")}})
     res.update(strategy=strategy, tf=tf, tf_name=tf_name, days=days,
                days_covered=len([d for d in day_list if pd.Timestamp(d, tz="UTC") >= start.floor("D")]))
     return res, None
@@ -273,10 +281,18 @@ def report_text(res, balance=DEFAULT_BALANCE):
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
         lines.append(f"   ⏳ {res['open']} trade still open at the end (not counted)")
+    is_range = str(res.get("strategy", "")).startswith("range3")
+    if is_range and res.get("compare"):
+        lines.append(LINE + "\n🔁 <b>Same data, other versions</b> (stop ½ range in all):")
     for cmp in res.get("compare") or []:
         cwr = cmp["wins"] / cmp["trades"] * 100 if cmp["trades"] else 0
-        lines.append(f"🔁 {STRATEGY_NAMES[cmp['strategy']]} on the same data: {cmp['trades']} trades, "
-                     f"win rate {cwr:.0f}%, {cmp['net_r']:+.2f}R")
+        if is_range:
+            money = f" · 2% risk → ${cmp['final2']:,.0f}" if cmp.get("final2") else ""
+            lines.append(f"• {STRATEGY_NAMES[cmp['strategy']]}: {cmp['trades']} trades, "
+                         f"win {cwr:.0f}%, <b>{cmp['net_r']:+.2f}R</b>{money}")
+        else:
+            lines.append(f"🔁 {STRATEGY_NAMES[cmp['strategy']]} on the same data: {cmp['trades']} trades, "
+                         f"win rate {cwr:.0f}%, {cmp['net_r']:+.2f}R")
     lines.append(LINE)
     lines.append(f"💵 Account ${balance:,.0f}:")
     for rp, a in res["accounts"].items():

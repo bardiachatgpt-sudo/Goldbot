@@ -22,6 +22,7 @@ from .structure3 import lines, segment
 from .trades_pin import candle_path, walk
 
 WINDOW = 500            # همان ۵۰۰ کندلی که دکمه‌ی 📐 Structure نشان می‌دهد
+MACD_FAST, MACD_SLOW, MACD_SIGNAL = 48, 104, 36     # «مکدی ۴ برابر»: (12, 26, 9) × 4 روی M5
 MIN_RANGE_BARS = 20     # رنج کوتاه‌تر از این هنوز «تشخیص داده نشده»
 EDGE = 0.25             # سایه‌ی پین‌بار در ربع پایینی/بالایی رنج
 
@@ -44,11 +45,35 @@ def range_at(close, t, window=WINDOW):
     return float(top), float(bot), ph["end"] - ph["start"], int(prev)
 
 
-def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin", with_trend=False):
-    """رویدادها با همان قالب بقیه‌ی بک‌تست‌ها (TRADE_PENDING / OPEN / CLOSED / CANCELLED)."""
+def macd_hist(close):
+    """هیستوگرام MACD(48, 104, 36) روی بسته‌شدن‌ها (همان روش معمول: EMA سریع − EMA کند، منهای خط سیگنال)."""
+    cl = pd.Series(np.asarray(close, float))
+    macd = cl.ewm(span=MACD_FAST, adjust=False).mean() - cl.ewm(span=MACD_SLOW, adjust=False).mean()
+    return (macd - macd.ewm(span=MACD_SIGNAL, adjust=False).mean()).values
+
+
+def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin", with_trend=False,
+        macd=False, rr=None, cache=None):
+    """رویدادها با همان قالب بقیه‌ی بک‌تست‌ها (TRADE_PENDING / OPEN / CLOSED / CANCELLED).
+
+    macd=True: هیستوگرام MACD ۴ برابر (کندل بسته‌شده‌ی قبل از ورود) مثبت → فقط خرید در کف، منفی → فقط فروش در سقف.
+    rr: None = حد سود لبه‌ی مقابل رنج؛ عدد = حد سود ثابت rr × ریسک (۱ یعنی ۱:۱، ۲ یعنی ۱:۲).
+    cache: dict مشترک برای رنج هر کندل، وقتی چند نسخه روی همان داده اجرا می‌شوند.
+    """
     from .strategy import analyze
     d = analyze(m5, cycle=False)["df"]
     o, h, l, c = (d[k].values.astype(float) for k in ("open", "high", "low", "close"))
+    hist = macd_hist(c)
+    cache = {} if cache is None else cache
+
+    def rng_at(t):
+        if t not in cache:
+            cache[t] = range_at(c, t)
+        return cache[t]
+
+    def macd_ok(side, t):
+        """t = آخرین کندل بسته‌شده قبل از ورود."""
+        return not macd or (t >= 0 and hist[t] * side > 0)
     pin_bar, key_bar = d["pin_bar"].values.astype(int), d["key_bar"].values.astype(int)
     times = list(d["date"])
     sp = spread(sym)
@@ -65,7 +90,7 @@ def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin", wit
         half = (top - bot) / 2
         ref = entry if stop_from == "entry" else (bot if s > 0 else top)
         sl = ref - half - sp if s > 0 else ref + half + sp
-        tp = top if s > 0 else bot
+        tp = (top if s > 0 else bot) if rr is None else entry + s * rr * abs(entry - sl)
         if (tp - entry) * s <= 0:                                       # جایی تا لبه‌ی مقابل نمانده
             return ev("TRADE_CANCELLED", setup, i, c[i], reason="no_room")
         open_t = {**setup, "entry": float(entry), "sl": float(sl), "tp": float(tp), "risk": float(abs(entry - sl)),
@@ -101,13 +126,18 @@ def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin", wit
             continue
         # ۱ب) بدون پین‌بار: رسیدن قیمت به کف/سقف رنج (لبه‌ها از کندل‌های تا i-1)
         if entry == "touch":
-            rng = range_at(c, i - 1) if i > 0 else None
+            rng = rng_at(i - 1) if i > 0 else None
             if rng is None:
                 continue
             top, bot, length, prev = rng
             levels = {"BUY": (bot, -1), "SELL": (top, 1)}
             if with_trend and prev:                    # بعد از ریزش فقط فروش در سقف، بعد از صعود فقط خرید در کف
                 levels.pop("BUY" if prev < 0 else "SELL")
+            for name, side in (("BUY", 1), ("SELL", -1)):
+                if not macd_ok(side, i - 1):           # هیستوگرام MACD خلاف این طرف
+                    levels.pop(name, None)
+            if not levels:
+                continue
             hit = walk(candle_path(o[i], h[i], l[i], c[i]), levels)
             if not hit:
                 continue
@@ -141,11 +171,11 @@ def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin", wit
         s = pin_bar[i]
         if not s:
             continue
-        rng = range_at(c, i)
+        rng = rng_at(i)
         if rng is None:
             continue
         top, bot, length, prev = rng
-        if with_trend and prev and s != prev:
+        if (with_trend and prev and s != prev) or not macd_ok(s, i):
             continue
         zone = EDGE * (top - bot)
         if (s > 0 and l[i] <= bot + zone) or (s < 0 and h[i] >= top - zone):

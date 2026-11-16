@@ -72,6 +72,29 @@ class TestRangeTrades(unittest.TestCase):
         opens = [e for e in ev if e["kind"] == "TRADE_OPEN"]
         self.assertEqual([e["side"] for e in opens], [-1])               # خرید در کف رد شد، فروش در سقف
 
+    def test_macd_negative_blocks_buys_at_the_bottom(self):
+        with mock.patch.object(range_trades, "range_at", lambda c, t, window=500: self.RANGE), \
+                mock.patch.object(range_trades, "spread", lambda s: 0.1), \
+                mock.patch.object(range_trades, "macd_hist", lambda c: -np.ones(len(c))):
+            after = [(100, 100.5, 95.5, 96.5), (96.5, 106.3, 96.4, 106.1), (106.1, 106.2, 95, 95.5)]
+            ev = range_trades.run("XAUUSD", market(after), entry="touch", macd=True)
+        self.assertEqual([e["side"] for e in ev if e["kind"] == "TRADE_OPEN"], [-1])   # فقط فروش در سقف
+
+    def test_macd_hist_is_4x_macd(self):
+        up = np.linspace(100, 200, 400)
+        self.assertGreater(range_trades.macd_hist(up)[-1], -1e-9)
+        self.assertEqual((range_trades.MACD_FAST, range_trades.MACD_SLOW, range_trades.MACD_SIGNAL), (48, 104, 36))
+
+    def test_fixed_one_to_one_target(self):
+        with mock.patch.object(range_trades, "range_at", lambda c, t, window=500: self.RANGE), \
+                mock.patch.object(range_trades, "spread", lambda s: 0.1):
+            ev = range_trades.run("XAUUSD", market([(100, 100.5, 95.5, 96.5), (96.5, 101.5, 96.4, 101.3)]),
+                                  entry="touch", rr=1.0)
+        op = next(e for e in ev if e["kind"] == "TRADE_OPEN")
+        self.assertAlmostEqual(op["tp"], 96.1 + 5.1)                  # ورود + ۱ × ریسک
+        cl = next(e for e in ev if e["kind"] == "TRADE_CLOSED")
+        self.assertEqual((cl["result"], cl["r"]), ("TP", 1.0))
+
     def test_default_enters_on_the_candle_after_the_pin(self):
         ev = self.run_with([(102.0, 104.5, 101.5, 104.2), (104.2, 106.5, 104, 106.2)], confirm="none")
         op = next(e for e in ev if e["kind"] == "TRADE_OPEN")
@@ -123,8 +146,8 @@ class TestRangeTrades(unittest.TestCase):
         txt = backtest.report_text(res)
         self.assertIn("Range edges", txt)
         self.assertIn("Risk 2% per trade", txt)
-        self.assertEqual([c["strategy"] for c in res["compare"]],
-                         ["range3_touch_trend", "range3_touch_edge", "range3"])
+        self.assertEqual([c["strategy"] for c in res["compare"]], list(backtest.RANGE_VARIANTS))
+        self.assertNotIn("<0", txt.replace(" ", ""))                                # HTML تلگرام سالم
         self.assertIn("Buys at the bottom", txt)
 
 
