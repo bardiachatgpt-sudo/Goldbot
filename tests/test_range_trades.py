@@ -32,10 +32,20 @@ def market(after):
 class TestRangeTrades(unittest.TestCase):
     RANGE = (106.0, 96.0, 50)                      # سقف، کف، طول رنج
 
-    def run_with(self, after, stop_from="entry"):
+    def run_with(self, after, stop_from="entry", confirm="key"):
         with mock.patch.object(range_trades, "range_at", lambda c, t, window=500: self.RANGE), \
                 mock.patch.object(range_trades, "spread", lambda s: 0.1):
-            return range_trades.run("XAUUSD", market(after), stop_from=stop_from)
+            return range_trades.run("XAUUSD", market(after), stop_from=stop_from, confirm=confirm)
+
+    def test_default_enters_on_the_candle_after_the_pin(self):
+        ev = self.run_with([(102.0, 104.5, 101.5, 104.2), (104.2, 106.5, 104, 106.2)], confirm="none")
+        op = next(e for e in ev if e["kind"] == "TRADE_OPEN")
+        self.assertEqual(op["side"], 1)
+        self.assertAlmostEqual(op["entry"], 100.2 + 0.1)             # باز کندل بعد از پین‌بار + اسپرد
+        self.assertAlmostEqual(op["sl"], 100.3 - 5 - 0.1)
+        cl = next(e for e in ev if e["kind"] == "TRADE_CLOSED")
+        self.assertEqual(cl["result"], "TP")
+        self.assertAlmostEqual(cl["r"], round((106.0 - 100.3) / 5.1, 2))
 
     def test_buy_at_bottom_hits_other_edge(self):
         ev = self.run_with([(102.0, 103, 101.5, 102.8), (102.8, 104.5, 102.5, 104.2), (104.2, 106.5, 104, 106.2)])
@@ -71,13 +81,14 @@ class TestRangeTrades(unittest.TestCase):
         o = np.r_[mid[0], mid[:-1]]
         df = pd.DataFrame({"Open": o, "High": np.maximum(o, mid) + 0.3, "Low": np.minimum(o, mid) - 0.3,
                            "Close": mid}, index=pd.date_range("2026-11-02", periods=3500, freq="5min", tz="UTC"))
-        res, err = backtest.run_days("XAUUSD", 10, m1=df, m5=df, tf=backtest.RANGE_TF)
+        res, err = backtest.run_days("XAUUSD", 5, m1=df, m5=df, tf=backtest.RANGE_TF)
         self.assertIsNone(err)
         self.assertEqual(res["strategy"], "range3")
         self.assertGreaterEqual((df.index < res["start"]).sum(), 500)      # ۵۰۰ کندل گرم شدن
         txt = backtest.report_text(res)
         self.assertIn("Range edges", txt)
         self.assertIn("Risk 2% per trade", txt)
+        self.assertEqual([c["strategy"] for c in res["compare"]], ["range3_edge", "range3_key"])
 
 
 if __name__ == "__main__":

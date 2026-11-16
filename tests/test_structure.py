@@ -275,7 +275,7 @@ class TestStructureButton(unittest.TestCase):
         self.assertIn("last 500 candles", cap)
         self.assertIn("last two structures", photos[1].kwargs["caption"])
         btns = [b.callback_data for row in photos[1].kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxp:XAUUSD", "sx"])                    # تازه کردن، جفت دیگر
+        self.assertEqual(btns, ["sxp:XAUUSD", "sx", "btd:XAUUSD:5r:5"])  # تازه کردن، جفت دیگر، بک‌تست رنج
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
 

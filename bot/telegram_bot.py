@@ -133,6 +133,8 @@ class Telegram:
         kb = types.InlineKeyboardMarkup(row_width=2)
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="sxp:" + sym),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
+        kb.row(types.InlineKeyboardButton("🧪 Backtest range rules · last 5 days",   # پین‌بار در لبه‌ی رنج
+                                          callback_data=f"btd:{sym}:5r:5"))
         self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML")
         try:                                     # بزرگ‌نمایی دو ساختار آخر
             png2, _, _ = render(sym, df, tf="M5", zoom=2)
