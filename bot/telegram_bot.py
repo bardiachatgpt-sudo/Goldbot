@@ -10,13 +10,14 @@ from telebot import types
 from .config import MIN_BARS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
-VERSION = "structure only · gold + majors + Dow Jones · M1 to D1"
+VERSION = "structure only · gold + majors + Dow Jones · M1 to D1 · M1 + M5 view"
 MENU_STRUCTURE = "📐 Structure"
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
         "Pick a pair, then a timeframe.\n\n"
+        "🔬 M1 + M5: M1 candles with the M5 structure on them, plus the M1 micro cycles inside it.\n\n"
         "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
-            f"{k}={v}" for k, v in TIMEFRAMES.items()) + ")")
+            f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
 
 
 class Telegram:
@@ -41,6 +42,7 @@ class Telegram:
         kb = types.InlineKeyboardMarkup(row_width=4)
         kb.add(*[types.InlineKeyboardButton(f"⏱ {name}", callback_data=f"sxt:{sym}:{tf}")
                  for tf, name in TIMEFRAMES.items()])
+        kb.row(types.InlineKeyboardButton("🔬 M1 candles + M5 structure + M1 micro cycles", callback_data=f"sxm:{sym}"))
         return kb
 
     def ask_structure(self, chat_id):
@@ -90,6 +92,37 @@ class Telegram:
             print("structure zoom error:", e)
             self.bot.send_message(chat_id, "📐", reply_markup=kb)
 
+    def send_mtf(self, chat_id, sym):
+        """یک عکس: کندل‌های M1 با ساختار M5 (جعبه و خط پررنگ) و چرخه‌های کوچک M1 (خط نازک و نوار)."""
+        from .mtf import MAX_M1, render
+        from .structure3 import NAMES
+        try:
+            self.bot.send_chat_action(chat_id, "upload_photo")
+        except Exception:
+            pass
+        m5 = get_closed_candles(sym, STRUCTURE_BARS + 1, MIN_BARS, "5")
+        m1 = get_closed_candles(sym, MAX_M1 + 1, MIN_BARS, "1") if m5 is not None else None
+        if m5 is None or m1 is None:
+            self.bot.send_message(chat_id, f"⚠️ {sym}: could not fetch M1/M5 candles, try again in a minute.")
+            return
+        png, ph5, ph1, now5, now1 = render(sym, m5.tail(STRUCTURE_BARS), m1)
+
+        def chain(phases):
+            return " → ".join(NAMES[(p["type"], p["side"])].title() for p in phases[-4:]) or "-"
+
+        cap = (f"🔬 <b>{label(sym)} · M1 candles with the M5 structure</b>\n"
+               f"M5: <b>{now5}</b>\n"
+               f"M1 micro: <b>{now1}</b>\n"
+               f"M5 phases: {chain(ph5)}\n"
+               f"M1 micro cycles: {chain(ph1)}\n"
+               f"<i>Thick lines and boxes = M5 structure (same as the M5 picture); thin lines and the ribbon at the "
+               f"bottom = the M1 cycles inside it.</i>")
+        kb = types.InlineKeyboardMarkup(row_width=3)
+        kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data=f"sxm:{sym}"),
+               types.InlineKeyboardButton("⏱ Timeframe", callback_data=f"sxp:{sym}"),
+               types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
+        self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
+
     # ------------------------------------------------------------ دستورها
     def _register_handlers(self):
         bot = self.bot
@@ -107,6 +140,8 @@ class Telegram:
                 self.ask_structure(m.chat.id)
             elif sym not in STRUCTURE_SYMBOLS:
                 bot.send_message(m.chat.id, f"Unknown pair. Available: {', '.join(STRUCTURE_SYMBOLS)}")
+            elif len(parts) > 2 and parts[2].lower() in ("mtf", "1+5", "m1m5"):  # /structure XAUUSD mtf
+                self.send_mtf(m.chat.id, sym)
             elif len(parts) > 2 and parts[2].upper() in TIMEFRAMES:          # /structure EURUSD 5
                 self.send_structure(m.chat.id, sym, parts[2].upper())
             else:
@@ -121,7 +156,10 @@ class Telegram:
             chat_id = c.message.chat.id
             action, _, rest = c.data.partition(":")
             sym, _, tf = rest.partition(":")
-            if action == "sxt" and sym in STRUCTURE_SYMBOLS and tf in TIMEFRAMES:
+            if action == "sxm" and sym in STRUCTURE_SYMBOLS:
+                bot.answer_callback_query(c.id, f"Drawing {sym} M1 + M5…")
+                self.send_mtf(chat_id, sym)
+            elif action == "sxt" and sym in STRUCTURE_SYMBOLS and tf in TIMEFRAMES:
                 bot.answer_callback_query(c.id, f"Drawing {sym} {TIMEFRAMES[tf]}…")
                 self.send_structure(chat_id, sym, tf)
             elif action in ("sxp", "sxt") and sym in STRUCTURE_SYMBOLS:

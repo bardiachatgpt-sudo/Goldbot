@@ -140,7 +140,7 @@ class TestStructureBot(unittest.TestCase):
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
-        self.assertEqual(tfs, [f"sxt:US30:{tf}" for tf in config.TIMEFRAMES])
+        self.assertEqual(tfs, [f"sxt:US30:{tf}" for tf in config.TIMEFRAMES] + ["sxm:US30"])
         self.assertEqual(list(config.TIMEFRAMES.values()), ["M1", "M5", "M15", "M30", "H1", "H4", "D1"])
 
     def test_sends_500_candles_and_zoom_on_chosen_timeframe(self):
@@ -172,6 +172,59 @@ class TestStructureBot(unittest.TestCase):
             tg.send_structure(7, "US30", "5")
         self.assertIn("could not fetch", tg.bot.send_message.call_args.args[1])
         tg.bot.send_photo.assert_not_called()
+
+
+def m1_market(seed=3):
+    """M1 با رنج و کانال‌ها (۲۶۰۰ کندل) و M5 ساخته‌شده از همان."""
+    rnd = np.random.default_rng(seed)
+    plan = [(500, 0), (350, -0.06), (450, 0), (300, 0.07), (400, 0), (300, -0.05), (300, 0)]
+    mid, lvl = [], 4000.0
+    for m, dr in plan:
+        t = np.arange(m)
+        s = dr * t + rnd.uniform(2, 5) * np.sin(2 * np.pi * t / rnd.uniform(40, 100)) + \
+            rnd.normal(0, 0.25, m).cumsum() * 0.25
+        part = lvl + s - s[0]
+        mid.extend(part)
+        lvl = part[-1]
+    mid = np.array(mid)
+    o = np.r_[mid[0], mid[:-1]]
+    h, l = np.maximum(o, mid) + 0.3, np.minimum(o, mid) - 0.3
+    m1 = pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": mid},
+                      index=pd.date_range("2026-11-16", periods=len(mid), freq="1min", tz="UTC"))
+    m5 = m1.resample("5min", label="left", closed="left").agg(
+        {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
+    return m1, m5
+
+
+class TestM1WithM5Structure(unittest.TestCase):
+    def test_render_uses_the_same_m5_structure(self):
+        from bot import mtf
+        m1, m5 = m1_market()
+        png, ph5, ph1, now5, now1 = mtf.render("XAUUSD", m5, m1)
+        self.assertEqual(png[:4], b"\x89PNG")
+        self.assertEqual(ph5, structure3.segment(m5["Close"].values)[0])        # همان ساختار دکمه‌ی M5
+        self.assertTrue(ph1 and now5 and now1)
+        w = mtf.m1_window(m5, m1)
+        self.assertTrue(mtf.MIN_M1 <= len(w) <= mtf.MAX_M1)
+        self.assertEqual(w.index[-1], m1.index[-1])                             # تا آخرین کندل M1
+
+    def test_button_sends_one_picture(self):
+        tg = make_bot()
+        m1, m5 = m1_market()
+        calls = []
+
+        def fake(sym, n, m, interval=None):
+            calls.append((sym, interval))
+            return m1 if interval == "1" else m5
+
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake):
+            tg.send_mtf(7, "XAUUSD")
+        self.assertEqual(calls, [("XAUUSD", "5"), ("XAUUSD", "1")])
+        call = tg.bot.send_photo.call_args
+        self.assertEqual(call.args[1][:4], b"\x89PNG")
+        self.assertIn("M1 candles with the M5 structure", call.kwargs["caption"])
+        btns = [b.callback_data for row in call.kwargs["reply_markup"].keyboard for b in row]
+        self.assertEqual(btns, ["sxm:XAUUSD", "sxp:XAUUSD", "sx"])
 
 
 class TestPollingSurvivesConflict(unittest.TestCase):
