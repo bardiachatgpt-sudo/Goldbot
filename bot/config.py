@@ -87,8 +87,8 @@ def _chain(base):
     return [f"OANDA:{base}", f"FOREXCOM:{base}", f"FX:{base}"]
 
 
-# نماد → فهرست منابع TradingView به ترتیب اولویت
-SYMBOLS = {
+# نماد → فهرست منابع TradingView به ترتیب اولویت (همه‌ی نمادهایی که ربات می‌شناسد)
+ALL_SYMBOLS = {
     "XAUUSD": ["OANDA:XAUUSD", "FOREXCOM:XAUUSD", "FX_IDC:XAUUSD"],
     "EURUSD": _chain("EURUSD"),
     "GBPUSD": _chain("GBPUSD"),
@@ -99,6 +99,13 @@ SYMBOLS = {
     "NZDUSD": _chain("NZDUSD"),
     "BTCUSD": ["BINANCE:BTCUSDT", "COINBASE:BTCUSD"],
 }
+
+# نمادهایی که ربات اسکن می‌کند و در دکمه‌ها نشان می‌دهد. پیش‌فرض: فقط طلا.
+# برای برگرداندن بقیه: PAIRS=XAUUSD,EURUSD,... (یا PAIRS=ALL)
+_PAIRS = os.environ.get("PAIRS", "XAUUSD").strip().upper()
+SYMBOLS = dict(ALL_SYMBOLS) if _PAIRS == "ALL" else \
+    {s: ALL_SYMBOLS[s] for s in (p.strip() for p in _PAIRS.split(",")) if s in ALL_SYMBOLS} or \
+    {"XAUUSD": ALL_SYMBOLS["XAUUSD"]}
 
 FLAGS = {
     "XAUUSD": "🥇🇺🇸",

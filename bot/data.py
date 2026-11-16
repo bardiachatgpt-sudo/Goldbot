@@ -8,7 +8,7 @@ import time
 import pandas as pd
 import websocket
 
-from .config import SYMBOLS, TIMEFRAME
+from .config import ALL_SYMBOLS as SYMBOLS, TIMEFRAME
 
 
 def _send(ws, func, params):

@@ -8,6 +8,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from bot.config import SYMBOLS  # noqa: E402
 from bot import backtest  # noqa: E402
 from bot.storage import JsonState  # noqa: E402
 from bot.telegram_bot import Telegram  # noqa: E402
@@ -43,19 +44,19 @@ class TestBacktestFlow(unittest.TestCase):
         self.flow.start(7)
         kb = self.tg.bot.send_message.call_args.kwargs["reply_markup"]
         self.assertEqual(buttons(kb)[0], ("🥇🇺🇸 XAUUSD · recommended", "btp:XAUUSD"))   # پیشنهاد: طلا
-        self.assertEqual(len(buttons(kb)), 9)
+        self.assertEqual(len(buttons(kb)), len(SYMBOLS))                 # پیش‌فرض: فقط طلا
 
-        self.flow.on_callback(FakeCall("btp:EURUSD"))
+        self.flow.on_callback(FakeCall("btp:XAUUSD"))
         tf = buttons(self.last_markup())
-        self.assertIn(("M5 → M1  ✅ recommended (your live setup)", "btt:EURUSD:5-1"), tf)
-        self.assertIn(("H1 → M5", "btt:EURUSD:60-5"), tf)
+        self.assertIn(("M5 → M1  ✅ recommended (your live setup)", "btt:XAUUSD:5-1"), tf)
+        self.assertIn(("H1 → M5", "btt:XAUUSD:60-5"), tf)
         self.assertEqual(tf[-1], ("⬅️ Back", "bt"))
 
-        self.flow.on_callback(FakeCall("btt:EURUSD:5-1"))
+        self.flow.on_callback(FakeCall("btt:XAUUSD:5-1"))
         days = buttons(self.last_markup())
         self.assertEqual([d for _, d in days[:-1]],
-                         ["btd:EURUSD:5-1:1", "btd:EURUSD:5-1:3", "btd:EURUSD:5-1:5", "btd:EURUSD:5-1:10"])
-        self.assertIn(("5 days ✅", "btd:EURUSD:5-1:5"), days)
+                         ["btd:XAUUSD:5-1:1", "btd:XAUUSD:5-1:3", "btd:XAUUSD:5-1:5", "btd:XAUUSD:5-1:10"])
+        self.assertIn(("5 days ✅", "btd:XAUUSD:5-1:5"), days)
 
     def test_run_shows_waiting_then_results(self):
         m1 = candles(n=7600, vol=0.0005, freq="1min", seed=5)

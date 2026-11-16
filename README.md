@@ -146,6 +146,7 @@ python -m bot.backtest XAUUSD --csv m1.csv --days 5 --balance 1000 --tf 5-1
 | متغیر | توضیح |
 |---|---|
 | `BOT_TOKEN` | توکن ربات از BotFather (ضروری) |
+| `PAIRS` | نمادهایی که ربات کار می‌کند. پیش‌فرض فقط `XAUUSD` (طلا). مثلاً `XAUUSD,EURUSD` یا `ALL` برای همه |
 | `CHANNEL_ID` | اختیاری: کانال یا گروه برای هشدارها، مثلاً `@mychannel`. ربات باید ادمین باشد |
 | `DATABASE_URL` | اختیاری: Postgres تا کاربران و فالوها با هر دیپلوی پاک نشوند |
 | `SPREAD_<نماد>` | اسپرد بروکر به واحد قیمت، مثلاً `SPREAD_XAUUSD=0.25` یا `SPREAD_EURUSD=0.00012` |

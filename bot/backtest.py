@@ -168,7 +168,7 @@ def summary(sym, events, start, end, balance=DEFAULT_BALANCE):
 
 def fetch(sym, days, ctx_min=5, trig_min=1, progress=None):
     """داده‌ی TradingView (روی Render): روزهای معاملاتی اخیر + گرم شدن."""
-    from .config import SYMBOLS
+    from .config import ALL_SYMBOLS as SYMBOLS
     from .data import LAST_SOURCE, fetch_candles
     warm = 700 if trig_min == ctx_min else 400               # رنج: ۵۰۰ کندل قبل از اولین روز لازم است
     n_trig = min(days * 1440 // trig_min + warm, 20000)
