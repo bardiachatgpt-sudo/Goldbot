@@ -10,13 +10,15 @@ from telebot import types
 from .config import MIN_BARS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
-VERSION = "structure · gold + majors + Dow Jones · M1 to D1 · M1 + M5 with the gap setup"
+VERSION = "structure · gold + majors + Dow Jones · M1 to D1 · M1 + M5 with the gap setup · gap backtest"
 MENU_STRUCTURE = "📐 Structure"
+MENU_BACKTEST = "🧪 Gap backtest"
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
         "Pick a pair, then a timeframe.\n\n"
         "🔬 M1 + M5: M1 candles; each M5 structure is a light-blue box (range flat, channel slanted) with its "
         "top and bottom price, and the M1 gap setup on it (gap, entry, stop, 1:1 target, result).\n\n"
+        "🧪 Gap backtest: one tap runs the gap setup on all available M1 candles (gold; or under any pair).\n\n"
         "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
             f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
 
@@ -30,8 +32,8 @@ class Telegram:
     # ------------------------------------------------------------ دکمه‌ها
     def menu(self):
         """دکمه‌ی ثابت پایین چت."""
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-        kb.add(types.KeyboardButton(MENU_STRUCTURE))
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+        kb.add(types.KeyboardButton(MENU_STRUCTURE), types.KeyboardButton(MENU_BACKTEST))
         return kb
 
     def structure_pairs(self):
@@ -44,6 +46,7 @@ class Telegram:
         kb.add(*[types.InlineKeyboardButton(f"⏱ {name}", callback_data=f"sxt:{sym}:{tf}")
                  for tf, name in TIMEFRAMES.items()])
         kb.row(types.InlineKeyboardButton("🔬 M1 candles + M5 structure + gap setup", callback_data=f"sxm:{sym}"))
+        kb.row(types.InlineKeyboardButton("🧪 Backtest the gap setup (M1)", callback_data=f"sxb:{sym}"))
         return kb
 
     def ask_structure(self, chat_id):
@@ -125,7 +128,39 @@ class Telegram:
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data=f"sxm:{sym}"),
                types.InlineKeyboardButton("⏱ Timeframe", callback_data=f"sxp:{sym}"),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
+        kb.row(types.InlineKeyboardButton("🧪 Backtest the gap setup (M1)", callback_data=f"sxb:{sym}"))
         self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
+
+    # ------------------------------------------------------------ بک‌تست گپ
+    def send_gap_backtest(self, chat_id, sym):
+        """همه‌ی کندل‌های M1 که TradingView می‌دهد (تا M1_BARS) با قاعده‌ی گپ؛ گزارش + نمودار موجودی."""
+        from .gap_backtest import M1_BARS, equity_chart, report_text, run
+        from .mtf import fmt_price
+        wait = self.bot.send_message(chat_id, f"⏳ Backtesting the gap setup on {label(sym)} M1 "
+                                              f"(up to {M1_BARS} candles)…")
+        try:
+            self.bot.send_chat_action(chat_id, "upload_photo")
+        except Exception:
+            pass
+        m1 = get_closed_candles(sym, M1_BARS + 1, MIN_BARS, "1", timeout=90)
+        if m1 is None:
+            self.bot.send_message(chat_id, f"⚠️ {sym}: could not fetch M1 candles, try again in a minute.")
+            return
+        res = run(sym, m1)
+        dec = len(fmt_price(sym, 1.0).split(".")[1])
+        text = report_text(res, dec)
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        kb.add(types.InlineKeyboardButton("🔄 Run again", callback_data=f"sxb:{sym}"),
+               types.InlineKeyboardButton("🔬 Picture", callback_data=f"sxm:{sym}"))
+        try:
+            self.bot.delete_message(chat_id, wait.message_id)
+        except Exception:
+            pass
+        try:
+            self.bot.send_photo(chat_id, equity_chart(res))
+        except Exception as e:
+            print("gap backtest chart error:", e)
+        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=kb)
 
     # ------------------------------------------------------------ دستورها
     def _register_handlers(self):
@@ -151,8 +186,20 @@ class Telegram:
             else:
                 self.ask_structure_tf(m.chat.id, sym)
 
+        @bot.message_handler(commands=["backtest", "bt"])
+        def on_backtest(m):
+            parts = m.text.split()
+            sym = parts[1].upper() if len(parts) > 1 else "XAUUSD"
+            if sym in STRUCTURE_SYMBOLS:
+                self.send_gap_backtest(m.chat.id, sym)
+            else:
+                bot.send_message(m.chat.id, f"Unknown pair. Available: {', '.join(STRUCTURE_SYMBOLS)}")
+
         @bot.message_handler(func=lambda m: True)
-        def on_text(m):                                          # دکمه‌ی 📐 یا هر پیام دیگر
+        def on_text(m):                                          # دکمه‌های پایین چت یا هر پیام دیگر
+            if (m.text or "").strip() == MENU_BACKTEST:
+                self.send_gap_backtest(m.chat.id, "XAUUSD" if "XAUUSD" in STRUCTURE_SYMBOLS else STRUCTURE_SYMBOLS[0])
+                return
             self.ask_structure(m.chat.id)
 
         @bot.callback_query_handler(func=lambda c: bool(c.data))
@@ -160,7 +207,10 @@ class Telegram:
             chat_id = c.message.chat.id
             action, _, rest = c.data.partition(":")
             sym, _, tf = rest.partition(":")
-            if action == "sxm" and sym in STRUCTURE_SYMBOLS:
+            if action == "sxb" and sym in STRUCTURE_SYMBOLS:
+                bot.answer_callback_query(c.id, f"Backtesting {sym}…")
+                self.send_gap_backtest(chat_id, sym)
+            elif action == "sxm" and sym in STRUCTURE_SYMBOLS:
                 bot.answer_callback_query(c.id, f"Drawing {sym} M1 + M5…")
                 self.send_mtf(chat_id, sym)
             elif action == "sxt" and sym in STRUCTURE_SYMBOLS and tf in TIMEFRAMES:
@@ -184,7 +234,8 @@ class Telegram:
             print("remove_webhook error:", e)
         try:                                     # منوی دستورها در تلگرام
             self.bot.set_my_commands([types.BotCommand("start", "Menu"),
-                                      types.BotCommand("structure", "📐 Market structure")])
+                                      types.BotCommand("structure", "📐 Market structure"),
+                                      types.BotCommand("backtest", "🧪 Gap setup backtest on M1 (gold)")])
         except Exception as e:
             print("set_my_commands error:", e)
         # هر خطایی (مثلاً 409 وقتی نسخه‌ی قبلی هنگام دیپلوی هنوز در حال polling است) نباید برنامه را ببندد،

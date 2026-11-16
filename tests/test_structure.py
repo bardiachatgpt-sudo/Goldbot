@@ -136,11 +136,11 @@ class TestStructureBot(unittest.TestCase):
         self.assertEqual([b.callback_data for row in kb.keyboard for b in row],
                          ["sxp:XAUUSD", "sxp:EURUSD", "sxp:GBPUSD", "sxp:USDJPY", "sxp:USDCHF",
                           "sxp:USDCAD", "sxp:AUDUSD", "sxp:NZDUSD", "sxp:US30"])
-        self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row], ["📐 Structure"])
+        self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row], ["📐 Structure", "🧪 Gap backtest"])
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
-        self.assertEqual(tfs, [f"sxt:US30:{tf}" for tf in config.TIMEFRAMES] + ["sxm:US30"])
+        self.assertEqual(tfs, [f"sxt:US30:{tf}" for tf in config.TIMEFRAMES] + ["sxm:US30", "sxb:US30"])
         self.assertEqual(list(config.TIMEFRAMES.values()), ["M1", "M5", "M15", "M30", "H1", "H4", "D1"])
 
     def test_sends_500_candles_and_zoom_on_chosen_timeframe(self):
@@ -227,7 +227,7 @@ class TestM1WithM5Structure(unittest.TestCase):
         self.assertEqual(call.args[1][:4], b"\x89PNG")
         self.assertIn("gap setup", call.kwargs["caption"])
         btns = [b.callback_data for row in call.kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxm:XAUUSD", "sxp:XAUUSD", "sx"])
+        self.assertEqual(btns, ["sxm:XAUUSD", "sxp:XAUUSD", "sx", "sxb:XAUUSD"])
 
 
 def candles(rows):
@@ -274,6 +274,48 @@ class TestGapSetup(unittest.TestCase):
         self.assertEqual(t["side"], 1)
         self.assertAlmostEqual(t["entry"], 107.99)
         self.assertAlmostEqual(t["sl"], 98.99)
+
+
+def gappy_m1(n=3000, seed=11):
+    rnd = np.random.default_rng(seed)
+    r = rnd.normal(0, 0.35, n) + np.where(rnd.random(n) < 0.03, rnd.choice([-1, 1], n) * 2.5, 0)
+    c = 4000 + np.cumsum(r)
+    o = np.r_[c[0], c[:-1]]
+    return pd.DataFrame({"Open": o, "High": np.maximum(o, c) + 0.2, "Low": np.minimum(o, c) - 0.2, "Close": c},
+                        index=pd.date_range("2026-11-16", periods=n, freq="1min", tz="UTC"))
+
+
+class TestGapBacktest(unittest.TestCase):
+    def test_report_and_account(self):
+        from bot import gap_backtest
+        res = gap_backtest.run("XAUUSD", gappy_m1())
+        self.assertGreater(res["trades"], 10)
+        self.assertEqual(res["trades"], res["wins"] + res["losses"])
+        self.assertAlmostEqual(res["net_r"], res["wins"] - res["losses"])          # ۱:۱
+        a2 = res["accounts"][2.0]
+        bal = 1000.0
+        for t in res["closed"]:
+            bal *= 1 + 0.02 * t["r"]
+        self.assertAlmostEqual(a2["final"], bal, places=6)                           # ریسک ۲٪ مرکب
+        txt = gap_backtest.report_text(res)
+        self.assertLess(len(txt), 4096)                                              # یک پیام تلگرام
+        self.assertIn("GAP BACKTEST", txt)
+        self.assertIn("Risk 2% per trade", txt)
+        self.assertEqual(gap_backtest.equity_chart(res)[:4], b"\x89PNG")
+
+    def test_one_tap_in_the_bot(self):
+        tg = make_bot()
+        calls = []
+
+        def fake(sym, n, m, interval=None, timeout=20):
+            calls.append((sym, n, interval))
+            return gappy_m1()
+
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake):
+            tg.send_gap_backtest(7, "XAUUSD")
+        self.assertEqual(calls, [("XAUUSD", 5001, "1")])
+        self.assertEqual(tg.bot.send_photo.call_args.args[1][:4], b"\x89PNG")       # نمودار موجودی
+        self.assertIn("GAP BACKTEST", tg.bot.send_message.call_args.args[1])
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):

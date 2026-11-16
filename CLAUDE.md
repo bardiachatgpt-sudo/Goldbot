@@ -55,8 +55,9 @@ on purpose; they are in git history before commit 678dacb if ever needed).
   - Stop: just beyond candle 1 (sell: above its high; buy: below its low). Target 1:1.
   - Runs on M1, drawn on the M1 + M5 picture. No invalidation for now (user's choice). One trade at a time; a new
     gap before entry replaces the waiting one. No spread. Stop = candle 1 + 1 pipette.
-  - Still open: the user said "when we reach the important M5 zones we should not react much" — asked whether it
-    means (a) skip gap trades near M5 box edges, or (b) M5 edges are targets; not answered yet.
+  - M5 box edges are meant as targets (user chose "b"), but the user said to leave the edges out for now — no edge
+    rule is coded. Gap backtest: one tap (🧪 Gap backtest / under each pair / `/backtest XAUUSD`) runs bot/gap.py on
+    up to 5000 M1 candles (bot/gap_backtest.py): trades, wins, R, buys vs sells, $1,000 at 1% and 2%, equity chart.
 
 ## Environment notes
 - The cloud session cannot reach TradingView; real data is only on Render. Test with synthetic data and pictures
