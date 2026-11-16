@@ -204,6 +204,9 @@ class TestM1WithM5Structure(unittest.TestCase):
         self.assertEqual(png[:4], b"\x89PNG")
         self.assertEqual(ph5, structure3.segment(m5["Close"].values)[0])        # همان ساختار دکمه‌ی M5
         self.assertTrue(ph1 and now5 and now1)
+        from bot import structure                                              # M1: تشخیص ریز نسخه‌ی ۱
+        w1 = mtf.m1_window(m5, m1)
+        self.assertEqual(ph1, structure.detect(*(w1[k].values for k in ("Open", "High", "Low", "Close")))[0])
         w = mtf.m1_window(m5, m1)
         self.assertTrue(mtf.MIN_M1 <= len(w) <= mtf.MAX_M1)
         self.assertEqual(w.index[-1], m1.index[-1])                             # تا آخرین کندل M1

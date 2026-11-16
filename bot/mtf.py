@@ -1,5 +1,6 @@
 """M1 با ساختار M5 روی زمینه‌ی سفید: کندل‌های یک دقیقه (خاکستری)، هر فاز M5 یک جعبه‌ی آبی کم‌رنگ
-(رنج صاف، کانال مورب) با قیمت سقف و کف، و داخلش ساختارهای M1 (اسپایک، کانال، رنج) با خط مشکی.
+(رنج صاف، کانال مورب) با قیمت سقف و کف، و داخلش چرخه‌های ریز M1 با خط مشکی: همان تشخیص ریز نسخه‌ی ۱
+(bot/structure.py: رنج، رنج مشکوک، اسپایک، کانال صعودی/نزولی، با سوئینگ‌ها).
 
 - ساختار M5 دقیقاً همان دکمه‌ی M5 است (۵۰۰ کندل M5، bot/structure3.py)؛ فقط با زمان روی M1 نشانده می‌شود.
   خط‌های فاز آخر M5 تا آخرین کندل M1 ادامه دارند (کندل M5 در حال تشکیل هنوز در ساختار نیست).
@@ -43,6 +44,14 @@ def _edges(ph, c5, h5, l5, piv5, pos):
     return np.full(len(pos), top), np.full(len(pos), bot)
 
 
+def micro_cycles(o, h, l, c):
+    """چرخه‌های ریز M1 با نسخه‌ی ۱ ساختار (bot/structure.py: سوئینگ با سایه‌ها، برگشت ۱.۵ کندل متوسط):
+    فازهای {type, side, start, end, lines, doubt} و سوئینگ‌ها."""
+    from .structure import detect
+    phases, _, piv, _ = detect(o, h, l, c)
+    return phases, piv
+
+
 def m1_window(m5, m1, zoom=2):
     """بازه‌ی M1 برای عکس: از شروع k فاز آخر M5 تا آخر، محدود به MIN_M1..MAX_M1 کندل."""
     phases, _ = segment(m5["Close"].values.astype(float))
@@ -67,7 +76,7 @@ def render(sym, m5, m1):
     w = m1_window(m5, m1)
     o, h, l, c = (w[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     n = len(c)
-    ph1, piv1 = segment(c)
+    ph1, piv1 = micro_cycles(o, h, l, c)
     t1 = w.index
     t5 = m5.index
     step5 = (t5[-1] - t5[-2]) if len(t5) > 1 else pd.Timedelta(minutes=5)
@@ -109,29 +118,35 @@ def render(sym, m5, m1):
         name = NAMES[(ph["type"], ph["side"])]
         if len(xs) >= 25:
             ax.text(xs[0] + 2, upper[0] + pad * 0.6, f"M5 · {name}", color=M5_TEXT, fontsize=12,
-                    fontweight="bold", va="bottom", zorder=8)
+                    fontweight="bold", va="bottom", zorder=9,
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.85))
             word = {"RANGE": "range", "CHANNEL": "channel", "SPIKE": "spike"}[ph["type"]]
             for y, edge, va in ((upper[-1], "top", "bottom"), (lower[-1], "bottom", "top")):
                 ax.text(xs[-1] - 1, y + (pad * 0.4 if va == "bottom" else -pad * 0.4),
                         f"M5 {word} {edge}  {fmt_price(sym, y)}", color=M5_TEXT, fontsize=9.5,
-                        fontweight="bold", ha="right", va=va, zorder=8,
+                        fontweight="bold", ha="right", va=va, zorder=9,
                         bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor=M5_EDGE, lw=0.8))
 
-    # ---- M1: داخل جعبه‌ها، ساختارهای یک دقیقه با خط مشکی
+    # ---- M1: چرخه‌های ریز (نسخه‌ی ۱، با سایه‌ها) داخل جعبه‌های M5، همه مشکی
     for ph in ph1:
         a, b = ph["start"], ph["end"]
-        if ph["type"] == "SPIKE":
-            ax.plot([a, b], [c[a], c[b]], color=M1_LINE, lw=2.0, zorder=7, solid_capstyle="round")
-        for x0, y0, x1, y1, role in lines(ph, c, piv1):
-            ax.plot([x0, x1], [y0, y1], color=M1_LINE, lw=1.4, ls=(0, (3, 2)) if role == "parallel" else "-",
-                    zorder=7)
-        if b - a >= 15:
-            short = {"TRADING RANGE": "range", "BULL CHANNEL": "bull channel", "BEAR CHANNEL": "bear channel",
-                     "SPIKE ↑": "spike ↑", "SPIKE ↓": "spike ↓"}
-            ytxt = l[a:b + 1].min() - pad * 0.35          # زیر همان ساختار، تا روی نام جعبه‌ی M5 نیفتد
-            ax.text(a + 1, ytxt, "M1 " + short[NAMES[(ph["type"], ph["side"])]], color=M1_LINE, fontsize=8.5,
-                    va="top", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.75))
+        doubt = bool(ph.get("doubt"))
+        y0, y1 = l[a:b + 1].min(), h[a:b + 1].max()
+        ax.add_patch(patches.Rectangle((a - 0.5, y0), b - a + 1, y1 - y0, facecolor="none", edgecolor=M1_LINE,
+                                       lw=0.9, ls=":" if doubt else "-", alpha=0.55 if doubt else 0.8, zorder=6))
+        ln = ph["lines"]
+        if ln:
+            xs = np.array([max(ln["x0"], a - 3), b + 1])
+            base = ln["y0"] + ln["slope"] * (xs - ln["x0"])
+            ax.plot(xs, base, color=M1_LINE, lw=1.4, zorder=7)
+            ax.plot(xs, base + ln["off"], color=M1_LINE, lw=1.1, ls=(0, (3, 2)), zorder=7)
+        if b - a >= 3 or ph["type"] == "SPIKE":
+            name = "RANGE (in doubt)" if doubt else NAMES[(ph["type"], ph["side"])]
+            ax.text((a + b) / 2, y1 + pad * 0.15, "M1 · " + name, color=M1_LINE, fontsize=7.5, ha="center",
+                    va="bottom", alpha=0.7 if doubt else 1.0, zorder=8)
+    for j, t, p, _ in piv1:                             # سوئینگ‌های M1 (کم‌رنگ)
+        ax.plot(j, p - pad * 0.5 if t == "L" else p + pad * 0.5, "^" if t == "L" else "v", color="#6B7280",
+                ms=3.5, zorder=6)
 
     # ---- کندل‌های M1 (خاکستری روشن، تا خط‌های مشکی و جعبه‌های آبی دیده شوند)
     width = 0.62
@@ -159,15 +174,18 @@ def render(sym, m5, m1):
     for s in ax.spines.values():
         s.set_color(GRID)
     ax.grid(color=GRID, lw=0.6)
-    now5, now1 = now_text(ph5), now_text(ph1)
+    now5 = now_text(ph5)
+    now1 = NAMES[(ph1[-1]["type"], ph1[-1]["side"])] if ph1 else "unclear"
+    if ph1 and ph1[-1].get("doubt"):
+        now1 = "RANGE (in doubt)"
     ax.set_title(f"{sym} · M1 candles · M5 structure + M1 micro cycles\n"
                  f"M5 now: {NAMES[(ph5[-1]['type'], ph5[-1]['side'])]}   ·   "
-                 f"M1 now: {NAMES[(ph1[-1]['type'], ph1[-1]['side'])]}   ·   {n} M1 candles",
+                 f"M1 now: {now1}   ·   {n} M1 candles",
                  color=TEXT, fontsize=13, fontweight="bold", loc="left", pad=12)
     # راهنما بالای نمودار، سمت راست (روی نمودار چیزی را نمی‌پوشاند)
     from matplotlib.lines import Line2D
     handles = [patches.Patch(facecolor=M5_FILL, edgecolor=M5_LINE, lw=2, label="M5 structure (box: range flat, channel slanted)"),
-               Line2D([0], [0], color=M1_LINE, lw=1.5, label="M1 structure inside it (spike / channel / range)")]
+               Line2D([0], [0], color=M1_LINE, lw=1.5, label="M1 micro cycles inside it (fine detection)")]
     leg = ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.0, 1.005), ncol=2, frameon=False,
                     fontsize=10, handlelength=2.6)
     for t in leg.get_texts():
