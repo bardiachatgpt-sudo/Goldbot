@@ -176,4 +176,24 @@ class BacktestFlow:
         except Exception:
             pass
         self.tg._send(chat_id, backtest.report_text(res), png)
+        if str(res.get("strategy", "")).startswith("range3") and res.get("candles") is not None:
+            self.send_trade_pictures(chat_id, sym, res)
         bot.send_message(chat_id, "Run another one?", reply_markup=again)
+
+    def send_trade_pictures(self, chat_id, sym, res):
+        """یک عکس برای هر معامله (ورود، حد ضرر، حد سود، خروج)، در آلبوم‌های ۱۰تایی."""
+        from .config import decimals
+        from .trade_charts import caption, trade_chart
+        dec = decimals(sym)
+        media = []
+        for k, t in enumerate(res["closed"], 1):
+            try:
+                png = trade_chart(res["candles"], t, k, sym, dec)
+                media.append(types.InputMediaPhoto(png, caption=caption(t, k, dec)))
+            except Exception as e:
+                print("trade chart error:", k, e)
+        for j in range(0, len(media), 10):
+            try:
+                self.bot.send_media_group(chat_id, media[j:j + 10])
+            except Exception as e:
+                print("trade pictures error:", e)

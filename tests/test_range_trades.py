@@ -153,3 +153,21 @@ class TestRangeTrades(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTradePictures(unittest.TestCase):
+    def test_each_trade_gets_a_picture_in_albums_of_ten(self):
+        from bot import backtest_ui
+        from bot.trade_charts import caption, trade_chart
+        df = market([(100, 100.5, 95.5, 96.5), (96.5, 106.3, 96.4, 106.1)])
+        with mock.patch.object(range_trades, "range_at", lambda c, t, window=500: (106.0, 96.0, 50, 0)), \
+                mock.patch.object(range_trades, "spread", lambda s: 0.1):
+            ev = range_trades.run("XAUUSD", df, entry="touch")
+        closed = [e for e in ev if e["kind"] == "TRADE_CLOSED"]
+        self.assertEqual(trade_chart(df, closed[0], 1, "XAUUSD")[:4], b"\x89PNG")
+        self.assertIn("#1 BUY", caption(closed[0], 1))
+        self.assertIn("entry 96.10", caption(closed[0], 1))
+        tg = mock.MagicMock()
+        flow = backtest_ui.BacktestFlow(tg)
+        flow.send_trade_pictures(7, "XAUUSD", {"closed": closed * 12, "candles": df})
+        self.assertEqual([len(c.args[1]) for c in tg.bot.send_media_group.call_args_list], [10, 2])

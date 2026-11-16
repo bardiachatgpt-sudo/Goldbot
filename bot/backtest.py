@@ -243,6 +243,8 @@ def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, p
             sm = summary(sym, ev2, start, end, balance)
             res["compare"].append({"strategy": other, "final2": sm["accounts"].get(2.0, {}).get("final"),
                                    **{k: v for k, v in sm.items() if k in ("trades", "wins", "net_r")}})
+    if strategy.startswith("range3"):
+        res["candles"] = m1                                             # برای عکس هر معامله
     res.update(strategy=strategy, tf=tf, tf_name=tf_name, days=days,
                days_covered=len([d for d in day_list if pd.Timestamp(d, tz="UTC") >= start.floor("D")]))
     return res, None
@@ -301,14 +303,19 @@ def report_text(res, balance=DEFAULT_BALANCE):
                      f"max drawdown {a['max_dd']:.1f}%")
     if res["closed"]:
         lines.append(LINE + "\n<b>Trades</b>")
-        shown = 30 if str(res.get("strategy", "")).startswith("range3") else 15
-        for e in res["closed"][-shown:]:
+        shown = 30 if is_range else 15
+        if is_range:
+            lines[-1] += " (Tehran time; a picture of each one follows)"
+        first = max(0, len(res["closed"]) - shown)
+        for k, e in enumerate(res["closed"][first:], first + 1):
             icon = "🏆" if e["r"] > 0 else "🛑"
             side = "BUY" if e["side"] > 0 else "SELL"
             mode = {"RANGE": "Range", "SPIKE": "Spike", "TREND": "Trend"}.get(e["mode"], e["mode"])
             if e.get("n_h"):
                 mode += f" {'H' if e['side'] > 0 else 'L'}{e['n_h']}"
-            lines.append(f"{icon} {e['opened']:%d %b %H:%M} {mode} {side} {p(e['entry'])} → {p(e['exit'])} "
+            opened = e["opened"].tz_convert("Asia/Tehran") if is_range else e["opened"]   # رنج: وقت تهران
+            lines.append(f"{icon} {f'#{k} ' if is_range else ''}{opened:%d %b %H:%M} {mode} {side} "
+                         f"{p(e['entry'])} → {p(e['exit'])} "
                          f"({e['r']:+.2f}R)")
         if len(res["closed"]) > shown:
             lines.append(f"<i>… {len(res['closed']) - shown} earlier trades not listed</i>")
