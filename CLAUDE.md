@@ -43,8 +43,16 @@ on purpose; they are in git history before commit 678dacb if ever needed).
 ## Trade setups
 - All earlier setups (pin bar, key bar, range edges, MACD, Always In…) were dropped by the user. Do not bring them
   back. The structures above stay.
-- The user is now describing new setups one by one. First one: the **gap** (3-candle gap, like a fair value gap),
-  starting with the down-trend version — still being defined, not coded yet.
+- The user is now describing new setups one by one. First one: the **gap** (not coded yet; rules agreed so far):
+  - Sell: candle 1 low > candle 3 high, and candle 2's body overlaps that gap (candle 2 is usually red; overlap is
+    enough). Buy: the mirror (candle 1 high < candle 3 low, candle 2 body overlaps).
+  - Following starts as soon as the gap exists (close of candle 3): compare each candle's high with the previous
+    candle's high (buy: lows).
+  - Entry (sell): the moment price goes even a tick above the previous candle's high; entry price = that high.
+    (Buy: a tick below the previous candle's low.)
+  - Stop: just beyond candle 1 (sell: above its high; buy: below its low). Target 1:1.
+  - Still open: gap invalidation / max wait, trend condition (our structure or any gap), timeframe (M5?), spread,
+    and what the bot should do with it (mark on pictures, alerts, backtest).
 
 ## Environment notes
 - The cloud session cannot reach TradingView; real data is only on Render. Test with synthetic data and pictures
