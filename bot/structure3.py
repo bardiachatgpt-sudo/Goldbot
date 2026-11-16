@@ -373,3 +373,81 @@ def render(sym, df, tf="M5"):
     fig.savefig(buf, format="png", facecolor="#121214")
     plt.close(fig)
     return buf.getvalue(), phases, now
+
+
+def swing_labels(piv):
+    """هر سقف با سقف قبلی و هر کف با کف قبلی: HH / LH / HL / LL (اولی فقط H یا L)."""
+    out = []
+    last = {"H": None, "L": None}
+    for i, t, p in piv:
+        prev = last[t]
+        if prev is None:
+            tag = t
+        elif t == "H":
+            tag = "HH" if p > prev else "LH"
+        else:
+            tag = "HL" if p > prev else "LL"
+        out.append((i, t, p, tag))
+        last[t] = p
+    return out
+
+
+def render_line(sym, df, tf="M5"):
+    """نمودار خطی (فقط بسته‌شدن‌ها) با همان فازها و خط‌ها، و هر سقف/کف با برچسب HH/LH/HL/LL.
+    همان چیزی است که ساختار رویش ساخته شده، تا معلوم باشد دقیقاً کجا سقف و کف گرفته شده."""
+    import io
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    c = df["Close"].values.astype(float)
+    n = len(c)
+    phases, piv = segment(c)
+    fig, ax = plt.subplots(figsize=(22, 9), dpi=100)
+    fig.patch.set_facecolor("#121214")
+    ax.set_facecolor("#18181B")
+    col = {"SPIKE": "#FBBF24", "RANGE": "#60A5FA", ("CHANNEL", 1): "#10B981", ("CHANNEL", -1): "#EF4444"}
+    span = c.max() - c.min()
+    pad = span * 0.02
+    for ph in phases:
+        a, b = ph["start"], ph["end"]
+        cc = col[("CHANNEL", ph["side"])] if ph["type"] == "CHANNEL" else col[ph["type"]]
+        ax.axvspan(a, b, color=cc, alpha=0.07, zorder=0)
+        ax.text(a + 1, c.max() + pad * 2.5, NAMES[(ph["type"], ph["side"])], color=cc, fontsize=10,
+                fontweight="bold", va="bottom")
+        for x0, y0, x1, y1, role in lines(ph, c, piv):
+            ax.plot([x0, x1], [y0, y1], color=cc, lw=1.8 if role != "parallel" else 1.3,
+                    ls="-" if role != "parallel" else "--", zorder=2)
+    ax.plot(range(n), c, color="#E4E4E7", lw=1.2, zorder=3)
+    tag_col = {"HH": "#10B981", "HL": "#10B981", "LH": "#EF4444", "LL": "#EF4444", "H": "#A1A1AA", "L": "#A1A1AA"}
+    for i, t, p, tag in swing_labels(piv):
+        cc = tag_col[tag]
+        ax.plot(i, p, "o", color=cc, ms=6, zorder=5)
+        ax.text(i, p + pad if t == "H" else p - pad, tag, color=cc, fontsize=10, fontweight="bold",
+                ha="center", va="bottom" if t == "H" else "top", zorder=6)
+    if hasattr(df.index, "tz_convert"):
+        try:
+            from .config import TEHRAN
+            dates = df.index.tz_convert(TEHRAN)
+            step = max(1, n // 12)
+            ax.set_xticks(range(0, n, step))
+            ax.set_xticklabels([d.strftime("%d %b %H:%M") for d in dates[::step]], rotation=30, fontsize=8)
+            ax.set_xlabel("Tehran time", color="#9CA3AF")
+        except Exception:
+            pass
+    ax.set_title(f"{sym} {tf} · line chart (closes) · the highs and lows the structure is built from\n"
+                 f"HH/HL = higher high / higher low (green) · LH/LL = lower high / lower low (red) · "
+                 f"a high or low counts after a {CFG['T']:.0%}-of-chart pullback",
+                 color="#F3F4F6", fontsize=12, fontweight="bold")
+    ax.set_xlim(-2, n + 2)
+    ax.set_ylim(c.min() - pad * 3, c.max() + pad * 6)
+    ax.tick_params(colors="#9CA3AF")
+    for s in ax.spines.values():
+        s.set_color("#3F3F46")
+    ax.grid(color="#27272A", lw=0.5)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", facecolor="#121214")
+    plt.close(fig)
+    return buf.getvalue()

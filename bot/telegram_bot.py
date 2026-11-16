@@ -133,7 +133,15 @@ class Telegram:
         kb = types.InlineKeyboardMarkup(row_width=2)
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="sxp:" + sym),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
-        self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
+        self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML")
+        try:                                     # همان ساختار روی نمودار خطی، با سقف و کف‌ها
+            from .structure3 import render_line
+            self.bot.send_photo(chat_id, render_line(sym, df, tf="M5"),
+                                caption=f"📈 {label(sym)} · line chart (closes): where every high and low was taken "
+                                        f"(HH / HL / LH / LL)", reply_markup=kb)
+        except Exception as e:
+            print("structure line error:", e)
+            self.bot.send_message(chat_id, "📐", reply_markup=kb)
 
     # ------------------------------------------------------------ وضعیت
     def send_status(self, chat_id, sym):
