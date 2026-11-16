@@ -200,7 +200,7 @@ class TestM1WithM5Structure(unittest.TestCase):
     def test_render_uses_the_same_m5_structure(self):
         from bot import mtf
         m1, m5 = m1_market()
-        png, ph5, ph1, now5, now1 = mtf.render("XAUUSD", m5, m1)
+        png, ph5, ph1, now5, now1 = mtf.render("XAUUSD", m5, m1, layer="micro")
         self.assertEqual(png[:4], b"\x89PNG")
         self.assertEqual(ph5, structure3.segment(m5["Close"].values)[0])        # همان ساختار دکمه‌ی M5
         self.assertTrue(ph1 and now5 and now1)
@@ -225,9 +225,69 @@ class TestM1WithM5Structure(unittest.TestCase):
         self.assertEqual(calls, [("XAUUSD", "5"), ("XAUUSD", "1")])
         call = tg.bot.send_photo.call_args
         self.assertEqual(call.args[1][:4], b"\x89PNG")
-        self.assertIn("M1 candles with the M5 structure", call.kwargs["caption"])
+        self.assertIn("gap setup", call.kwargs["caption"])
         btns = [b.callback_data for row in call.kwargs["reply_markup"].keyboard for b in row]
         self.assertEqual(btns, ["sxm:XAUUSD", "sxp:XAUUSD", "sx"])
+
+
+def candles(rows):
+    a = np.array(rows, float)
+    return a[:, 0], a[:, 1], a[:, 2], a[:, 3]
+
+
+class TestGapSetup(unittest.TestCase):
+    # ردیف‌ها: (open, high, low, close)
+    SELL = [(110, 111, 108, 108.5),       # کندل ۱: کف 108
+            (108.5, 108.6, 101, 101.5),   # کندل ۲: بدنه‌ی قرمز بزرگ
+            (101.5, 105, 100, 100.5),     # کندل ۳: سقف 105 < کف کندل ۱ → گپ 105..108
+            (100.5, 102, 99, 99.5),       # سقف پایین‌تر: هنوز ورود نیست
+            (99.5, 102.5, 99.4, 102.2),   # سقف 102.5 > سقف قبلی 102 → فروش روی 102.01
+            (102.2, 102.3, 92, 92.5)]     # حد سود
+
+    def test_bearish_gap_is_found(self):
+        from bot import gap
+        o, h, l, c = candles(self.SELL)
+        self.assertEqual(gap.find_gap(o, h, l, c, 2), (-1, (108, 105)))
+        o2 = o.copy(); c2 = c.copy()
+        o2[1], c2[1] = 108.5, 108.4                                    # بدنه‌ی کندل ۲ بیرون گپ
+        self.assertEqual(gap.find_gap(o2, h, l, c2, 2)[0], 0)
+
+    def test_sell_one_pipette_above_previous_high_stop_behind_candle_1_target_1_to_1(self):
+        from bot import gap
+        t = gap.trades(*candles(self.SELL), sym="XAUUSD")[0]
+        self.assertEqual((t["side"], t["entry_i"]), (-1, 4))
+        self.assertAlmostEqual(t["entry"], 102.01)                     # سقف قبلی + ۱ پیپت
+        self.assertAlmostEqual(t["sl"], 111.01)                        # پشت کندل ۱
+        self.assertAlmostEqual(t["tp"], 102.01 - (111.01 - 102.01))    # ۱:۱
+        self.assertEqual((t["result"], t["r"]), ("TP", 1.0))
+
+    def test_touching_the_previous_high_is_not_an_entry(self):
+        from bot import gap
+        rows = self.SELL[:4] + [(99.5, 102.0, 99.4, 101.0)]           # فقط به 102 رسید، رد نکرد
+        t = gap.trades(*candles(rows), sym="XAUUSD")[-1]
+        self.assertIsNone(t["entry_i"])
+
+    def test_buy_is_the_mirror(self):
+        from bot import gap
+        rows = [(2 * 105 - o, 2 * 105 - lo, 2 * 105 - hi, 2 * 105 - cl) for o, hi, lo, cl in self.SELL]
+        t = gap.trades(*candles(rows), sym="XAUUSD")[0]
+        self.assertEqual(t["side"], 1)
+        self.assertAlmostEqual(t["entry"], 107.99)
+        self.assertAlmostEqual(t["sl"], 98.99)
+
+
+class TestLastLegAgainstTheChannel(unittest.TestCase):
+    def test_fall_after_a_bull_channel_is_not_called_bull(self):
+        rng = np.random.default_rng(2)
+        up = []
+        x = 100.0
+        for k in range(5):                                           # کانال صعودی با پولبک
+            up += list(np.linspace(x, x + 6, 20)) + list(np.linspace(x + 6, x + 3, 10))
+            x += 3
+        fall = list(np.linspace(up[-1], up[-1] - 10, 30))              # ریزش زیر آخرین کف، بدون پولبک
+        c = np.array(up + fall) + rng.normal(0, 0.05, len(up) + len(fall))
+        ph, _ = structure3.segment(c)
+        self.assertEqual(ph[-1]["side"], -1)                            # پایه‌ی آخر نزولی است، نه «کانال صعودی»
 
 
 class TestPollingSurvivesConflict(unittest.TestCase):

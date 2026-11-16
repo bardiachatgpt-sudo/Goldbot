@@ -135,7 +135,16 @@ def segment(close, cfg=None):
         # ---- TREND (کانال)
         if p[1] == "E":
             s0 = out[-1]["end"] if out and out[-1]["type"] == "SPIKE" else tstart
-            add("CHANNEL", side, s0, p[0])
+            broke = p[2] < last_l if side == 1 else p[2] > last_h      # آخرین بسته‌شدن آن طرف آخرین کف/سقف کانال
+            e = P[k - 1][0]
+            if broke and e > s0 and p[0] - e >= 2:
+                add("CHANNEL", side, s0, e)              # کانال تا آخرین سقف/کف تمام شد؛ پایه‌ی آخر جدا (موقت)
+                if _is_spike(c, e, p[0], hgt, mad, cfg):
+                    add("SPIKE", -side, e, p[0])
+                else:
+                    add("CHANNEL", -side, e, p[0])
+            else:
+                add("CHANNEL", side, s0, p[0])
             k += 1
             continue
         with_trend = p[1] == ("H" if side == 1 else "L")

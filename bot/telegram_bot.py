@@ -10,13 +10,13 @@ from telebot import types
 from .config import MIN_BARS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
-VERSION = "structure only · gold + majors + Dow Jones · M1 to D1 · M1 + M5 view"
+VERSION = "structure · gold + majors + Dow Jones · M1 to D1 · M1 + M5 with the gap setup"
 MENU_STRUCTURE = "📐 Structure"
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
         "Pick a pair, then a timeframe.\n\n"
         "🔬 M1 + M5: M1 candles; each M5 structure is a light-blue box (range flat, channel slanted) with its "
-        "top and bottom price, and the M1 structure inside it in black.\n\n"
+        "top and bottom price, and the M1 gap setup on it (gap, entry, stop, 1:1 target, result).\n\n"
         "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
             f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
 
@@ -43,7 +43,7 @@ class Telegram:
         kb = types.InlineKeyboardMarkup(row_width=4)
         kb.add(*[types.InlineKeyboardButton(f"⏱ {name}", callback_data=f"sxt:{sym}:{tf}")
                  for tf, name in TIMEFRAMES.items()])
-        kb.row(types.InlineKeyboardButton("🔬 M1 candles + M5 structure + M1 micro cycles", callback_data=f"sxm:{sym}"))
+        kb.row(types.InlineKeyboardButton("🔬 M1 candles + M5 structure + gap setup", callback_data=f"sxm:{sym}"))
         return kb
 
     def ask_structure(self, chat_id):
@@ -94,7 +94,7 @@ class Telegram:
             self.bot.send_message(chat_id, "📐", reply_markup=kb)
 
     def send_mtf(self, chat_id, sym):
-        """یک عکس: کندل‌های M1 با ساختار M5 (جعبه و خط پررنگ) و چرخه‌های کوچک M1 (خط نازک و نوار)."""
+        """یک عکس: کندل‌های M1 با ساختار M5 (جعبه‌های آبی) و ستاپ گپ M1 (گپ، ورود، حد ضرر، حد سود ۱:۱)."""
         from .mtf import MAX_M1, render
         from .structure3 import NAMES
         try:
@@ -106,18 +106,21 @@ class Telegram:
         if m5 is None or m1 is None:
             self.bot.send_message(chat_id, f"⚠️ {sym}: could not fetch M1/M5 candles, try again in a minute.")
             return
-        png, ph5, ph1, now5, now1 = render(sym, m5.tail(STRUCTURE_BARS), m1)
-
-        def chain(phases):
-            return " → ".join(NAMES[(p["type"], p["side"])].title() for p in phases[-4:]) or "-"
-
-        cap = (f"🔬 <b>{label(sym)} · M1 candles with the M5 structure</b>\n"
+        png, ph5, trades, now5, now1 = render(sym, m5.tail(STRUCTURE_BARS), m1)
+        chain5 = " → ".join(NAMES[(p["type"], p["side"])].title() for p in ph5[-4:]) or "-"
+        waiting = [t for t in trades if t.get("entry_i") is None]
+        live = [t for t in trades if t.get("entry_i") is not None and t.get("exit_i") is None]
+        state = ("🟢 trade open: " + ("SELL" if live[0]["side"] < 0 else "BUY") if live else
+                 "⏳ gap found, waiting for entry: " + ("SELL" if waiting[0]["side"] < 0 else "BUY") if waiting else
+                 "no gap waiting")
+        cap = (f"🔬 <b>{label(sym)} · M1 candles · M5 structure · gap setup</b>\n"
                f"M5: <b>{now5}</b>\n"
-               f"M1 micro: <b>{now1}</b>\n"
-               f"M5 phases: {chain(ph5)}\n"
-               f"M1 micro cycles: {chain(ph1)}\n"
-               f"<i>Light-blue boxes = the M5 structure (same as the M5 picture): a range is a flat box, a channel a "
-               f"slanted one, with its top and bottom price. Black lines inside = the M1 spikes, channels and ranges.</i>")
+               f"M5 phases: {chain5}\n"
+               f"Gap setup on these M1 candles: <b>{now1}</b>\n"
+               f"Now: {state}\n"
+               f"<i>Gap = candle 1 and candle 3 do not overlap and candle 2's body covers part of the space. "
+               f"Sell: enter 1 pipette above the previous candle's high; stop just beyond candle 1; target 1:1 "
+               f"(buy: the mirror).</i>")
         kb = types.InlineKeyboardMarkup(row_width=3)
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data=f"sxm:{sym}"),
                types.InlineKeyboardButton("⏱ Timeframe", callback_data=f"sxp:{sym}"),
