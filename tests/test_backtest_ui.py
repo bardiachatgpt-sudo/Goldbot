@@ -40,30 +40,20 @@ class TestBacktestFlow(unittest.TestCase):
         call = self.tg.bot.edit_message_text.call_args
         return call.kwargs.get("reply_markup")
 
-    def test_steps_suggest_pair_timeframe_and_period(self):
+    def test_only_the_range_backtest_is_offered(self):
         self.flow.start(7)
         kb = self.tg.bot.send_message.call_args.kwargs["reply_markup"]
-        if len(SYMBOLS) == 1:                                            # پیش‌فرض فقط طلا: مستقیم قاعده‌ها
-            self.assertEqual(buttons(kb)[0], ("📦 M5 · Range edges (buy the bottom / sell the top)", "btt:XAUUSD:5r"))
-        else:
-            self.assertEqual(buttons(kb)[0], ("🥇🇺🇸 XAUUSD · recommended", "btp:XAUUSD"))   # پیشنهاد: طلا
-            self.assertEqual(len(buttons(kb)), len(SYMBOLS))
+        self.assertEqual(buttons(kb), [("5 days ✅", "btd:XAUUSD:5r:5"), ("10 days", "btd:XAUUSD:5r:10")])
+        self.assertIn("Range rules", self.tg.bot.send_message.call_args.args[1])
+        with mock.patch.object(self.flow, "run") as run:
+            self.flow.on_callback(FakeCall("btd:XAUUSD:5-1:5"))              # دکمه‌ی قدیمی M5 → M1: هیچ
+            run.assert_not_called()
+            self.flow.on_callback(FakeCall("btd:XAUUSD:5r:10"))
+            run.assert_called_once_with(7, "XAUUSD", "5r", 10, mock.ANY)
         with mock.patch.dict(backtest_ui.SYMBOLS, {"EURUSD": ["FX:EURUSD"]}):   # چند جفت: اول انتخاب جفت
             self.flow.start(7)
             kb = self.tg.bot.send_message.call_args.kwargs["reply_markup"]
             self.assertEqual(buttons(kb)[0], ("🥇🇺🇸 XAUUSD · recommended", "btp:XAUUSD"))
-
-        self.flow.on_callback(FakeCall("btp:XAUUSD"))
-        tf = buttons(self.last_markup())
-        self.assertIn(("M5 → M1  ✅ recommended (your live setup)", "btt:XAUUSD:5-1"), tf)
-        self.assertIn(("H1 → M5", "btt:XAUUSD:60-5"), tf)
-        self.assertEqual(tf[-1], ("⬅️ Back", "bt"))
-
-        self.flow.on_callback(FakeCall("btt:XAUUSD:5-1"))
-        days = buttons(self.last_markup())
-        self.assertEqual([d for _, d in days[:-1]],
-                         ["btd:XAUUSD:5-1:1", "btd:XAUUSD:5-1:3", "btd:XAUUSD:5-1:5", "btd:XAUUSD:5-1:10"])
-        self.assertIn(("5 days ✅", "btd:XAUUSD:5-1:5"), days)
 
     def test_run_shows_waiting_then_results(self):
         m1 = candles(n=7600, vol=0.0005, freq="1min", seed=5)
@@ -73,17 +63,18 @@ class TestBacktestFlow(unittest.TestCase):
             for stage in ("fetch_trig", "fetch_ctx"):
                 progress(stage)
                 time.sleep(0.05)
-            return real(sym, days, m1=m1, m5=backtest.to_m5(m1), tf=tf, progress=progress)
+            m5 = backtest.to_m5(m1)
+            return real(sym, days, m1=m5, m5=m5, tf=tf, progress=progress)
 
         with mock.patch.object(backtest, "run_days", fake_run_days):
-            self.flow.on_callback(FakeCall("btd:XAUUSD:5-1:5"))
+            self.flow.on_callback(FakeCall("btd:XAUUSD:5r:5"))
             for _ in range(200):                        # در پس‌زمینه اجرا می‌شود
                 if 7 not in self.flow.running:
                     break
                 time.sleep(0.05)
         self.assertNotIn(7, self.flow.running)
         texts = [c.args[0] for c in self.tg.bot.edit_message_text.call_args_list]
-        self.assertTrue(any("⏳" in t and "Downloading trigger" in t for t in texts))     # پیام انتظار
+        self.assertTrue(any("⏳" in t and "Downloading M5" in t for t in texts))          # پیام انتظار
         self.assertTrue(any("Replaying" in t for t in texts))
         self.assertTrue(any("Backtest finished" in t for t in texts))
         photo = self.tg.bot.send_photo.call_args
@@ -94,7 +85,7 @@ class TestBacktestFlow(unittest.TestCase):
 
     def test_one_backtest_at_a_time(self):
         self.flow.running.add(7)
-        self.flow.run(7, "XAUUSD", "5-1", 5)
+        self.flow.run(7, "XAUUSD", "5r", 5)
         self.assertIn("already running", self.tg.bot.send_message.call_args.args[1])
 
     def test_pairs_menu_has_backtest_button(self):

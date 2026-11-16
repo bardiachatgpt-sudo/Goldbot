@@ -21,7 +21,7 @@ HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / cha
         "with levels and chart.\n"
         "⭐ Follow a pair to also get every cycle change for it.\n"
         "📐 Structure: the last 500 M5 candles with only the structure (spike / channel / range).\n"
-        "🧪 Backtest: tap the button (pair → timeframe → period) to replay recent days with the same rules "
+        "🧪 Backtest: the range rules on M5 (buy the bottom / sell the top) over recent days "
         "on a $1,000 account.\n\n"
         "/status XAUUSD · /structure XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest")
 BACKTEST_MAX_DAYS = 10
@@ -271,7 +271,7 @@ class Telegram:
                     bot.send_message(m.chat.id, f"Usage: /backtest  (step by step)  or  /backtest XAUUSD 5\n"
                                                 f"Pairs: {', '.join(SYMBOLS)} · days 1–{BACKTEST_MAX_DAYS}")
                     return
-            self.backtests.run(m.chat.id, sym, "5-1", days)
+            self.backtests.run(m.chat.id, sym, "5r", days)
 
         @bot.message_handler(commands=["structure", "sx"])
         def on_structure(m):

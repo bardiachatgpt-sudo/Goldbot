@@ -12,12 +12,12 @@ from . import backtest
 from .config import SYMBOLS, label
 
 RECOMMENDED_PAIR = "XAUUSD"
-RECOMMENDED_DAYS = {"5-1": 5, "15-3": 10, "60-5": 20, "5r": 5}
+RECOMMENDED_DAYS = {"5r": 5}
 STAGES = {
     "start": "Preparing…",
-    "fetch_trig": "Downloading trigger candles from TradingView…",
-    "fetch_ctx": "Downloading context candles from TradingView…",
-    "replay": "Replaying every candle with the live rules…",
+    "fetch_trig": "Downloading M5 candles from TradingView…",
+    "fetch_ctx": "Downloading M5 candles from TradingView…",
+    "replay": "Replaying every candle: range, entries, stops and targets…",
     "chart": "Drawing the account chart…",
 }
 BAR = ["▱▱▱▱", "▰▱▱▱", "▰▰▱▱", "▰▰▰▱", "▰▰▰▰"]
@@ -44,34 +44,28 @@ class BacktestFlow:
                  for s in SYMBOLS if s != RECOMMENDED_PAIR])
         return kb
 
-    def tf_markup(self, sym):
-        kb = types.InlineKeyboardMarkup(row_width=1)
-        keys = sorted(backtest.TF_PRESETS, key=lambda k: k != backtest.RANGE_TF)     # رنج اول
-        for key in keys:
-            name = backtest.TF_PRESETS[key][2]
-            txt = f"{name}  ✅ recommended (your live setup)" if key == backtest.LIVE_TF else name
-            kb.add(types.InlineKeyboardButton(txt, callback_data=f"btt:{sym}:{key}"))
-        kb.add(types.InlineKeyboardButton("⬅️ Back", callback_data="bt"))
-        return kb
-
-    def days_markup(self, sym, tf):
+    def days_markup(self, sym, tf=backtest.RANGE_TF):
         kb = types.InlineKeyboardMarkup(row_width=2)
         rec = RECOMMENDED_DAYS.get(tf)
         kb.add(*[types.InlineKeyboardButton(f"{d} day{'s' if d > 1 else ''}" + (" ✅" if d == rec else ""),
                                             callback_data=f"btd:{sym}:{tf}:{d}")
                  for d in backtest.TF_PRESETS[tf][3]])
-        kb.add(types.InlineKeyboardButton("⬅️ Back", callback_data=f"btp:{sym}"))
+        if len(SYMBOLS) > 1:
+            kb.add(types.InlineKeyboardButton("⬅️ Back", callback_data="bt"))
         return kb
 
+    def _days_text(self, sym):
+        return (f"🧪 <b>Backtest · {label(sym)}</b>\n"
+                "📦 Range rules on M5: price reaches the bottom of the range → buy, the top → sell; "
+                "stop ½ range, target the other edge.\n"
+                "Over which period? Counted in recent trading days (weekends have no candles).")
+
     def start(self, chat_id, message_id=None):
-        if len(SYMBOLS) == 1:                     # فقط طلا: مستقیم مرحله‌ی تایم‌فریم
+        """فقط بک‌تست قاعده‌ی رنج. یک جفت (طلا): مستقیم انتخاب بازه."""
+        if len(SYMBOLS) == 1:
             sym = next(iter(SYMBOLS))
-            text = (f"🧪 <b>Backtest · {label(sym)}</b>\n"
-                    "Which rules? 📦 Range edges = your pin bar at the top / bottom of the range (M5).\n"
-                    "The others are the live bot's context → trigger rules.")
-            return self._show(chat_id, message_id, text, self.tf_markup(sym))
-        text = ("🧪 <b>Backtest</b> · step 1/3\n"
-                "Which pair? Gold is recommended: it is the pair this bot is built around.")
+            return self._show(chat_id, message_id, self._days_text(sym), self.days_markup(sym))
+        text = "🧪 <b>Backtest</b> · range rules on M5\nWhich pair?"
         self._show(chat_id, message_id, text, self.pairs_markup())
 
     def on_callback(self, c):
@@ -84,24 +78,12 @@ class BacktestFlow:
         sym = parts[1] if len(parts) > 1 else None
         if sym not in SYMBOLS:
             return
-        if action == "btp":
-            text = (f"🧪 <b>Backtest · {label(sym)}</b> · step 2/3\n"
-                    "Which timeframe? Context (spike / channel / range) → trigger (entries).\n"
-                    "M5 → M1 is exactly what the live bot trades.")
-            return self._show(chat_id, mid, text, self.tf_markup(sym))
-        tf = parts[2] if len(parts) > 2 else None
-        if tf not in backtest.TF_PRESETS:
-            return
-        name = backtest.TF_PRESETS[tf][2]
-        if action == "btt":
-            text = (f"🧪 <b>Backtest · {label(sym)} · {name}</b> · step 3/3\n"
-                    "Over which period? Counted in recent trading days (weekends have no candles).")
-            return self._show(chat_id, mid, text, self.days_markup(sym, tf))
-        if action == "btd":
+        if action in ("btp", "btt"):                         # دکمه‌های قدیمی هم به انتخاب بازه می‌روند
+            return self._show(chat_id, mid, self._days_text(sym), self.days_markup(sym))
+        if action == "btd" and len(parts) > 3 and parts[2] == backtest.RANGE_TF:
             days = int(parts[3])
-            if days not in backtest.TF_PRESETS[tf][3]:
-                return
-            self.run(chat_id, sym, tf, days, mid)
+            if days in backtest.TF_PRESETS[backtest.RANGE_TF][3]:
+                self.run(chat_id, sym, backtest.RANGE_TF, days, mid)
 
     def _show(self, chat_id, message_id, text, markup):
         if message_id:

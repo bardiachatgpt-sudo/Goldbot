@@ -323,7 +323,8 @@ def equity_chart(res, balance=DEFAULT_BALANCE):
         for t, b in a["curve"]:
             ax.plot(t, b, "o", color=colors.get(rp, "#60A5FA"), markersize=4)
     ax.axhline(balance, color="#9CA3AF", linestyle=":", linewidth=1)
-    ax.set_title(f"{res['sym']} {res.get('tf_name', '')} backtest · {res['trades']} trades · {res['net_r']:+.2f}R",
+    tf_name = res.get("tf_name", "").encode("ascii", "ignore").decode().strip(" ·")       # بدون ایموجی (فونت ندارد)
+    ax.set_title(f"{res['sym']} {tf_name} backtest · {res['trades']} trades · {res['net_r']:+.2f}R",
                  color="#F3F4F6", fontsize=13, fontweight="bold")
     ax.set_ylabel("Account ($)", color="#9CA3AF")
     ax.tick_params(colors="#9CA3AF")
