@@ -49,6 +49,8 @@ STRATEGY_NAMES = {"pin": "Pin bar (M1)", "pin_wedge": "Pin bar + wedge confirmat
                   "brooks": "Brooks (M5 signal bar)",
                   "range3_touch": "Range edges: price reaches the bottom → buy, the top → sell; "
                                   "stop ½ range from entry, target the other edge",
+                  "range3_touch_trend": "Same, but only in the direction of the move before the range "
+                                        "(after a fall: sell the top only; after a rise: buy the bottom only)",
                   "range3_touch_edge": "Same, but stop ½ range beyond the range edge",
                   "range3": "Same, but only after a pin bar (enter on the next candle)",
                   "range3_edge": "Same, but stop ½ range beyond the range edge",
@@ -67,7 +69,8 @@ def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
         from . import range_trades
         return range_trades.run(sym, trig, start, "edge" if strategy.endswith("_edge") else "entry",
                                 "key" if strategy == "range3_key" else "none",
-                                "touch" if strategy.startswith("range3_touch") else "pin"), None
+                                "touch" if strategy.startswith("range3_touch") else "pin",
+                                with_trend=strategy.endswith("_trend")), None
     return run_brooks(sym, trig, ctx, start, ctx_min, trig_min)
 
 
@@ -224,7 +227,7 @@ def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, p
     res = summary(sym, events, start, end, balance)
     if compare:                                                         # قاعده‌های دیگر روی همان داده
         res["compare"] = []
-        for other in (("range3_touch_edge", "range3") if strategy.startswith("range3")
+        for other in (("range3_touch_trend", "range3_touch_edge", "range3") if strategy.startswith("range3")
                       else ("pin", "pin_wedge", "brooks")):
             if other == strategy:
                 continue
@@ -258,6 +261,10 @@ def report_text(res, balance=DEFAULT_BALANCE):
         wins = [e["r"] for e in res["closed"] if e["r"] > 0]
         if wins:
             lines.append(f"   🏆 Average win: +{sum(wins) / len(wins):.2f}R")
+        for side, name in ((1, "🟢 Buys at the bottom"), (-1, "🔴 Sells at the top")):
+            cs = [e for e in res["closed"] if e["side"] == side]
+            lines.append(f"   {name}: {len(cs)} trades, {sum(e['r'] > 0 for e in cs)} wins, "
+                         f"{sum(e['r'] for e in cs):+.2f}R")
     else:
         for mode, name in (("TREND", "📈 With the trend"), ("RANGE", "📦 Range"), ("SPIKE", "🚀 Spike pullback")):
             n, w, r = res["by_mode"][mode]
@@ -278,7 +285,8 @@ def report_text(res, balance=DEFAULT_BALANCE):
                      f"max drawdown {a['max_dd']:.1f}%")
     if res["closed"]:
         lines.append(LINE + "\n<b>Trades</b>")
-        for e in res["closed"][-15:]:
+        shown = 30 if str(res.get("strategy", "")).startswith("range3") else 15
+        for e in res["closed"][-shown:]:
             icon = "🏆" if e["r"] > 0 else "🛑"
             side = "BUY" if e["side"] > 0 else "SELL"
             mode = {"RANGE": "Range", "SPIKE": "Spike", "TREND": "Trend"}.get(e["mode"], e["mode"])
@@ -286,8 +294,8 @@ def report_text(res, balance=DEFAULT_BALANCE):
                 mode += f" {'H' if e['side'] > 0 else 'L'}{e['n_h']}"
             lines.append(f"{icon} {e['opened']:%d %b %H:%M} {mode} {side} {p(e['entry'])} → {p(e['exit'])} "
                          f"({e['r']:+.2f}R)")
-        if len(res["closed"]) > 15:
-            lines.append(f"<i>… {len(res['closed']) - 15} earlier trades not listed</i>")
+        if len(res["closed"]) > shown:
+            lines.append(f"<i>… {len(res['closed']) - shown} earlier trades not listed</i>")
     lines.append(LINE)
     if str(res.get("strategy", "")).startswith("range3"):
         lines.append("<i>The range is read at every candle from the last 500 closed M5 candles only (no look-ahead), "

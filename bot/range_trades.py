@@ -27,7 +27,8 @@ EDGE = 0.25             # سایه‌ی پین‌بار در ربع پایینی
 
 
 def range_at(close, t, window=WINDOW):
-    """رنجِ فاز آخر با کندل‌های تا t (شامل t): (سقف، کف، طول) یا None."""
+    """رنجِ فاز آخر با کندل‌های تا t (شامل t): (سقف، کف، طول، جهت حرکت قبل از رنج) یا None.
+    جهت قبل از رنج: +1 اگر فاز قبلی کانال/اسپایک صعودی بوده، -1 نزولی، 0 اگر نبوده."""
     a = max(0, t - window + 1)
     c = np.asarray(close[a:t + 1], float)
     if len(c) < 100:
@@ -39,10 +40,11 @@ def range_at(close, t, window=WINDOW):
     (_, _, x1, top, _), (_, _, _, bot, _) = lines(ph, c, piv)     # مقدار خط‌ها در آخرین کندل
     if top <= bot:
         return None
-    return float(top), float(bot), ph["end"] - ph["start"]
+    prev = phases[-2]["side"] if len(phases) >= 2 else 0
+    return float(top), float(bot), ph["end"] - ph["start"], int(prev)
 
 
-def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin"):
+def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin", with_trend=False):
     """رویدادها با همان قالب بقیه‌ی بک‌تست‌ها (TRADE_PENDING / OPEN / CLOSED / CANCELLED)."""
     from .strategy import analyze
     d = analyze(m5, cycle=False)["df"]
@@ -102,12 +104,16 @@ def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin"):
             rng = range_at(c, i - 1) if i > 0 else None
             if rng is None:
                 continue
-            top, bot, length = rng
-            hit = walk(candle_path(o[i], h[i], l[i], c[i]), {"BUY": (bot, -1), "SELL": (top, 1)})
+            top, bot, length, prev = rng
+            levels = {"BUY": (bot, -1), "SELL": (top, 1)}
+            if with_trend and prev:                    # بعد از ریزش فقط فروش در سقف، بعد از صعود فقط خرید در کف
+                levels.pop("BUY" if prev < 0 else "SELL")
+            hit = walk(candle_path(o[i], h[i], l[i], c[i]), levels)
             if not hit:
                 continue
             name, price, rest = hit
-            setup = {"side": 1 if name == "BUY" else -1, "range_high": top, "range_low": bot, "range_bars": length}
+            setup = {"side": 1 if name == "BUY" else -1, "range_high": top, "range_low": bot, "range_bars": length,
+                     "before": prev}
             events.append(ev("TRADE_PENDING", setup, i, price))
             e = open_trade(setup, i, price=price, at=i)
             events.append(e)
@@ -138,7 +144,9 @@ def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin"):
         rng = range_at(c, i)
         if rng is None:
             continue
-        top, bot, length = rng
+        top, bot, length, prev = rng
+        if with_trend and prev and s != prev:
+            continue
         zone = EDGE * (top - bot)
         if (s > 0 and l[i] <= bot + zone) or (s < 0 and h[i] >= top - zone):
             setup = {"side": int(s), "waited": 0, "range_high": top, "range_low": bot, "range_bars": length,
