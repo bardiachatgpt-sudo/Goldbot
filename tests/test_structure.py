@@ -251,15 +251,20 @@ class TestStructure3(unittest.TestCase):
 
 
 class TestGoldMenu(unittest.TestCase):
-    def test_start_shows_menu_and_version_and_structure_goes_to_gold(self):
+    def test_menu_and_structure_pairs_gold_majors_dow(self):
         st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
         tg = telegram_bot.Telegram(None, st)
         tg.bot = mock.MagicMock()
         menu = [b["text"] for row in tg.menu().keyboard for b in row]
         self.assertEqual(menu, ["🥇 Gold", "📐 Structure", "🧪 Backtest"])
-        with mock.patch.object(tg, "send_structure") as ss:
-            tg.ask_structure(7)
-        ss.assert_called_once_with(7, "XAUUSD")                         # فقط طلا: بدون انتخاب جفت
+        tg.ask_structure(7)
+        kb = tg.bot.send_message.call_args.kwargs["reply_markup"]
+        pairs = [b.callback_data for row in kb.keyboard for b in row]
+        self.assertEqual(pairs, ["sxp:XAUUSD", "sxp:EURUSD", "sxp:GBPUSD", "sxp:USDJPY", "sxp:USDCHF",
+                                 "sxp:USDCAD", "sxp:AUDUSD", "sxp:NZDUSD", "sxp:US30"])
+        self.assertNotIn("BTCUSD", " ".join(pairs))
+        tfs = [b.callback_data for row in tg.structure_tf_keyboard("US30").keyboard for b in row]
+        self.assertEqual(tfs, ["sxt:US30:1", "sxt:US30:5"])
 
 
 class TestPollingSurvivesConflict(unittest.TestCase):
@@ -274,6 +279,25 @@ class TestPollingSurvivesConflict(unittest.TestCase):
 
 
 class TestStructureButton(unittest.TestCase):
+    def test_one_minute_for_a_major(self):
+        st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
+        tg = telegram_bot.Telegram(None, st)
+        tg.bot = mock.MagicMock()
+        calls = []
+
+        def fake(sym, n, m, interval=None):
+            calls.append((sym, interval))
+            return fake_market(1234)
+
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake):
+            tg.send_structure(7, "EURUSD", "1")
+        self.assertEqual(calls, [("EURUSD", "1")])
+        photos = tg.bot.send_photo.call_args_list
+        self.assertEqual(len(photos), 2)
+        self.assertIn("M1 structure", photos[0].kwargs["caption"])
+        btns = [b.callback_data for row in photos[1].kwargs["reply_markup"].keyboard for b in row]
+        self.assertEqual(btns, ["sxt:EURUSD:1", "sxt:EURUSD:5", "sx"])  # بدون بک‌تست (فقط طلا M5)
+
     def test_button_sends_one_m5_picture(self):
         st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
         tg = telegram_bot.Telegram(None, st)
@@ -298,7 +322,7 @@ class TestStructureButton(unittest.TestCase):
         self.assertIn("last 500 candles", cap)
         self.assertIn("last two structures", photos[1].kwargs["caption"])
         btns = [b.callback_data for row in photos[1].kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxp:XAUUSD", "sx", "btd:XAUUSD:5r:5"])  # تازه کردن، جفت دیگر، بک‌تست رنج
+        self.assertEqual(btns, ["sxt:XAUUSD:5", "sxt:XAUUSD:1", "sx", "btd:XAUUSD:5r:5"])  # تازه، M1، جفت دیگر، بک‌تست
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
 

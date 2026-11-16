@@ -61,6 +61,7 @@ DEFAULT_SPREADS = {
     "EURUSD": 0.00012, "GBPUSD": 0.00015, "USDJPY": 0.015, "USDCHF": 0.00015,
     "USDCAD": 0.00018, "AUDUSD": 0.00014, "NZDUSD": 0.00018,
     "BTCUSD": 15.0,
+    "US30": 2.0,
 }
 
 
@@ -98,6 +99,7 @@ ALL_SYMBOLS = {
     "AUDUSD": _chain("AUDUSD"),
     "NZDUSD": _chain("NZDUSD"),
     "BTCUSD": ["BINANCE:BTCUSDT", "COINBASE:BTCUSD"],
+    "US30": ["OANDA:US30USD", "FOREXCOM:DJI", "CAPITALCOM:US30", "TVC:DJI"],     # داوجونز (CFD تقریباً ۲۳ ساعته)
 }
 
 # نمادهایی که ربات اسکن می‌کند و در دکمه‌ها نشان می‌دهد. پیش‌فرض: فقط طلا.
@@ -106,6 +108,10 @@ _PAIRS = os.environ.get("PAIRS", "XAUUSD").strip().upper()
 SYMBOLS = dict(ALL_SYMBOLS) if _PAIRS == "ALL" else \
     {s: ALL_SYMBOLS[s] for s in (p.strip() for p in _PAIRS.split(",")) if s in ALL_SYMBOLS} or \
     {"XAUUSD": ALL_SYMBOLS["XAUUSD"]}
+
+# نمادهای دکمه‌ی 📐 Structure (فقط عکس ساختار، بدون هشدار): طلا، ماژورها و داوجونز
+_SX = os.environ.get("STRUCTURE_PAIRS", "XAUUSD,EURUSD,GBPUSD,USDJPY,USDCHF,USDCAD,AUDUSD,NZDUSD,US30")
+STRUCTURE_SYMBOLS = [s for s in (p.strip().upper() for p in _SX.split(",")) if s in ALL_SYMBOLS] or ["XAUUSD"]
 
 FLAGS = {
     "XAUUSD": "🥇🇺🇸",
@@ -117,12 +123,14 @@ FLAGS = {
     "AUDUSD": "🇦🇺🇺🇸",
     "NZDUSD": "🇳🇿🇺🇸",
     "BTCUSD": "₿🇺🇸",
+    "US30": "🇺🇸📊",
 }
 
 # تعداد رقم اعشار قیمت؛ نمادهای ذکرنشده: ین 3 رقم، بقیه 5 رقم
 DECIMALS = {
     "BTCUSD": 0,
     "XAUUSD": 2,
+    "US30": 1,
 }
 
 # سشن‌ها: ساعت محلی هر بازار (تقریبی؛ تغییر ساعت تابستانی خودکار اعمال می‌شود)
