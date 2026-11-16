@@ -1,4 +1,5 @@
-"""M1 با ساختار M5: کندل‌های یک دقیقه، ساختار بزرگ M5 (جعبه و خط پررنگ) و چرخه‌های کوچک M1 (خط نازک و نوار پایین).
+"""M1 با ساختار M5 روی زمینه‌ی سفید: کندل‌های یک دقیقه، ساختار M5 (آبی کم‌رنگ، با برچسب M5 کنار هر جعبه و خط)
+و چرخه‌های کوچک M1 (خط‌های رنگی نازک و نوار پایین؛ هر حالت یک رنگ).
 
 - ساختار M5 دقیقاً همان دکمه‌ی M5 است (۵۰۰ کندل M5، bot/structure3.py)؛ فقط با زمان روی M1 نشانده می‌شود.
   خط‌های فاز آخر M5 تا آخرین کندل M1 ادامه دارند (کندل M5 در حال تشکیل هنوز در ساختار نیست).
@@ -14,11 +15,12 @@ from .structure3 import NAMES, lines, now_text, segment
 
 MIN_M1, MAX_M1 = 300, 1200
 
-# رنگ‌ها: M5 پررنگ و درشت، M1 همان خانواده‌ی رنگ ولی روشن‌تر و نازک
-MACRO = {"RANGE": "#3B82F6", "SPIKE": "#F59E0B", 1: "#10B981", -1: "#EF4444"}
-MICRO = {"RANGE": "#93C5FD", "SPIKE": "#FCD34D", 1: "#6EE7B7", -1: "#FCA5A5"}
-BG, PANEL, GRID, TEXT, MUTED = "#0F1115", "#151821", "#232734", "#E5E7EB", "#8B93A7"
-UP, DOWN = "#2BB3A3", "#E0606E"         # کندل‌ها کمی آرام‌تر تا ساختار دیده شود
+# رنگ‌ها روی زمینه‌ی سفید: همه‌ی ساختار M5 آبی کم‌رنگ (با برچسب «M5» کنار هر جعبه و خط)،
+# چرخه‌های M1 با رنگ‌های جدا برای هر حالت، کندل‌ها خاکستری تا رنگ‌ها فقط مال ساختار باشند
+M5_FILL, M5_EDGE, M5_LINE, M5_TEXT = "#E8F2FD", "#A9CDF3", "#6FB1EE", "#2F7FC8"
+MICRO = {"RANGE": "#8B5CF6", "SPIKE": "#EA580C", 1: "#16A34A", -1: "#DC2626"}
+BG, PANEL, GRID, TEXT, MUTED = "#FFFFFF", "#FFFFFF", "#EEF0F4", "#111827", "#6B7280"
+UP, DOWN = "#A3A9B4", "#3F4652"         # کندل صعودی خاکستری روشن، نزولی خاکستری تیره
 
 
 def _color(table, ph):
@@ -83,16 +85,24 @@ def render(sym, m5, m1):
         if not on.any():
             continue
         xa, xb = int(np.argmax(on)), int(len(on) - 1 - np.argmax(on[::-1]))
-        cc = _color(MACRO, ph)
+        if xb - xa < 5:                              # فقط لبه‌ای از فاز پیداست: نکش
+            continue
         top = max(h5[a:b + 1].max(), h[xa:xb + 1].max())
         bot = min(l5[a:b + 1].min(), l[xa:xb + 1].min())
         ax.add_patch(patches.FancyBboxPatch((xa - 0.5, bot - pad * 0.6), xb - xa + 1, top - bot + pad * 1.2,
-                                            boxstyle="round,pad=0,rounding_size=2", facecolor=cc, alpha=0.07,
-                                            edgecolor=cc, lw=1.4, zorder=1))
+                                            boxstyle="round,pad=0,rounding_size=2", facecolor=M5_FILL, alpha=0.75,
+                                            edgecolor=M5_EDGE, lw=1.4, zorder=1))
         if xb - xa >= 25:
-            ax.text(xa + 2, top + pad * 0.9, f"M5 · {NAMES[(ph['type'], ph['side'])]}", color=cc, fontsize=12,
+            ax.text(xa + 2, top + pad * 0.9, f"M5 · {NAMES[(ph['type'], ph['side'])]}", color=M5_TEXT, fontsize=12,
                     fontweight="bold", va="bottom", zorder=7)
-        for x0, y0, x1, y1, role in lines(ph, c5, piv5):
+        ls5 = lines(ph, c5, piv5)
+        if ph["type"] == "RANGE":
+            roles = ["M5 range top", "M5 range bottom"]
+        elif ph["type"] == "CHANNEL":
+            roles = ["M5 trend line", "M5 parallel line"]
+        else:
+            roles = []
+        for (x0, y0, x1, y1, role), name in zip(ls5, roles):
             if k == last5:                           # خط‌های فاز آخر تا حال ادامه دارند
                 x1n = max(x1, p5[-1] + 1)
                 y1 = y0 + (y1 - y0) * (x1n - x0) / (x1 - x0) if x1 != x0 else y1
@@ -102,22 +112,27 @@ def render(sym, m5, m1):
                 continue
             xs = np.where(seg)[0]
             ys = y0 + (y1 - y0) * (p5[xs] - x0) / (x1 - x0)
-            ax.plot(xs, ys, color=cc, lw=2.8 if role != "parallel" else 2.0,
+            ax.plot(xs, ys, color=M5_LINE, lw=3.0 if role != "parallel" else 2.2,
                     ls="-" if role != "parallel" else (0, (6, 3)), alpha=0.95, zorder=5, solid_capstyle="round")
+            if len(xs) >= 25:                        # «M5 …» جلوی همان خط
+                above = name != "M5 range bottom"
+                ax.text(xs[-1], ys[-1] + (pad * 0.5 if above else -pad * 0.5), name, color=M5_TEXT, fontsize=9,
+                        fontweight="bold", ha="right", va="bottom" if above else "top", zorder=8,
+                        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.8))
 
     # ---- M1: خط‌های چرخه‌های کوچک (نازک) و نوار رنگی پایین
     for ph in ph1:
         cc = _color(MICRO, ph)
         a, b = ph["start"], ph["end"]
         for x0, y0, x1, y1, role in lines(ph, c, piv1):
-            ax.plot([x0, x1], [y0, y1], color=cc, lw=1.2, ls=(0, (2, 2)) if role == "parallel" else "-",
-                    alpha=0.75, zorder=4)
-        ax.add_patch(patches.Rectangle((a - 0.5, ybot), b - a + 1, ribbon_h, facecolor=cc, alpha=0.85,
+            ax.plot([x0, x1], [y0, y1], color=cc, lw=1.5, ls=(0, (2, 2)) if role == "parallel" else "-",
+                    alpha=0.9, zorder=4)
+        ax.add_patch(patches.Rectangle((a - 0.5, ybot), b - a + 1, ribbon_h, facecolor=cc, alpha=0.9,
                                        edgecolor=PANEL, lw=1.5, zorder=2))
         if b - a >= 18:
             short = {"TRADING RANGE": "range", "BULL CHANNEL": "bull ch.", "BEAR CHANNEL": "bear ch."}
             name = NAMES[(ph["type"], ph["side"])]
-            ax.text((a + b) / 2, ybot + ribbon_h / 2, short.get(name, name.lower()), color=BG, fontsize=8,
+            ax.text((a + b) / 2, ybot + ribbon_h / 2, "M1 " + short.get(name, name.lower()), color="white", fontsize=8,
                     fontweight="bold", ha="center", va="center", zorder=3)
     ax.text(0, ybot + ribbon_h * 1.25, "M1 micro cycles", color=MUTED, fontsize=9, va="bottom")
 
@@ -152,9 +167,12 @@ def render(sym, m5, m1):
                  color=TEXT, fontsize=13, fontweight="bold", loc="left", pad=12)
     # راهنما بالای نمودار، سمت راست (روی نمودار چیزی را نمی‌پوشاند)
     from matplotlib.lines import Line2D
-    handles = [Line2D([0], [0], color=MACRO["RANGE"], lw=3.2, label="M5 structure · boxes + thick lines"),
-               Line2D([0], [0], color=MICRO["RANGE"], lw=1.3, label="M1 micro cycles · thin lines + ribbon")]
-    leg = ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.0, 1.005), ncol=2, frameon=False,
+    handles = [Line2D([0], [0], color=M5_LINE, lw=3.2, label="M5 structure"),
+               Line2D([0], [0], color=MICRO["RANGE"], lw=1.6, label="M1 range"),
+               Line2D([0], [0], color=MICRO[1], lw=1.6, label="M1 bull channel"),
+               Line2D([0], [0], color=MICRO[-1], lw=1.6, label="M1 bear channel"),
+               Line2D([0], [0], color=MICRO["SPIKE"], lw=1.6, label="M1 spike")]
+    leg = ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.0, 1.005), ncol=5, frameon=False,
                     fontsize=10, handlelength=2.6)
     for t in leg.get_texts():
         t.set_color(MUTED)
