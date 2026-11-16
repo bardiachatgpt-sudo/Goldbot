@@ -140,7 +140,7 @@ class TestStructureBot(unittest.TestCase):
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
-        self.assertEqual(tfs, [f"sxt:US30:{tf}" for tf in config.TIMEFRAMES] + ["sxm:US30", "sxb:US30"])
+        self.assertEqual(tfs, [f"sxt:US30:{tf}" for tf in config.TIMEFRAMES] + ["sxm:US30", "sxbp:US30"])
         self.assertEqual(list(config.TIMEFRAMES.values()), ["M1", "M5", "M15", "M30", "H1", "H4", "D1"])
 
     def test_sends_500_candles_and_zoom_on_chosen_timeframe(self):
@@ -227,7 +227,7 @@ class TestM1WithM5Structure(unittest.TestCase):
         self.assertEqual(call.args[1][:4], b"\x89PNG")
         self.assertIn("gap setup", call.kwargs["caption"])
         btns = [b.callback_data for row in call.kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxm:XAUUSD", "sxp:XAUUSD", "sx", "sxb:XAUUSD"])
+        self.assertEqual(btns, ["sxm:XAUUSD", "sxp:XAUUSD", "sx", "sxbp:XAUUSD"])
 
 
 def candles(rows):
@@ -316,6 +316,36 @@ class TestGapBacktest(unittest.TestCase):
         self.assertEqual(calls, [("XAUUSD", 5001, "1")])
         self.assertEqual(tg.bot.send_photo.call_args.args[1][:4], b"\x89PNG")       # نمودار موجودی
         self.assertIn("GAP BACKTEST", tg.bot.send_message.call_args.args[1])
+
+
+class TestGapBacktestTimeframesAndPairs(unittest.TestCase):
+    def test_menu_asks_pair_then_m1_m5_m15(self):
+        tg = make_bot()
+        tg.ask_backtest(7)
+        pairs = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
+        self.assertEqual(pairs, [f"sxbp:{s}" for s in config.STRUCTURE_SYMBOLS])
+        tg.ask_backtest(7, "EURUSD")
+        tfs = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
+        self.assertEqual(tfs, ["sxb:EURUSD:1", "sxb:EURUSD:5", "sxb:EURUSD:15"])
+
+    def test_m15_on_a_major(self):
+        tg = make_bot()
+        calls = []
+        df = gappy_m1().copy()
+        df.index = pd.date_range("2026-10-01", periods=len(df), freq="15min", tz="UTC")
+
+        def fake(sym, n, m, interval=None, timeout=20):
+            calls.append((sym, interval))
+            return df
+
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake):
+            tg.send_gap_backtest(7, "EURUSD", "15")
+        self.assertEqual(calls, [("EURUSD", "15")])
+        txt = tg.bot.send_message.call_args.args[1]
+        self.assertIn("GAP BACKTEST", txt)
+        self.assertIn("EURUSD · M15", txt)
+        btns = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
+        self.assertEqual(btns, ["sxb:EURUSD:15", "sxbp:EURUSD", "sxbp"])
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""بک‌تست ستاپ گپ روی M1: همان قاعده‌ی bot/gap.py روی همه‌ی کندل‌های M1 که TradingView می‌دهد.
+"""بک‌تست ستاپ گپ روی M1، M5 یا M15: همان قاعده‌ی bot/gap.py روی همه‌ی کندل‌هایی که TradingView می‌دهد.
 
 حساب ۱۰۰۰ دلاری، ریسک ثابت درصدی از موجودی فعلی (مرکب) برای ۱٪ و ۲٪. بدون اسپرد و کمیسیون.
 داخل هر کندل ترتیب قیمت از شکل کندل است (صعودی: باز ← کف ← سقف ← بسته)، پس نتیجه‌ی واقعی کمی فرق می‌کند.
@@ -12,7 +12,8 @@ from .gap import RR, trades
 
 BALANCE = 1000.0
 RISKS = (1.0, 2.0)
-M1_BARS = 5000          # حداکثر کندل M1 که از TradingView گرفته می‌شود (حدود ۳ تا ۴ روز معاملاتی)
+M1_BARS = 5000          # حداکثر کندل که از TradingView گرفته می‌شود (M1 ≈ ۴–۶ روز، M5 ≈ ۳ هفته، M15 ≈ ۲ ماه)
+BT_TIMEFRAMES = {"1": "M1", "5": "M5", "15": "M15"}
 
 
 def account(closed, risk_pct, balance=BALANCE):
@@ -26,8 +27,9 @@ def account(closed, risk_pct, balance=BALANCE):
     return bal, max_dd, curve
 
 
-def run(sym, m1):
-    """m1: کندل‌های M1 (Open/High/Low/Close، زمان = شروع کندل). خروجی: dict نتیجه."""
+def run(sym, m1, tf="1"):
+    """m1: کندل‌های تایم‌فریم tf (Open/High/Low/Close، زمان = شروع کندل). خروجی: dict نتیجه."""
+    step = pd.Timedelta(minutes=int(tf))
     o, h, l, c = (m1[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     idx = m1.index
     all_t = trades(o, h, l, c, sym)
@@ -35,10 +37,10 @@ def run(sym, m1):
         if t.get("entry_i") is not None:
             t["entry_time"] = idx[t["entry_i"]]
         if t.get("exit_i") is not None:
-            t["exit_time"] = idx[t["exit_i"]] + pd.Timedelta(minutes=1)
+            t["exit_time"] = idx[t["exit_i"]] + step
     closed = [t for t in all_t if t.get("exit_i") is not None]
     wins = [t for t in closed if t["r"] > 0]
-    res = {"sym": sym, "start": idx[0], "end": idx[-1] + pd.Timedelta(minutes=1), "bars": len(m1),
+    res = {"sym": sym, "tf": BT_TIMEFRAMES.get(tf, tf), "start": idx[0], "end": idx[-1] + step, "bars": len(m1),
            "closed": closed, "trades": len(closed), "wins": len(wins), "losses": len(closed) - len(wins),
            "net_r": sum(t["r"] for t in closed),
            "open": [t for t in all_t if t.get("entry_i") is not None and t.get("exit_i") is None],
@@ -59,8 +61,9 @@ def report_text(res, decimals=2, shown=25):
     p = lambda x: f"{x:.{decimals}f}"
     tz = lambda ts: ts.tz_convert(TEHRAN)
     wr = res["wins"] / res["trades"] * 100 if res["trades"] else 0
-    lines = [f"🧪 <b>GAP BACKTEST · {label(sym)} · M1</b>",
-             f"{tz(res['start']):%d %b %H:%M} → {tz(res['end']):%d %b %H:%M} Tehran · {res['bars']} M1 candles "
+    tfn = res.get("tf", "M1")
+    lines = [f"🧪 <b>GAP BACKTEST · {label(sym)} · {tfn}</b>",
+             f"{tz(res['start']):%d %b %H:%M} → {tz(res['end']):%d %b %H:%M} Tehran · {res['bars']} {tfn} candles "
              f"({res['days']} days)",
              "📐 Gap on 3 candles → enter 1 pipette beyond the previous candle → stop behind candle 1 → target 1:1",
              "━━━━━━━━━━━━━━━━",
@@ -88,7 +91,7 @@ def report_text(res, decimals=2, shown=25):
         if len(res["closed"]) > shown:
             lines.append(f"<i>… {len(res['closed']) - shown} earlier trades not listed</i>")
     lines.append("━━━━━━━━━━━━━━━━")
-    lines.append("<i>No spread, commission or slippage. Inside each M1 candle the order of prices comes from the "
+    lines.append(f"<i>No spread, commission or slippage. Inside each {tfn} candle the order of prices comes from the "
                  "candle shape, so live results can differ. Past results do not predict the future.</i>")
     return "\n".join(lines)
 
@@ -106,7 +109,7 @@ def equity_chart(res):
         ax.step(xs, ys, where="post", color=colors.get(rp, "#111111"), lw=2,
                 label=f"Risk {rp:g}% → ${a['final']:,.2f}")
     ax.axhline(BALANCE, color="#9CA3AF", ls=":", lw=1)
-    ax.set_title(f"{res['sym']} M1 gap setup · {res['trades']} trades · {res['net_r']:+.0f}R",
+    ax.set_title(f"{res['sym']} {res.get('tf', 'M1')} gap setup · {res['trades']} trades · {res['net_r']:+.0f}R",
                  fontsize=13, fontweight="bold", color="#111827")
     ax.set_ylabel("Account ($)", color="#6B7280")
     ax.grid(True, color="#EEF0F4")
