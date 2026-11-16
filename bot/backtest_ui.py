@@ -46,7 +46,9 @@ class BacktestFlow:
 
     def tf_markup(self, sym):
         kb = types.InlineKeyboardMarkup(row_width=1)
-        for key, (_, _, name, _) in backtest.TF_PRESETS.items():
+        keys = sorted(backtest.TF_PRESETS, key=lambda k: k != backtest.RANGE_TF)     # رنج اول
+        for key in keys:
+            name = backtest.TF_PRESETS[key][2]
             txt = f"{name}  ✅ recommended (your live setup)" if key == backtest.LIVE_TF else name
             kb.add(types.InlineKeyboardButton(txt, callback_data=f"btt:{sym}:{key}"))
         kb.add(types.InlineKeyboardButton("⬅️ Back", callback_data="bt"))
@@ -62,6 +64,12 @@ class BacktestFlow:
         return kb
 
     def start(self, chat_id, message_id=None):
+        if len(SYMBOLS) == 1:                     # فقط طلا: مستقیم مرحله‌ی تایم‌فریم
+            sym = next(iter(SYMBOLS))
+            text = (f"🧪 <b>Backtest · {label(sym)}</b>\n"
+                    "Which rules? 📦 Range edges = your pin bar at the top / bottom of the range (M5).\n"
+                    "The others are the live bot's context → trigger rules.")
+            return self._show(chat_id, message_id, text, self.tf_markup(sym))
         text = ("🧪 <b>Backtest</b> · step 1/3\n"
                 "Which pair? Gold is recommended: it is the pair this bot is built around.")
         self._show(chat_id, message_id, text, self.pairs_markup())

@@ -9,7 +9,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bot.config import SYMBOLS  # noqa: E402
-from bot import backtest  # noqa: E402
+from bot import backtest, backtest_ui  # noqa: E402
 from bot.storage import JsonState  # noqa: E402
 from bot.telegram_bot import Telegram  # noqa: E402
 from tests.synthetic import candles  # noqa: E402
@@ -43,8 +43,15 @@ class TestBacktestFlow(unittest.TestCase):
     def test_steps_suggest_pair_timeframe_and_period(self):
         self.flow.start(7)
         kb = self.tg.bot.send_message.call_args.kwargs["reply_markup"]
-        self.assertEqual(buttons(kb)[0], ("🥇🇺🇸 XAUUSD · recommended", "btp:XAUUSD"))   # پیشنهاد: طلا
-        self.assertEqual(len(buttons(kb)), len(SYMBOLS))                 # پیش‌فرض: فقط طلا
+        if len(SYMBOLS) == 1:                                            # پیش‌فرض فقط طلا: مستقیم قاعده‌ها
+            self.assertEqual(buttons(kb)[0], ("📦 M5 · Range edges (pin bar at top / bottom)", "btt:XAUUSD:5r"))
+        else:
+            self.assertEqual(buttons(kb)[0], ("🥇🇺🇸 XAUUSD · recommended", "btp:XAUUSD"))   # پیشنهاد: طلا
+            self.assertEqual(len(buttons(kb)), len(SYMBOLS))
+        with mock.patch.dict(backtest_ui.SYMBOLS, {"EURUSD": ["FX:EURUSD"]}):   # چند جفت: اول انتخاب جفت
+            self.flow.start(7)
+            kb = self.tg.bot.send_message.call_args.kwargs["reply_markup"]
+            self.assertEqual(buttons(kb)[0], ("🥇🇺🇸 XAUUSD · recommended", "btp:XAUUSD"))
 
         self.flow.on_callback(FakeCall("btp:XAUUSD"))
         tf = buttons(self.last_markup())

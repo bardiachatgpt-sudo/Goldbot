@@ -250,6 +250,18 @@ class TestStructure3(unittest.TestCase):
         self.assertTrue(ph and now)
 
 
+class TestGoldMenu(unittest.TestCase):
+    def test_start_shows_menu_and_version_and_structure_goes_to_gold(self):
+        st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
+        tg = telegram_bot.Telegram(None, st)
+        tg.bot = mock.MagicMock()
+        menu = [b["text"] for row in tg.menu().keyboard for b in row]
+        self.assertEqual(menu, ["🥇 Gold", "📐 Structure", "🧪 Backtest"])
+        with mock.patch.object(tg, "send_structure") as ss:
+            tg.ask_structure(7)
+        ss.assert_called_once_with(7, "XAUUSD")                         # فقط طلا: بدون انتخاب جفت
+
+
 class TestStructureButton(unittest.TestCase):
     def test_button_sends_one_m5_picture(self):
         st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))

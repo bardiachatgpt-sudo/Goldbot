@@ -25,6 +25,8 @@ HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / cha
         "on a $1,000 account.\n\n"
         "/status XAUUSD · /structure XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest")
 BACKTEST_MAX_DAYS = 10
+VERSION = "16 Nov · gold only · structure v3 (2 pictures) · range backtest"
+MENU_STATUS, MENU_STRUCTURE, MENU_BACKTEST = "🥇 Gold", "📐 Structure", "🧪 Backtest"
 STRUCTURE_BARS = 500
 
 
@@ -102,6 +104,20 @@ class Telegram:
                types.InlineKeyboardButton("📋 All pairs", callback_data="home"))
         kb.row(types.InlineKeyboardButton("📐 Structure", callback_data="sxp:" + sym))
         return kb
+
+    def menu(self):
+        """دکمه‌های ثابت پایین چت."""
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
+        kb.add(types.KeyboardButton(MENU_STATUS), types.KeyboardButton(MENU_STRUCTURE),
+               types.KeyboardButton(MENU_BACKTEST))
+        return kb
+
+    def ask_structure(self, chat_id):
+        """فقط یک جفت (طلا): مستقیم عکس‌ها؛ وگرنه انتخاب جفت."""
+        if len(SYMBOLS) == 1:
+            self.send_structure(chat_id, next(iter(SYMBOLS)))
+        else:
+            self.bot.send_message(chat_id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
 
     # ------------------------------------------------------------ ساختار (فقط نمایش)
     def structure_pairs(self):
@@ -197,10 +213,23 @@ class Telegram:
         @bot.message_handler(commands=["start", "help"])
         def on_start(m):
             self.state.add_user(m.chat.id)
+            pairs = "gold" if list(SYMBOLS) == ["XAUUSD"] else "all pairs"
             bot.send_message(m.chat.id,
-                             f"✅ Registered. You will receive Al Brooks {tf_label()} alerts for all pairs "
-                             f"({', '.join(sorted(ALERT_SETUPS))}).\n\n{HELP}",
-                             reply_markup=self.pairs_keyboard(m.chat.id))
+                             f"✅ Registered. You will receive Al Brooks {tf_label()} alerts for {pairs} "
+                             f"({', '.join(sorted(ALERT_SETUPS))}).\n\n{HELP}\n\n🆕 Version: {VERSION}",
+                             reply_markup=self.menu())
+            bot.send_message(m.chat.id, "👇", reply_markup=self.pairs_keyboard(m.chat.id))
+
+        @bot.message_handler(func=lambda m: (m.text or "").strip() in (MENU_STATUS, MENU_STRUCTURE, MENU_BACKTEST))
+        def on_menu(m):
+            self.state.add_user(m.chat.id)
+            txt = m.text.strip()
+            if txt == MENU_STRUCTURE:
+                self.ask_structure(m.chat.id)
+            elif txt == MENU_BACKTEST:
+                self.backtests.start(m.chat.id)
+            else:
+                self.send_status(m.chat.id, next(iter(SYMBOLS)))
 
         @bot.message_handler(commands=["status", "analyze", "pa"])
         def on_status(m):
@@ -250,7 +279,7 @@ class Telegram:
             if sym is False:
                 return
             if sym is None:
-                bot.send_message(m.chat.id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
+                self.ask_structure(m.chat.id)
                 return
             self.send_structure(m.chat.id, sym)
 
@@ -266,9 +295,9 @@ class Telegram:
             if action in ("bt", "btp", "btt", "btd"):          # بک‌تست مرحله‌به‌مرحله
                 self.backtests.on_callback(c)
                 return
-            if action == "sx":                                  # ساختار: انتخاب جفت
+            if action == "sx":                                  # ساختار: انتخاب جفت (یا مستقیم طلا)
                 bot.answer_callback_query(c.id)
-                bot.send_message(chat_id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
+                self.ask_structure(chat_id)
                 return
             if action in ("sxp", "sxt"):                        # ساختار M5 (sxt: دکمه‌های قدیمی)
                 sym = sym.partition(":")[0]
@@ -309,4 +338,12 @@ class Telegram:
             self.bot.remove_webhook()
         except Exception as e:
             print("remove_webhook error:", e)
+        try:                                     # منوی دستورها در تلگرام
+            self.bot.set_my_commands([
+                types.BotCommand("start", "Menu and buttons"),
+                types.BotCommand("structure", "📐 Gold M5 structure"),
+                types.BotCommand("backtest", "🧪 Backtest"),
+                types.BotCommand("status", "🥇 Gold status")])
+        except Exception as e:
+            print("set_my_commands error:", e)
         self.bot.infinity_polling(skip_pending=True)
