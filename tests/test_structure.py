@@ -10,7 +10,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from bot import structure, telegram_bot  # noqa: E402
+from bot import structure, structure3, telegram_bot  # noqa: E402
 from bot.storage import JsonState  # noqa: E402
 
 
@@ -159,8 +159,75 @@ class TestStructureV2(unittest.TestCase):
         self.assertIn(("CHANNEL", 1), [(p["type"], p["side"]) for p in phases])
 
 
+class TestStructure3(unittest.TestCase):
+    """نسخه‌ی ۳: قاعده‌هایی که از خط‌های کاربر روی ۶ نمودار M5 درآمد."""
+
+    @staticmethod
+    def walk(parts, seed=1, noise=0.02):
+        rng = np.random.default_rng(seed)
+        c = np.concatenate([np.linspace(a, b, n) for a, b, n in parts])
+        return c + rng.normal(0, noise, len(c))
+
+    def test_phases_cover_the_chart(self):
+        c = fake_market(57730)["Close"].values
+        ph, _ = structure3.segment(c)
+        self.assertEqual(ph[0]["start"], 0)
+        self.assertEqual(ph[-1]["end"], len(c) - 1)
+        for x, y in zip(ph, ph[1:]):
+            self.assertEqual(x["end"], y["start"])
+            self.assertFalse(x["type"] == y["type"] == "RANGE")
+
+    def test_v_that_comes_back_is_one_range(self):
+        # رنج، ریزش تند تا پایین، برگشت کامل، رنج (مثل USDCAD): یک رنج
+        parts = []
+        for k in range(6):
+            parts.append((10, 11, 15)); parts.append((11, 10, 15))
+        parts += [(10, 4, 6), (4, 10.5, 12)]
+        for k in range(6):
+            parts.append((10.5, 9.8, 15)); parts.append((9.8, 10.5, 15))
+        ph, _ = structure3.segment(self.walk(parts))
+        self.assertEqual([p["type"] for p in ph], ["RANGE"])
+
+    def test_held_breakout_is_spike_then_new_range(self):
+        # رنج، اسپایک پایین که برنمی‌گردد، رنج پایین‌تر (پله‌ای، مثل AUDUSD)
+        parts = []
+        for k in range(5):
+            parts.append((10, 11, 15)); parts.append((11, 10, 15))
+        parts.append((10, 5, 5))
+        for k in range(5):
+            parts.append((5, 6, 15)); parts.append((6, 5, 15))
+        ph, _ = structure3.segment(self.walk(parts))
+        self.assertEqual([(p["type"], p["side"]) for p in ph], [("RANGE", 0), ("SPIKE", -1), ("RANGE", 0)])
+
+    def test_lower_highs_and_lows_is_bear_channel(self):
+        parts = []
+        top = 20.0
+        for k in range(6):
+            parts.append((top, top - 3, 20)); parts.append((top - 3, top - 1.5, 20)); top -= 1.5
+        ph, _ = structure3.segment(self.walk(parts))
+        self.assertIn(("CHANNEL", -1), [(p["type"], p["side"]) for p in ph])
+        self.assertGreater(sum(p["end"] - p["start"] for p in ph if p["type"] == "CHANNEL"), 150)
+
+    def test_triangle_range_lines(self):
+        parts = []
+        hi, lo = 12.0, 8.0
+        for k in range(6):
+            parts.append((lo, hi, 15)); parts.append((hi, lo, 15)); hi -= 0.3; lo += 0.3
+        c = self.walk(parts, noise=0.01)
+        ph, piv = structure3.segment(c)
+        self.assertEqual([p["type"] for p in ph], ["RANGE"])
+        (_, t0, _, t1, _), (_, b0, _, b1, _) = structure3.lines(ph[0], c, piv)
+        self.assertLess(t1, t0)                                         # سقف پایین می‌آید
+        self.assertGreater(b1, b0)                                      # کف بالا می‌رود
+
+    def test_render_png(self):
+        png, ph, now = structure3.render("XAUUSD", fake_market(57730))
+        self.assertEqual(png[:4], b"\x89PNG")
+        self.assertTrue(ph and now)
+
+
 class TestStructureButton(unittest.TestCase):
-    def test_button_sends_last_500_candles_with_caption(self):
+    def test_button_sends_one_m5_picture(self):
         st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
         tg = telegram_bot.Telegram(None, st)
         tg.bot = mock.MagicMock()
@@ -174,39 +241,17 @@ class TestStructureButton(unittest.TestCase):
 
         with mock.patch.object(telegram_bot, "get_closed_candles", fake):
             tg.send_structure(7, "XAUUSD")
-        self.assertEqual(calls, [("XAUUSD", 501, "5")])            # پیش‌فرض: M5
+        self.assertEqual(calls, [("XAUUSD", 501, "5")])                # فقط M5
         photos = tg.bot.send_photo.call_args_list
-        self.assertEqual(len(photos), 3)                                 # 1️⃣ فعلی، 2️⃣ بیشترین برخورد، 3️⃣ خالی
-        for call in photos:
-            self.assertEqual(call.args[1][:4], b"\x89PNG")
-        self.assertIn("1️⃣", photos[0].kwargs["caption"])
-        self.assertIn("last 500 candles", photos[0].kwargs["caption"])
-        self.assertIn("most touches", photos[1].kwargs["caption"])
-        self.assertIn("plain candles", photos[2].kwargs["caption"])
-        self.assertIn("reply_markup", photos[2].kwargs)                 # دکمه‌ها زیر عکس آخر
+        self.assertEqual(len(photos), 1)                                 # یک عکس
+        self.assertEqual(photos[0].args[1][:4], b"\x89PNG")
+        cap = photos[0].kwargs["caption"]
+        self.assertIn("M5 structure", cap)
+        self.assertIn("last 500 candles", cap)
+        btns = [b.callback_data for row in photos[0].kwargs["reply_markup"].keyboard for b in row]
+        self.assertEqual(btns, ["sxp:XAUUSD", "sx"])                    # تازه کردن، جفت دیگر
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]
         self.assertIn("sx", names)
-
-    def test_choose_one_or_five_minutes(self):
-        st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
-        tg = telegram_bot.Telegram(None, st)
-        tg.bot = mock.MagicMock()
-        tf_buttons = [b.callback_data for row in tg.structure_tf_keyboard("XAUUSD").keyboard for b in row]
-        self.assertEqual(tf_buttons, ["sxt:XAUUSD:1", "sxt:XAUUSD:5"])
-        calls = []
-        df = fake_market(1234)
-
-        def fake(sym, n, m, interval=None):
-            calls.append(interval)
-            return df
-
-        with mock.patch.object(telegram_bot, "get_closed_candles", fake):
-            tg.send_structure(7, "XAUUSD", "1")
-        self.assertEqual(calls, ["1"])
-        self.assertIn("M1 structure", tg.bot.send_photo.call_args_list[0].kwargs["caption"])
-        kw = tg.bot.send_photo.call_args.kwargs                         # دکمه‌ها زیر عکس دوم
-        btns = [b.callback_data for row in kw["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxt:XAUUSD:1", "sxt:XAUUSD:5", "sx"])      # تازه کردن، تایم‌فریم دیگر، جفت دیگر
 
 
 if __name__ == "__main__":

@@ -20,13 +20,12 @@ from .strategy import analyze
 HELP = ("Tap a pair to see its Al Brooks market cycle on M5 (range / spike / channel / under test) "
         "with levels and chart.\n"
         "⭐ Follow a pair to also get every cycle change for it.\n"
-        "📐 Structure: the last 500 candles (M1 or M5) with only the structure (spike / channel / range).\n"
+        "📐 Structure: the last 500 M5 candles with only the structure (spike / channel / range).\n"
         "🧪 Backtest: tap the button (pair → timeframe → period) to replay recent days with the same rules "
         "on a $1,000 account.\n\n"
         "/status XAUUSD · /structure XAUUSD · /follow XAUUSD · /unfollow XAUUSD · /following · /backtest")
 BACKTEST_MAX_DAYS = 10
 STRUCTURE_BARS = 500
-STRUCTURE_TFS = {"1": "M1", "5": "M5"}
 
 
 CAPTION_LIMIT = 1024
@@ -110,74 +109,31 @@ class Telegram:
         kb.add(*[types.InlineKeyboardButton(label(n), callback_data="sxp:" + n) for n in SYMBOLS])
         return kb
 
-    def structure_tf_keyboard(self, sym):
-        kb = types.InlineKeyboardMarkup(row_width=2)
-        kb.add(types.InlineKeyboardButton("⏱ 1 minute", callback_data=f"sxt:{sym}:1"),
-               types.InlineKeyboardButton("⏱ 5 minutes", callback_data=f"sxt:{sym}:5"))
-        return kb
-
-    def send_structure(self, chat_id, sym, tf="5"):
-        """نمودار آخرین STRUCTURE_BARS کندل (M1 یا M5)، فقط ساختار: سوئینگ‌ها، خط روند، خط موازی، مستطیل هر فاز."""
-        tf = tf if tf in STRUCTURE_TFS else "5"
-        tf_name = STRUCTURE_TFS[tf]
-        from .structure import render
+    def send_structure(self, chat_id, sym):
+        """یک عکس: آخرین STRUCTURE_BARS کندل M5 با ساختار نسخه‌ی ۳ (اسپایک / کانال / رنج، روی بسته‌شدن‌ها)."""
+        from .structure3 import NAMES, render
         try:
             self.bot.send_chat_action(chat_id, "upload_photo")
         except Exception:
             pass
-        df = get_closed_candles(sym, STRUCTURE_BARS + 1, MIN_BARS, tf)
+        df = get_closed_candles(sym, STRUCTURE_BARS + 1, MIN_BARS, "5")
         if df is None:
             self.bot.send_message(chat_id, f"⚠️ {sym}: could not fetch candles, try again in a minute.")
             return
         df = df.tail(STRUCTURE_BARS)
-        png, phases, now = render(sym, df, tf=tf_name)
-        if now == ("RANGE", 0) and phases and phases[-1]["type"] == "RANGE" and phases[-1].get("doubt"):
-            now = ("RANGE_DOUBT", 0)
-        names = {("SPIKE", 1): "🚀 Spike up", ("SPIKE", -1): "🚀 Spike down", ("CHANNEL", 1): "📈 Bull channel",
-                 ("CHANNEL", -1): "📉 Bear channel", ("RANGE", 0): "📦 Trading range",
-                 ("RANGE_DOUBT", 0): "📦 Range (in doubt)"}
-
-        def name(p):
-            return names["RANGE_DOUBT", 0] if p["type"] == "RANGE" and p.get("doubt") else names[(p["type"], p["side"])]
-
-        recent = " → ".join(name(p) for p in phases[-6:]) or "-"
-        cap = (f"📐 <b>{label(sym)} · {tf_name} structure</b> · last {len(df)} candles\n"
-               f"Now: <b>{names.get(now, '❔ unclear') if now else '❔ unclear (waiting for two new lows and highs)'}</b>\n"
-               f"Recent phases: {recent}\n"
-               f"<i>Lines drawn like a trader: through two lows (or highs) + a parallel line. Rough version.</i>")
-        other = "1" if tf == "5" else "5"
-        kb = types.InlineKeyboardMarkup(row_width=3)
-        kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data=f"sxt:{sym}:{tf}"),
-               types.InlineKeyboardButton(f"⏱ {STRUCTURE_TFS[other]}", callback_data=f"sxt:{sym}:{other}"),
+        png, phases, now = render(sym, df, tf="M5")
+        icons = {"SPIKE": "🚀", "RANGE": "📦", ("CHANNEL", 1): "📈", ("CHANNEL", -1): "📉"}
+        recent = " → ".join(f"{icons.get(p['type']) or icons[('CHANNEL', p['side'])]} {NAMES[(p['type'], p['side'])].title()}"
+                            for p in phases[-6:]) or "-"
+        cap = (f"📐 <b>{label(sym)} · M5 structure</b> · last {len(df)} candles\n"
+               f"Now: <b>{now}</b>\n"
+               f"Phases: {recent}\n"
+               f"<i>Closes only (like a line chart). A range lasts until a breakout that doesn't come back; "
+               f"anything that isn't a spike or a channel is a range.</i>")
+        kb = types.InlineKeyboardMarkup(row_width=2)
+        kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="sxp:" + sym),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
-        self.bot.send_photo(chat_id, png, caption="1️⃣ " + cap, parse_mode="HTML")
-        # مقایسه: همان فازها، ولی خط‌ها و جعبه‌ی رنج از جایی که بیشترین برخورد بوده
-        try:
-            png2, _, _ = render(sym, df, tf=tf_name, core=True)
-            cap2 = (f"2️⃣ <b>{label(sym)} · {tf_name} structure · range lines where most touches are</b>\n"
-                    f"Same phases as 1️⃣. Range top/bottom = the level most swing highs/lows turned at "
-                    f"(a single far wick no longer stretches the box). The faint dotted lines are the outer "
-                    f"edges: a close beyond them still ends the range.")
-            self.bot.send_photo(chat_id, png2, caption=cap2, parse_mode="HTML")
-        except Exception as e:
-            print("structure core error:", e)
-        # 3️⃣ فقط کندل‌ها، برای کشیدن خط با دست و مقایسه
-        try:
-            from .structure import render_plain
-            span = ""
-            try:
-                from .config import TEHRAN
-                d = df.index.tz_convert(TEHRAN)
-                span = f" · {d[0]:%d %b %H:%M} → {d[-1]:%d %b %H:%M} Tehran"
-            except Exception:
-                pass
-            self.bot.send_photo(chat_id, render_plain(df),
-                                caption=f"3️⃣ {label(sym)} · {tf_name} · plain candles (same {len(df)} candles){span} — "
-                                        f"draw your own lines and compare",
-                                reply_markup=kb)
-        except Exception as e:
-            print("structure plain error:", e)
-            self.bot.send_message(chat_id, "📐", reply_markup=kb)
+        self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML", reply_markup=kb)
 
     # ------------------------------------------------------------ وضعیت
     def send_status(self, chat_id, sym):
@@ -287,13 +243,7 @@ class Telegram:
             if sym is None:
                 bot.send_message(m.chat.id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
                 return
-            parts = m.text.split()
-            tf = parts[2] if len(parts) > 2 else None              # /structure XAUUSD 1
-            if tf in STRUCTURE_TFS:
-                self.send_structure(m.chat.id, sym, tf)
-            else:
-                bot.send_message(m.chat.id, f"📐 {label(sym)} · last {STRUCTURE_BARS} candles on which timeframe?",
-                                 reply_markup=self.structure_tf_keyboard(sym))
+            self.send_structure(m.chat.id, sym)
 
         @bot.message_handler(commands=["following"])
         def on_following(m):
@@ -311,16 +261,11 @@ class Telegram:
                 bot.answer_callback_query(c.id)
                 bot.send_message(chat_id, "📐 Structure · which pair?", reply_markup=self.structure_pairs())
                 return
-            if action == "sxp" and sym in SYMBOLS:                # ساختار: انتخاب تایم‌فریم
-                bot.answer_callback_query(c.id)
-                bot.send_message(chat_id, f"📐 {label(sym)} · last {STRUCTURE_BARS} candles on which timeframe?",
-                                 reply_markup=self.structure_tf_keyboard(sym))
-                return
-            if action == "sxt":
-                sym, _, tf = sym.partition(":")
-                if sym in SYMBOLS and tf in STRUCTURE_TFS:
-                    bot.answer_callback_query(c.id, f"Drawing {sym} {STRUCTURE_TFS[tf]}…")
-                    self.send_structure(chat_id, sym, tf)
+            if action in ("sxp", "sxt"):                        # ساختار M5 (sxt: دکمه‌های قدیمی)
+                sym = sym.partition(":")[0]
+                if sym in SYMBOLS:
+                    bot.answer_callback_query(c.id, f"Drawing {sym} M5…")
+                    self.send_structure(chat_id, sym)
                 else:
                     bot.answer_callback_query(c.id)
                 return
