@@ -346,4 +346,13 @@ class Telegram:
                 types.BotCommand("status", "🥇 Gold status")])
         except Exception as e:
             print("set_my_commands error:", e)
-        self.bot.infinity_polling(skip_pending=True)
+        # هر خطایی (مثلاً 409 وقتی نسخه‌ی قبلی هنگام دیپلوی هنوز در حال polling است) نباید برنامه را ببندد،
+        # وگرنه Render دیپلوی را Failed می‌کند. صبر کن و دوباره وصل شو.
+        skip = True
+        while True:
+            try:
+                self.bot.infinity_polling(skip_pending=skip, timeout=20, long_polling_timeout=20)
+            except Exception as e:
+                print("telegram polling error, retrying in 10s:", e)
+                time.sleep(10)
+                skip = False                     # پیام‌هایی که در این فاصله آمده‌اند از دست نروند

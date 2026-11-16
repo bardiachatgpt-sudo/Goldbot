@@ -262,6 +262,17 @@ class TestGoldMenu(unittest.TestCase):
         ss.assert_called_once_with(7, "XAUUSD")                         # فقط طلا: بدون انتخاب جفت
 
 
+class TestPollingSurvivesConflict(unittest.TestCase):
+    def test_409_during_deploy_does_not_stop_the_bot(self):
+        st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
+        tg = telegram_bot.Telegram(None, st)
+        tg.bot = mock.MagicMock()
+        tg.bot.infinity_polling.side_effect = [Exception("Error code: 409. Conflict"), SystemExit]
+        with mock.patch.object(telegram_bot.time, "sleep"), self.assertRaises(SystemExit):
+            tg.run()
+        self.assertEqual(tg.bot.infinity_polling.call_count, 2)            # بعد از 409 دوباره وصل شد
+
+
 class TestStructureButton(unittest.TestCase):
     def test_button_sends_one_m5_picture(self):
         st = JsonState(os.path.join(tempfile.mkdtemp(), "s.json"))
