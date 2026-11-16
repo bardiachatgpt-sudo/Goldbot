@@ -15,7 +15,8 @@ MENU_STRUCTURE = "📐 Structure"
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
         "Pick a pair, then a timeframe.\n\n"
-        "🔬 M1 + M5: M1 candles with the M5 structure on them, plus the M1 micro cycles inside it.\n\n"
+        "🔬 M1 + M5: M1 candles; each M5 structure is a light-blue box (range flat, channel slanted) with its "
+        "top and bottom price, and the M1 structure inside it in black.\n\n"
         "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
             f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
 
@@ -115,8 +116,8 @@ class Telegram:
                f"M1 micro: <b>{now1}</b>\n"
                f"M5 phases: {chain(ph5)}\n"
                f"M1 micro cycles: {chain(ph1)}\n"
-               f"<i>Thick lines and boxes = M5 structure (same as the M5 picture); thin lines and the ribbon at the "
-               f"bottom = the M1 cycles inside it.</i>")
+               f"<i>Light-blue boxes = the M5 structure (same as the M5 picture): a range is a flat box, a channel a "
+               f"slanted one, with its top and bottom price. Black lines inside = the M1 spikes, channels and ranges.</i>")
         kb = types.InlineKeyboardMarkup(row_width=3)
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data=f"sxm:{sym}"),
                types.InlineKeyboardButton("⏱ Timeframe", callback_data=f"sxp:{sym}"),

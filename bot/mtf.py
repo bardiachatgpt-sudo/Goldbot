@@ -1,5 +1,5 @@
-"""M1 با ساختار M5 روی زمینه‌ی سفید: کندل‌های یک دقیقه، ساختار M5 (آبی کم‌رنگ، با برچسب M5 کنار هر جعبه و خط)
-و چرخه‌های کوچک M1 (خط‌های رنگی نازک و نوار پایین؛ هر حالت یک رنگ).
+"""M1 با ساختار M5 روی زمینه‌ی سفید: کندل‌های یک دقیقه (خاکستری)، هر فاز M5 یک جعبه‌ی آبی کم‌رنگ
+(رنج صاف، کانال مورب) با قیمت سقف و کف، و داخلش ساختارهای M1 (اسپایک، کانال، رنج) با خط مشکی.
 
 - ساختار M5 دقیقاً همان دکمه‌ی M5 است (۵۰۰ کندل M5، bot/structure3.py)؛ فقط با زمان روی M1 نشانده می‌شود.
   خط‌های فاز آخر M5 تا آخرین کندل M1 ادامه دارند (کندل M5 در حال تشکیل هنوز در ساختار نیست).
@@ -18,13 +18,29 @@ MIN_M1, MAX_M1 = 300, 1200
 # رنگ‌ها روی زمینه‌ی سفید: همه‌ی ساختار M5 آبی کم‌رنگ (با برچسب «M5» کنار هر جعبه و خط)،
 # چرخه‌های M1 با رنگ‌های جدا برای هر حالت، کندل‌ها خاکستری تا رنگ‌ها فقط مال ساختار باشند
 M5_FILL, M5_EDGE, M5_LINE, M5_TEXT = "#E8F2FD", "#A9CDF3", "#6FB1EE", "#2F7FC8"
-MICRO = {"RANGE": "#8B5CF6", "SPIKE": "#EA580C", 1: "#16A34A", -1: "#DC2626"}
+M1_LINE = "#111111"                      # ساختارهای M1: خط مشکی
 BG, PANEL, GRID, TEXT, MUTED = "#FFFFFF", "#FFFFFF", "#EEF0F4", "#111827", "#6B7280"
-UP, DOWN = "#A3A9B4", "#3F4652"         # کندل صعودی خاکستری روشن، نزولی خاکستری تیره
+UP, DOWN = "#B9BFC9", "#7C8490"         # کندل‌ها خاکستری روشن تا ساختار دیده شود
 
 
-def _color(table, ph):
-    return table[ph["side"]] if ph["type"] == "CHANNEL" else table[ph["type"]]
+def fmt_price(sym, x):
+    dec = 2 if sym == "XAUUSD" else 1 if sym == "US30" else 3 if "JPY" in sym else 5
+    return f"{x:.{dec}f}"
+
+
+def _edges(ph, c5, h5, l5, piv5, pos):
+    """سقف و کف جعبه‌ی یک فاز M5 در جایگاه‌های pos (روی محور M5): رنج صاف (یا مثلثی)، کانال مورب، اسپایک صاف."""
+    a, b = ph["start"], ph["end"]
+    ls = lines(ph, c5, piv5)
+    if len(ls) == 2:
+        vals = []
+        for x0, y0, x1, y1, _ in ls:
+            sl = (y1 - y0) / (x1 - x0) if x1 != x0 else 0.0
+            vals.append(y0 + sl * (pos - x0))
+        u, d = vals
+        return np.maximum(u, d), np.minimum(u, d)
+    top, bot = c5[a:b + 1].max(), c5[a:b + 1].min()
+    return np.full(len(pos), top), np.full(len(pos), bot)
 
 
 def m1_window(m5, m1, zoom=2):
@@ -66,83 +82,66 @@ def render(sym, m5, m1):
     lo, hi = l.min(), h.max()
     span = hi - lo
     pad = span * 0.02
-    ribbon_h = span * 0.035
-    ybot = lo - pad - ribbon_h * 1.8                 # نوار چرخه‌های M1 پایین نمودار
 
     fig, ax = plt.subplots(figsize=(22, 10), dpi=100)
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(PANEL)
+    box_lo, box_hi = lo, hi
 
-    # ---- M5: جعبه‌ها و خط‌ها (پررنگ)
+    # ---- M5: هر فاز یک جعبه (رنج صاف، کانال مورب)، آبی کم‌رنگ، با قیمت سقف و کف
     last5 = len(ph5) - 1
     for k, ph in enumerate(ph5):
         a, b = ph["start"], ph["end"]
-        if k == last5:
-            b_pos = p5[-1] + 1                       # فاز آخر تا آخرین کندل M1
-        else:
-            b_pos = b
+        b_pos = p5[-1] + 1 if k == last5 else b      # فاز آخر تا آخرین کندل M1
         on = (p5 >= a) & (p5 <= b_pos)
         if not on.any():
             continue
-        xa, xb = int(np.argmax(on)), int(len(on) - 1 - np.argmax(on[::-1]))
-        if xb - xa < 5:                              # فقط لبه‌ای از فاز پیداست: نکش
+        xs = np.where(on)[0]
+        if len(xs) < 6:                              # فقط لبه‌ای از فاز پیداست: نکش
             continue
-        top = max(h5[a:b + 1].max(), h[xa:xb + 1].max())
-        bot = min(l5[a:b + 1].min(), l[xa:xb + 1].min())
-        ax.add_patch(patches.FancyBboxPatch((xa - 0.5, bot - pad * 0.6), xb - xa + 1, top - bot + pad * 1.2,
-                                            boxstyle="round,pad=0,rounding_size=2", facecolor=M5_FILL, alpha=0.75,
-                                            edgecolor=M5_EDGE, lw=1.4, zorder=1))
-        if xb - xa >= 25:
-            ax.text(xa + 2, top + pad * 0.9, f"M5 · {NAMES[(ph['type'], ph['side'])]}", color=M5_TEXT, fontsize=12,
-                    fontweight="bold", va="bottom", zorder=7)
-        ls5 = lines(ph, c5, piv5)
-        if ph["type"] == "RANGE":
-            roles = ["M5 range top", "M5 range bottom"]
-        elif ph["type"] == "CHANNEL":
-            roles = ["M5 trend line", "M5 parallel line"]
-        else:
-            roles = []
-        for (x0, y0, x1, y1, role), name in zip(ls5, roles):
-            if k == last5:                           # خط‌های فاز آخر تا حال ادامه دارند
-                x1n = max(x1, p5[-1] + 1)
-                y1 = y0 + (y1 - y0) * (x1n - x0) / (x1 - x0) if x1 != x0 else y1
-                x1 = x1n
-            seg = on & (p5 >= x0) & (p5 <= x1)
-            if not seg.any() or x1 == x0:
-                continue
-            xs = np.where(seg)[0]
-            ys = y0 + (y1 - y0) * (p5[xs] - x0) / (x1 - x0)
-            ax.plot(xs, ys, color=M5_LINE, lw=3.0 if role != "parallel" else 2.2,
-                    ls="-" if role != "parallel" else (0, (6, 3)), alpha=0.95, zorder=5, solid_capstyle="round")
-            if len(xs) >= 25:                        # «M5 …» جلوی همان خط
-                above = name != "M5 range bottom"
-                ax.text(xs[-1], ys[-1] + (pad * 0.5 if above else -pad * 0.5), name, color=M5_TEXT, fontsize=9,
-                        fontweight="bold", ha="right", va="bottom" if above else "top", zorder=8,
-                        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", edgecolor="none", alpha=0.8))
+        upper, lower = _edges(ph, c5, h5, l5, piv5, p5[xs])
+        box_lo, box_hi = min(box_lo, lower.min()), max(box_hi, upper.max())
+        ax.fill_between(xs, lower, upper, color=M5_FILL, alpha=0.85, lw=0, zorder=1)
+        ax.plot(xs, upper, color=M5_LINE, lw=2.6, zorder=2, solid_capstyle="round")
+        ax.plot(xs, lower, color=M5_LINE, lw=2.6, zorder=2, solid_capstyle="round")
+        ax.plot([xs[0], xs[0]], [lower[0], upper[0]], color=M5_LINE, lw=1.4, zorder=2)
+        ax.plot([xs[-1], xs[-1]], [lower[-1], upper[-1]], color=M5_LINE, lw=1.4, zorder=2)
+        name = NAMES[(ph["type"], ph["side"])]
+        if len(xs) >= 25:
+            ax.text(xs[0] + 2, upper[0] + pad * 0.6, f"M5 · {name}", color=M5_TEXT, fontsize=12,
+                    fontweight="bold", va="bottom", zorder=8)
+            word = {"RANGE": "range", "CHANNEL": "channel", "SPIKE": "spike"}[ph["type"]]
+            for y, edge, va in ((upper[-1], "top", "bottom"), (lower[-1], "bottom", "top")):
+                ax.text(xs[-1] - 1, y + (pad * 0.4 if va == "bottom" else -pad * 0.4),
+                        f"M5 {word} {edge}  {fmt_price(sym, y)}", color=M5_TEXT, fontsize=9.5,
+                        fontweight="bold", ha="right", va=va, zorder=8,
+                        bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor=M5_EDGE, lw=0.8))
 
-    # ---- M1: خط‌های چرخه‌های کوچک (نازک) و نوار رنگی پایین
+    # ---- M1: داخل جعبه‌ها، ساختارهای یک دقیقه با خط مشکی
     for ph in ph1:
-        cc = _color(MICRO, ph)
         a, b = ph["start"], ph["end"]
+        if ph["type"] == "SPIKE":
+            ax.plot([a, b], [c[a], c[b]], color=M1_LINE, lw=2.0, zorder=7, solid_capstyle="round")
         for x0, y0, x1, y1, role in lines(ph, c, piv1):
-            ax.plot([x0, x1], [y0, y1], color=cc, lw=1.5, ls=(0, (2, 2)) if role == "parallel" else "-",
-                    alpha=0.9, zorder=4)
-        ax.add_patch(patches.Rectangle((a - 0.5, ybot), b - a + 1, ribbon_h, facecolor=cc, alpha=0.9,
-                                       edgecolor=PANEL, lw=1.5, zorder=2))
-        if b - a >= 18:
-            short = {"TRADING RANGE": "range", "BULL CHANNEL": "bull ch.", "BEAR CHANNEL": "bear ch."}
-            name = NAMES[(ph["type"], ph["side"])]
-            ax.text((a + b) / 2, ybot + ribbon_h / 2, "M1 " + short.get(name, name.lower()), color="white", fontsize=8,
-                    fontweight="bold", ha="center", va="center", zorder=3)
-    ax.text(0, ybot + ribbon_h * 1.25, "M1 micro cycles", color=MUTED, fontsize=9, va="bottom")
+            ax.plot([x0, x1], [y0, y1], color=M1_LINE, lw=1.4, ls=(0, (3, 2)) if role == "parallel" else "-",
+                    zorder=7)
+        if b - a >= 15:
+            short = {"TRADING RANGE": "range", "BULL CHANNEL": "bull channel", "BEAR CHANNEL": "bear channel",
+                     "SPIKE ↑": "spike ↑", "SPIKE ↓": "spike ↓"}
+            ytxt = l[a:b + 1].min() - pad * 0.35          # زیر همان ساختار، تا روی نام جعبه‌ی M5 نیفتد
+            ax.text(a + 1, ytxt, "M1 " + short[NAMES[(ph["type"], ph["side"])]], color=M1_LINE, fontsize=8.5,
+                    va="top", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.75))
 
-    # ---- کندل‌های M1
+    # ---- کندل‌های M1 (خاکستری روشن، تا خط‌های مشکی و جعبه‌های آبی دیده شوند)
     width = 0.62
     for i in range(n):
         cl = UP if c[i] >= o[i] else DOWN
-        ax.vlines(i, l[i], h[i], color=cl, lw=0.7, zorder=6, alpha=0.9)
+        ax.vlines(i, l[i], h[i], color=cl, lw=0.7, zorder=5)
         ax.add_patch(patches.Rectangle((i - width / 2, min(o[i], c[i])), width, max(abs(c[i] - o[i]), span * 1e-4),
-                                       color=cl, zorder=6, lw=0))
+                                       color=cl, zorder=5, lw=0))
+    lo, hi = min(lo, box_lo), max(hi, box_hi)
+    ybot = lo - pad
 
     # ---- محورها و عنوان
     stepx = max(1, n // 12)
@@ -155,7 +154,7 @@ def render(sym, m5, m1):
     except Exception:
         pass
     ax.set_xlim(-2, n + 3)
-    ax.set_ylim(ybot - pad * 0.5, hi + pad * 4)
+    ax.set_ylim(ybot - pad, hi + pad * 4)
     ax.tick_params(colors=MUTED)
     for s in ax.spines.values():
         s.set_color(GRID)
@@ -167,12 +166,9 @@ def render(sym, m5, m1):
                  color=TEXT, fontsize=13, fontweight="bold", loc="left", pad=12)
     # راهنما بالای نمودار، سمت راست (روی نمودار چیزی را نمی‌پوشاند)
     from matplotlib.lines import Line2D
-    handles = [Line2D([0], [0], color=M5_LINE, lw=3.2, label="M5 structure"),
-               Line2D([0], [0], color=MICRO["RANGE"], lw=1.6, label="M1 range"),
-               Line2D([0], [0], color=MICRO[1], lw=1.6, label="M1 bull channel"),
-               Line2D([0], [0], color=MICRO[-1], lw=1.6, label="M1 bear channel"),
-               Line2D([0], [0], color=MICRO["SPIKE"], lw=1.6, label="M1 spike")]
-    leg = ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.0, 1.005), ncol=5, frameon=False,
+    handles = [patches.Patch(facecolor=M5_FILL, edgecolor=M5_LINE, lw=2, label="M5 structure (box: range flat, channel slanted)"),
+               Line2D([0], [0], color=M1_LINE, lw=1.5, label="M1 structure inside it (spike / channel / range)")]
+    leg = ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.0, 1.005), ncol=2, frameon=False,
                     fontsize=10, handlelength=2.6)
     for t in leg.get_texts():
         t.set_color(MUTED)
