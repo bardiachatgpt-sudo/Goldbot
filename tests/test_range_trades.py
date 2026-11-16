@@ -72,19 +72,6 @@ class TestRangeTrades(unittest.TestCase):
         opens = [e for e in ev if e["kind"] == "TRADE_OPEN"]
         self.assertEqual([e["side"] for e in opens], [-1])               # خرید در کف رد شد، فروش در سقف
 
-    def test_macd_negative_blocks_buys_at_the_bottom(self):
-        with mock.patch.object(range_trades, "range_at", lambda c, t, window=500: self.RANGE), \
-                mock.patch.object(range_trades, "spread", lambda s: 0.1), \
-                mock.patch.object(range_trades, "macd_hist", lambda c: -np.ones(len(c))):
-            after = [(100, 100.5, 95.5, 96.5), (96.5, 106.3, 96.4, 106.1), (106.1, 106.2, 95, 95.5)]
-            ev = range_trades.run("XAUUSD", market(after), entry="touch", macd=True)
-        self.assertEqual([e["side"] for e in ev if e["kind"] == "TRADE_OPEN"], [-1])   # فقط فروش در سقف
-
-    def test_macd_hist_is_4x_macd(self):
-        up = np.linspace(100, 200, 400)
-        self.assertGreater(range_trades.macd_hist(up)[-1], -1e-9)
-        self.assertEqual((range_trades.MACD_FAST, range_trades.MACD_SLOW, range_trades.MACD_SIGNAL), (48, 104, 36))
-
     def test_fixed_one_to_one_target(self):
         with mock.patch.object(range_trades, "range_at", lambda c, t, window=500: self.RANGE), \
                 mock.patch.object(range_trades, "spread", lambda s: 0.1):

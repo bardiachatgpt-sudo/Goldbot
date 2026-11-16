@@ -30,8 +30,7 @@ TF_PRESETS = {
 }
 RANGE_TF = "5r"             # قاعده‌ی رنج کاربر: فقط M5
 # نسخه‌هایی که کنار قاعده‌ی اصلی رنج روی همان داده گزارش می‌شوند
-RANGE_VARIANTS = ("range3_touch_rr1", "range3_touch_rr2",
-                  "range3_touch_macd", "range3_touch_macd_rr1", "range3_touch_macd_rr2")
+RANGE_VARIANTS = ("range3_touch_rr1", "range3_touch_rr2")
 LIVE_TF = "5-1"             # تنظیم ربات زنده
 
 
@@ -52,11 +51,8 @@ STRATEGY_NAMES = {"pin": "Pin bar (M1)", "pin_wedge": "Pin bar + wedge confirmat
                   "brooks": "Brooks (M5 signal bar)",
                   "range3_touch": "Range edges: price reaches the bottom → buy, the top → sell; "
                                   "stop ½ range from entry, target the other edge",
-                  "range3_touch_rr1": "No filter · target 1:1",
-                  "range3_touch_rr2": "No filter · target 1:2",
-                  "range3_touch_macd": "4× MACD filter (histogram positive: buys only, negative: sells only) · target the other edge",
-                  "range3_touch_macd_rr1": "4× MACD filter · target 1:1",
-                  "range3_touch_macd_rr2": "4× MACD filter · target 1:2",
+                  "range3_touch_rr1": "Target 1:1",
+                  "range3_touch_rr2": "Target 1:2",
                   "range3_touch_trend": "Same, but only in the direction of the move before the range",
                   "range3_touch_edge": "Same, but stop ½ range beyond the range edge",
                   "range3": "Same, but only after a pin bar (enter on the next candle)",
@@ -77,7 +73,7 @@ def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None, c
         return range_trades.run(sym, trig, start, "edge" if strategy.endswith("_edge") else "entry",
                                 "key" if strategy == "range3_key" else "none",
                                 "touch" if strategy.startswith("range3_touch") else "pin",
-                                with_trend=strategy.endswith("_trend"), macd="_macd" in strategy, rr=rr,
+                                with_trend=strategy.endswith("_trend"), rr=rr,
                                 cache=cache), None
     return run_brooks(sym, trig, ctx, start, ctx_min, trig_min)
 
