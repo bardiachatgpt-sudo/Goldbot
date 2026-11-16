@@ -134,13 +134,12 @@ class Telegram:
         kb.add(types.InlineKeyboardButton("🔄 Refresh", callback_data="sxp:" + sym),
                types.InlineKeyboardButton("📐 Other pair", callback_data="sx"))
         self.bot.send_photo(chat_id, png, caption=cap, parse_mode="HTML")
-        try:                                     # همان ساختار روی نمودار خطی، با سقف و کف‌ها
-            from .structure3 import render_line
-            self.bot.send_photo(chat_id, render_line(sym, df, tf="M5"),
-                                caption=f"📈 {label(sym)} · line chart (closes): where every high and low was taken "
-                                        f"(HH / HL / LH / LL)", reply_markup=kb)
+        try:                                     # بزرگ‌نمایی دو ساختار آخر
+            png2, _, _ = render(sym, df, tf="M5", zoom=2)
+            self.bot.send_photo(chat_id, png2, caption=f"🔍 {label(sym)} · M5 · zoom on the last two structures",
+                                reply_markup=kb)
         except Exception as e:
-            print("structure line error:", e)
+            print("structure zoom error:", e)
             self.bot.send_message(chat_id, "📐", reply_markup=kb)
 
     # ------------------------------------------------------------ وضعیت

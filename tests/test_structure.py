@@ -85,6 +85,13 @@ class TestStructure(unittest.TestCase):
         self.assertEqual([t for *_, t in structure3.swing_labels(piv)], ["L", "H", "HL", "HH", "LL", "LH"])
         self.assertEqual(structure3.render_line("XAUUSD", fake_market(57730))[:4], b"\x89PNG")
 
+    def test_zoom_shows_last_two_structures(self):
+        df = fake_market(57730)
+        png, ph, _ = structure3.render("XAUUSD", df, zoom=2)
+        full, ph2, _ = structure3.render("XAUUSD", df)
+        self.assertEqual(png[:4], b"\x89PNG")
+        self.assertEqual(ph, ph2)                                        # همان ساختار، فقط بزرگ‌تر
+
     def test_render_png(self):
         png, phases, now = structure.render("XAUUSD", fake_market(57730))
         self.assertEqual(png[:4], b"\x89PNG")
@@ -230,6 +237,13 @@ class TestStructure3(unittest.TestCase):
         self.assertEqual([t for *_, t in structure3.swing_labels(piv)], ["L", "H", "HL", "HH", "LL", "LH"])
         self.assertEqual(structure3.render_line("XAUUSD", fake_market(57730))[:4], b"\x89PNG")
 
+    def test_zoom_shows_last_two_structures(self):
+        df = fake_market(57730)
+        png, ph, _ = structure3.render("XAUUSD", df, zoom=2)
+        full, ph2, _ = structure3.render("XAUUSD", df)
+        self.assertEqual(png[:4], b"\x89PNG")
+        self.assertEqual(ph, ph2)                                        # همان ساختار، فقط بزرگ‌تر
+
     def test_render_png(self):
         png, ph, now = structure3.render("XAUUSD", fake_market(57730))
         self.assertEqual(png[:4], b"\x89PNG")
@@ -253,13 +267,13 @@ class TestStructureButton(unittest.TestCase):
             tg.send_structure(7, "XAUUSD")
         self.assertEqual(calls, [("XAUUSD", 501, "5")])                # فقط M5
         photos = tg.bot.send_photo.call_args_list
-        self.assertEqual(len(photos), 2)                                 # کندل + نمودار خطی
+        self.assertEqual(len(photos), 2)                                 # کل ۵۰۰ کندل + بزرگ‌نمایی
         for call in photos:
             self.assertEqual(call.args[1][:4], b"\x89PNG")
         cap = photos[0].kwargs["caption"]
         self.assertIn("M5 structure", cap)
         self.assertIn("last 500 candles", cap)
-        self.assertIn("line chart", photos[1].kwargs["caption"])
+        self.assertIn("last two structures", photos[1].kwargs["caption"])
         btns = [b.callback_data for row in photos[1].kwargs["reply_markup"].keyboard for b in row]
         self.assertEqual(btns, ["sxp:XAUUSD", "sx"])                    # تازه کردن، جفت دیگر
         names = [b.callback_data for row in tg.pairs_keyboard(7).keyboard for b in row]

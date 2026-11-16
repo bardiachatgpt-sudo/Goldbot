@@ -316,8 +316,9 @@ def now_text(phases):
     return txt
 
 
-def render(sym, df, tf="M5"):
-    """PNG: کندل‌ها، مستطیل رنگی هر فاز، خط‌های رنج/کانال. (png, phases, now_text)"""
+def render(sym, df, tf="M5", zoom=0):
+    """PNG: کندل‌ها، مستطیل رنگی هر فاز، خط‌های رنج/کانال. (png, phases, now_text)
+    zoom=k: ساختار روی همه‌ی کندل‌ها حساب می‌شود، ولی فقط k فاز آخر (حداقل ۸۰ کندل) بزرگ نشان داده می‌شود."""
     import io
 
     import matplotlib
@@ -328,42 +329,50 @@ def render(sym, df, tf="M5"):
     o, h, l, c = (df[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     n = len(c)
     phases, piv = segment(c)
+    v0 = 0
+    if zoom and phases:
+        v0 = max(0, min(phases[-min(zoom, len(phases))]["start"] - 5, n - 80))
+    hv, lv = h[v0:], l[v0:]
     fig, ax = plt.subplots(figsize=(22, 9), dpi=100)
     fig.patch.set_facecolor("#121214")
     ax.set_facecolor("#18181B")
     col = {"SPIKE": "#FBBF24", "RANGE": "#60A5FA", ("CHANNEL", 1): "#10B981", ("CHANNEL", -1): "#EF4444"}
-    pad = (h.max() - l.min()) * 0.015
+    pad = (hv.max() - lv.min()) * 0.015
     for ph in phases:
+        if ph["end"] < v0:
+            continue
         a, b = ph["start"], ph["end"]
         cc = col[("CHANNEL", ph["side"])] if ph["type"] == "CHANNEL" else col[ph["type"]]
-        top, bot = h[a:b + 1].max(), l[a:b + 1].min()
+        top, bot = h[max(a, v0):b + 1].max(), l[max(a, v0):b + 1].min()
         ax.add_patch(patches.Rectangle((a - 0.5, bot - pad), b - a + 1, top - bot + 2 * pad,
                                        facecolor=cc, alpha=0.10, edgecolor=cc, lw=1.0, zorder=1))
-        ax.text(a + 1, top + pad * 1.3, NAMES[(ph["type"], ph["side"])], color=cc, fontsize=10,
-                fontweight="bold", zorder=6, va="bottom")
+        if b - max(a, v0) >= 12:                 # فازی که فقط لبه‌اش دیده می‌شود برچسب نمی‌گیرد
+            ax.text(max(a, v0) + 1, top + pad * 1.3, NAMES[(ph["type"], ph["side"])], color=cc, fontsize=10,
+                    fontweight="bold", zorder=6, va="bottom")
         for x0, y0, x1, y1, role in lines(ph, c, piv):
             ax.plot([x0, x1], [y0, y1], color=cc, lw=2.2 if role != "parallel" else 1.6,
                     ls="-" if role != "parallel" else "--", zorder=5)
-    for i in range(n):
+    for i in range(v0, n):
         cl = "#10B981" if c[i] >= o[i] else "#EF4444"
-        ax.vlines(i, l[i], h[i], color=cl, lw=0.8, zorder=3)
+        ax.vlines(i, l[i], h[i], color=cl, lw=0.8 if not zoom else 1.4, zorder=3)
         ax.add_patch(patches.Rectangle((i - 0.3, min(o[i], c[i])), 0.6, max(abs(c[i] - o[i]), 1e-9),
                                        color=cl, zorder=3))
     if hasattr(df.index, "tz_convert"):
         try:
             from .config import TEHRAN
             dates = df.index.tz_convert(TEHRAN)
-            step = max(1, n // 12)
-            ax.set_xticks(range(0, n, step))
-            ax.set_xticklabels([d.strftime("%d %b %H:%M") for d in dates[::step]], rotation=30, fontsize=8)
+            step = max(1, (n - v0) // 12)
+            ax.set_xticks(range(v0, n, step))
+            ax.set_xticklabels([d.strftime("%d %b %H:%M") for d in dates[v0::step]], rotation=30, fontsize=8)
             ax.set_xlabel("Tehran time", color="#9CA3AF")
         except Exception:
             pass
     now = now_text(phases)
-    ax.set_title(f"{sym} {tf} · last {n} candles · structure (closes only, like a line chart)\nNow: {now}",
-                 color="#F3F4F6", fontsize=13, fontweight="bold")
-    ax.set_xlim(-2, n + 2)
-    ax.set_ylim(l.min() - pad * 3, h.max() + pad * 6)
+    what = (f"zoom: last {min(zoom, len(phases))} structures ({n - v0} candles)" if zoom
+            else f"last {n} candles · structure (closes only, like a line chart)")
+    ax.set_title(f"{sym} {tf} · {what}\nNow: {now}", color="#F3F4F6", fontsize=13, fontweight="bold")
+    ax.set_xlim(v0 - 2, n + 2)
+    ax.set_ylim(lv.min() - pad * 3, hv.max() + pad * 6)
     ax.tick_params(colors="#9CA3AF")
     for s in ax.spines.values():
         s.set_color("#3F3F46")
