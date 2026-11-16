@@ -48,8 +48,9 @@ on purpose; they are in git history before commit 678dacb if ever needed).
     enough). Buy: the mirror (candle 1 high < candle 3 low, candle 2 body overlaps).
   - Following starts as soon as the gap exists (close of candle 3): compare each candle's high with the previous
     candle's high (buy: lows).
-  - Entry (sell): the moment price goes even a tick above the previous candle's high; entry price = that high.
-    (Buy: a tick below the previous candle's low.)
+  - Entry (sell): only when price trades strictly ABOVE the previous candle's high, by at least one pipette;
+    entry price = previous high + 1 pipette (gold 0.01, 5-digit FX 0.00001, JPY 0.001, US30 0.1). Merely touching
+    the previous high is not an entry. (Buy: previous low − 1 pipette.)
   - Stop: just beyond candle 1 (sell: above its high; buy: below its low). Target 1:1.
   - Still open: gap invalidation / max wait, trend condition (our structure or any gap), timeframe (M5?), spread,
     and what the bot should do with it (mark on pictures, alerts, backtest).
