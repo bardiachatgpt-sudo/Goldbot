@@ -40,15 +40,11 @@ on purpose; they are in git history before commit 678dacb if ever needed).
   + parallel line. The last phase is provisional.
 - v1 (M1 layer): swings on highs/lows with a 1.5 average-bar reversal; more, smaller pieces; "range (in doubt)".
 
-## What was tried and the results (do not repeat blindly)
-- Range trading backtest on gold M5 (buy when price reaches the range bottom, sell at the top, stop ½ range,
-  target the other edge), 10 days: ≈ break-even (+0.65R, 20 trades). Losses were buys inside falling markets:
-  in real time the bot saw short pauses in a bear channel as "ranges".
-- Filters that did NOT help: direction of the move before the range; pin bar entry; key bar; 4× MACD (48,104,36)
-  histogram; fixed 1:1 or 1:2 targets (all ≈ 0). Sells won only because gold fell in that period.
-- Open ideas the user may come back to: (a) two-level structure — channels inside a big range; buy the range bottom
-  only after the inner bear channel has ended; (b) confirmed range (2 touches each side, ≥ ~50 bars) and no re-entry
-  on the same side after a stop. The user said they want to study first.
+## Trade setups
+- All earlier setups (pin bar, key bar, range edges, MACD, Always In…) were dropped by the user. Do not bring them
+  back. The structures above stay.
+- The user is now describing new setups one by one. First one: the **gap** (3-candle gap, like a fair value gap),
+  starting with the down-trend version — still being defined, not coded yet.
 
 ## Environment notes
 - The cloud session cannot reach TradingView; real data is only on Render. Test with synthetic data and pictures
