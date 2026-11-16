@@ -44,7 +44,7 @@ class TestBacktestFlow(unittest.TestCase):
         self.flow.start(7)
         kb = self.tg.bot.send_message.call_args.kwargs["reply_markup"]
         if len(SYMBOLS) == 1:                                            # پیش‌فرض فقط طلا: مستقیم قاعده‌ها
-            self.assertEqual(buttons(kb)[0], ("📦 M5 · Range edges (pin bar at top / bottom)", "btt:XAUUSD:5r"))
+            self.assertEqual(buttons(kb)[0], ("📦 M5 · Range edges (buy the bottom / sell the top)", "btt:XAUUSD:5r"))
         else:
             self.assertEqual(buttons(kb)[0], ("🥇🇺🇸 XAUUSD · recommended", "btp:XAUUSD"))   # پیشنهاد: طلا
             self.assertEqual(len(buttons(kb)), len(SYMBOLS))

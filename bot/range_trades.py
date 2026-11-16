@@ -9,6 +9,10 @@
 ۴) حد ضرر: نصف عرض رنج (+ اسپرد) — از قیمت ورود (پیش‌فرض) یا از لبه‌ی رنج (stop_from="edge").
 ۵) حد سود: لبه‌ی مقابل رنج (خرید در کف → سقف رنج).
 یک معامله در هر لحظه. داخل هر کندل ترتیب قیمت از شکل کندل (مثل بقیه‌ی بک‌تست‌ها).
+
+entry="touch" (قاعده‌ی اصلی کاربر، بدون پین‌بار): قیمت به کف رنج برسد → خرید روی همان کف،
+به سقف برسد → فروش روی همان سقف (سفارش Limit روی لبه). رنج و لبه‌هایش از کندل‌های بسته‌شده تا کندل قبل.
+حد ضرر و حد سود مثل بالا.
 """
 import numpy as np
 import pandas as pd
@@ -38,7 +42,7 @@ def range_at(close, t, window=WINDOW):
     return float(top), float(bot), ph["end"] - ph["start"]
 
 
-def run(sym, m5, start=None, stop_from="entry", confirm="none"):
+def run(sym, m5, start=None, stop_from="entry", confirm="none", entry="pin"):
     """رویدادها با همان قالب بقیه‌ی بک‌تست‌ها (TRADE_PENDING / OPEN / CLOSED / CANCELLED)."""
     from .strategy import analyze
     d = analyze(m5, cycle=False)["df"]
@@ -49,11 +53,12 @@ def run(sym, m5, start=None, stop_from="entry", confirm="none"):
     n = len(d)
     events, pending, open_t = [], None, None
 
-    def open_trade(setup, i):
-        """ورود در باز شدن کندل i+1. برمی‌گرداند رویداد ورود یا لغو (اگر جایی تا لبه‌ی مقابل نمانده)."""
+    def open_trade(setup, i, price=None, at=None):
+        """ورود در باز شدن کندل i+1 (یا با price در کندل at). رویداد ورود، یا لغو اگر جایی تا لبه‌ی مقابل نمانده."""
         nonlocal open_t
         s = setup["side"]
-        entry = o[i + 1] + (sp if s > 0 else 0.0)                      # خرید با Ask
+        k = i + 1 if at is None else at
+        entry = (o[k] if price is None else price) + (sp if s > 0 else 0.0)   # خرید با Ask
         top, bot = setup["range_high"], setup["range_low"]
         half = (top - bot) / 2
         ref = entry if stop_from == "entry" else (bot if s > 0 else top)
@@ -62,30 +67,53 @@ def run(sym, m5, start=None, stop_from="entry", confirm="none"):
         if (tp - entry) * s <= 0:                                       # جایی تا لبه‌ی مقابل نمانده
             return ev("TRADE_CANCELLED", setup, i, c[i], reason="no_room")
         open_t = {**setup, "entry": float(entry), "sl": float(sl), "tp": float(tp), "risk": float(abs(entry - sl)),
-                  "opened": times[i + 1], "opened_i": i + 1, "_fresh": True, "signal_time": times[i]}
+                  "opened": times[k], "opened_i": k, "_fresh": True, "signal_time": times[i]}
         return ev("TRADE_OPEN", open_t, i, entry)
 
     def ev(kind, t, i, price, **extra):
         return {**t, **extra, "kind": kind, "sym": sym, "setup": "TRADE", "mode": "RANGE",
                 "time": times[i] + pd.Timedelta(minutes=5), "price": float(price), "strategy": "range3"}
 
+    def exits(i, path):
+        """حد ضرر / حد سود معامله‌ی باز روی مسیر قیمت کندل i."""
+        nonlocal open_t
+        s = open_t["side"]
+        hit = walk(path, {"SL": (open_t["sl"], -s), "TP": (open_t["tp"], s)})
+        if hit:
+            name = hit[0]
+            lvl = open_t["sl"] if name == "SL" else open_t["tp"]
+            r = (lvl - open_t["entry"]) * s / open_t["risk"]
+            events.append(ev("TRADE_CLOSED", open_t, i, lvl, result=name, r=round(r, 2), exit=lvl,
+                             bars=i - open_t["opened_i"]))
+            open_t = None
+
     for i in range(n):
         if start is not None and times[i] < start:
             continue
         # ۱) معامله‌ی باز: حد ضرر / حد سود روی مسیر این کندل
         if open_t is not None:
-            s = open_t["side"]
             path = candle_path(o[i], h[i], l[i], c[i])
             if open_t.pop("_fresh", False):
                 path = [open_t["entry"]] + path[1:]
-            hit = walk(path, {"SL": (open_t["sl"], -s), "TP": (open_t["tp"], s)})
-            if hit:
-                name = hit[0]
-                lvl = open_t["sl"] if name == "SL" else open_t["tp"]
-                r = (lvl - open_t["entry"]) * s / open_t["risk"]
-                events.append(ev("TRADE_CLOSED", open_t, i, lvl, result=name, r=round(r, 2), exit=lvl,
-                                 bars=i - open_t["opened_i"]))
-                open_t = None
+            exits(i, path)
+            continue
+        # ۱ب) بدون پین‌بار: رسیدن قیمت به کف/سقف رنج (لبه‌ها از کندل‌های تا i-1)
+        if entry == "touch":
+            rng = range_at(c, i - 1) if i > 0 else None
+            if rng is None:
+                continue
+            top, bot, length = rng
+            hit = walk(candle_path(o[i], h[i], l[i], c[i]), {"BUY": (bot, -1), "SELL": (top, 1)})
+            if not hit:
+                continue
+            name, price, rest = hit
+            setup = {"side": 1 if name == "BUY" else -1, "range_high": top, "range_low": bot, "range_bars": length}
+            events.append(ev("TRADE_PENDING", setup, i, price))
+            e = open_trade(setup, i, price=price, at=i)
+            events.append(e)
+            if open_t is not None:                     # بقیه‌ی همین کندل بعد از ورود
+                open_t.pop("_fresh", None)
+                exits(i, rest)
             continue
         # ۲) منتظر Key bar
         if pending is not None:

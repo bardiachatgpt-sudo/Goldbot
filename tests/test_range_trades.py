@@ -37,6 +37,32 @@ class TestRangeTrades(unittest.TestCase):
                 mock.patch.object(range_trades, "spread", lambda s: 0.1):
             return range_trades.run("XAUUSD", market(after), stop_from=stop_from, confirm=confirm)
 
+    def run_touch(self, after, stop_from="entry"):
+        with mock.patch.object(range_trades, "range_at", lambda c, t, window=500: self.RANGE), \
+                mock.patch.object(range_trades, "spread", lambda s: 0.1):
+            return range_trades.run("XAUUSD", market(after), stop_from=stop_from, entry="touch")
+
+    def test_touch_bottom_buys_at_the_edge_and_targets_the_top(self):
+        ev = self.run_touch([(100, 100.5, 95.5, 96.5), (96.5, 106.5, 96.4, 106.2)])
+        op = next(e for e in ev if e["kind"] == "TRADE_OPEN")
+        self.assertEqual(op["side"], 1)
+        self.assertAlmostEqual(op["entry"], 96.0 + 0.1)              # روی کف رنج + اسپرد
+        self.assertAlmostEqual(op["sl"], 96.1 - 5 - 0.1)             # نصف عرض رنج از ورود
+        self.assertAlmostEqual(op["tp"], 106.0)
+        cl = next(e for e in ev if e["kind"] == "TRADE_CLOSED")
+        self.assertEqual(cl["result"], "TP")
+        self.assertAlmostEqual(cl["r"], round((106.0 - 96.1) / 5.1, 2))
+
+    def test_touch_top_sells_and_same_candle_stop(self):
+        ev = self.run_touch([(103, 106.2, 102.9, 106.1), (106.1, 111.5, 106, 111)])
+        op = next(e for e in ev if e["kind"] == "TRADE_OPEN")
+        self.assertEqual(op["side"], -1)
+        self.assertAlmostEqual(op["entry"], 106.0)
+        self.assertAlmostEqual(op["sl"], 106.0 + 5 + 0.1)
+        cl = next(e for e in ev if e["kind"] == "TRADE_CLOSED")
+        self.assertEqual(cl["result"], "SL")
+        self.assertAlmostEqual(cl["r"], -1.0)
+
     def test_default_enters_on_the_candle_after_the_pin(self):
         ev = self.run_with([(102.0, 104.5, 101.5, 104.2), (104.2, 106.5, 104, 106.2)], confirm="none")
         op = next(e for e in ev if e["kind"] == "TRADE_OPEN")
@@ -83,12 +109,12 @@ class TestRangeTrades(unittest.TestCase):
                            "Close": mid}, index=pd.date_range("2026-11-02", periods=3500, freq="5min", tz="UTC"))
         res, err = backtest.run_days("XAUUSD", 5, m1=df, m5=df, tf=backtest.RANGE_TF)
         self.assertIsNone(err)
-        self.assertEqual(res["strategy"], "range3")
+        self.assertEqual(res["strategy"], "range3_touch")
         self.assertGreaterEqual((df.index < res["start"]).sum(), 500)      # ۵۰۰ کندل گرم شدن
         txt = backtest.report_text(res)
         self.assertIn("Range edges", txt)
         self.assertIn("Risk 2% per trade", txt)
-        self.assertEqual([c["strategy"] for c in res["compare"]], ["range3_edge", "range3_key"])
+        self.assertEqual([c["strategy"] for c in res["compare"]], ["range3_touch_edge", "range3"])
 
 
 if __name__ == "__main__":

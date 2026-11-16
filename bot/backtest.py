@@ -26,7 +26,7 @@ TF_PRESETS = {
     "5-1": (5, 1, "M5 → M1", (1, 3, 5, 10)),
     "15-3": (15, 3, "M15 → M3", (3, 5, 10, 20)),
     "60-5": (60, 5, "H1 → M5", (5, 10, 20, 40)),
-    "5r": (5, 5, "📦 M5 · Range edges (pin bar at top / bottom)", (5, 10)),
+    "5r": (5, 5, "📦 M5 · Range edges (buy the bottom / sell the top)", (5, 10)),
 }
 RANGE_TF = "5r"             # قاعده‌ی رنج کاربر: فقط M5
 LIVE_TF = "5-1"             # تنظیم ربات زنده
@@ -47,8 +47,10 @@ def to_m5(m1):
 
 STRATEGY_NAMES = {"pin": "Pin bar (M1)", "pin_wedge": "Pin bar + wedge confirmation",
                   "brooks": "Brooks (M5 signal bar)",
-                  "range3": "Range edges: pin bar → enter on the next candle, stop ½ range from entry, "
-                            "target the other edge",
+                  "range3_touch": "Range edges: price reaches the bottom → buy, the top → sell; "
+                                  "stop ½ range from entry, target the other edge",
+                  "range3_touch_edge": "Same, but stop ½ range beyond the range edge",
+                  "range3": "Same, but only after a pin bar (enter on the next candle)",
                   "range3_edge": "Same, but stop ½ range beyond the range edge",
                   "range3_key": "Same, but wait for a key bar after the pin bar"}
 
@@ -63,8 +65,9 @@ def run(sym, trig, ctx=None, start=None, ctx_min=5, trig_min=1, strategy=None):
         return run_pin(sym, trig, ctx, start, ctx_min, trig_min, wedge_filter=True)
     if strategy.startswith("range3"):
         from . import range_trades
-        return range_trades.run(sym, trig, start, "edge" if strategy == "range3_edge" else "entry",
-                                "key" if strategy == "range3_key" else "none"), None
+        return range_trades.run(sym, trig, start, "edge" if strategy.endswith("_edge") else "entry",
+                                "key" if strategy == "range3_key" else "none",
+                                "touch" if strategy.startswith("range3_touch") else "pin"), None
     return run_brooks(sym, trig, ctx, start, ctx_min, trig_min)
 
 
@@ -214,14 +217,14 @@ def run_days(sym, days, balance=DEFAULT_BALANCE, m1=None, m5=None, tf=LIVE_TF, p
     from .config import STRATEGY, WEDGE_FILTER
     strategy = strategy or STRATEGY
     if tf == RANGE_TF:
-        strategy = "range3"
+        strategy = "range3_touch"
     elif strategy == "pin" and WEDGE_FILTER:                            # همان چیزی که ربات زنده اجرا می‌کند
         strategy = "pin_wedge"
     events, _ = run(sym, m1, m5, start, ctx_min, trig_min, strategy)
     res = summary(sym, events, start, end, balance)
     if compare:                                                         # قاعده‌های دیگر روی همان داده
         res["compare"] = []
-        for other in (("range3_edge", "range3_key") if strategy.startswith("range3")
+        for other in (("range3_touch_edge", "range3") if strategy.startswith("range3")
                       else ("pin", "pin_wedge", "brooks")):
             if other == strategy:
                 continue
