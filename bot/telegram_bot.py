@@ -24,7 +24,10 @@ HELP = ("📐 This bot only draws market structure (spike / channel / trading ra
 
 
 class Telegram:
+    LOSER_BATCH = 5                     # عکس باخت‌ها ۵تا ۵تا
+
     def __init__(self, token):
+        self.losers = {}                # چت → (نماد، کندل‌ها، M5، معامله‌های بازنده) آخرین بک‌تست
         self.bot = telebot.TeleBot(token, parse_mode=None) if token else None
         if self.bot:
             self._register_handlers()
@@ -193,31 +196,50 @@ class Telegram:
         self.bot.send_message(chat_id, "🧪 More?", reply_markup=kb)
 
     def send_losing_trades(self, chat_id, sym, res, m5):
-        """عکس بزرگ‌نمایی‌شده‌ی هر معامله‌ای که حد ضرر خورد، با ساختار M5 همان لحظه، در آلبوم‌های ۱۰تایی."""
-        from .gap_pictures import caption, trade_picture
+        """معامله‌هایی که حد ضرر خوردند: اول ۵ عکس، بقیه با دکمه‌ی «۵تای بعدی»."""
         losers = [t for t in res["closed"] if t["r"] < 0]
         if not losers:
             return
-        self.bot.send_message(chat_id, f"🛑 {len(losers)} stopped-out trades: a zoomed picture of each one, "
-                                       f"with the M5 structure at the moment of entry (light-blue boxes).")
+        self.losers[chat_id] = (sym, res["candles"], m5, losers)
+        self.bot.send_message(chat_id, f"🛑 {len(losers)} stopped-out trades. Zoomed pictures with the M5 structure at "
+                                       f"the moment of entry, {self.LOSER_BATCH} at a time:")
+        self.send_loser_batch(chat_id, 0)
+
+    def send_loser_batch(self, chat_id, start):
+        """عکس معامله‌های بازنده‌ی start تا start+5 و دکمه‌ی ۵تای بعدی."""
+        from .gap_pictures import caption, trade_picture
+        saved = self.losers.get(chat_id)
+        if saved is None:
+            self.bot.send_message(chat_id, "⚠️ This backtest is no longer in memory (the bot restarted). "
+                                           "Run the backtest again.")
+            return
+        sym, candles, m5, losers = saved
+        batch = losers[start:start + self.LOSER_BATCH]
         media = []
-        for t in losers:
+        for t in batch:
             try:
-                png = trade_picture(sym, res["candles"], m5, t, t["num"])
+                png = trade_picture(sym, candles, m5, t, t["num"])
                 media.append(types.InputMediaPhoto(png, caption=caption(sym, t, t["num"])))
             except Exception as e:
                 print("loser picture error:", t.get("num"), e)
-        for j in range(0, len(media), 10):
-            for attempt in range(3):
-                try:
-                    self.bot.send_media_group(chat_id, media[j:j + 10])
-                    break
-                except Exception as e:                 # محدودیت تعداد پیام تلگرام (429): صبر و دوباره
-                    info = getattr(e, "result_json", None)
-                    params = info.get("parameters", {}) if isinstance(info, dict) else {}
-                    print("losing trades album error:", e)
-                    time.sleep(min(int(params.get("retry_after", 5)) + 1, 60))
-            time.sleep(2)
+        for attempt in range(3):
+            try:
+                if media:
+                    self.bot.send_media_group(chat_id, media)
+                break
+            except Exception as e:                     # محدودیت تعداد پیام تلگرام (429): صبر و دوباره
+                info = getattr(e, "result_json", None)
+                params = info.get("parameters", {}) if isinstance(info, dict) else {}
+                print("losing trades album error:", e)
+                time.sleep(min(int(params.get("retry_after", 5)) + 1, 60))
+        nxt = start + len(batch)
+        if nxt < len(losers):
+            kb = types.InlineKeyboardMarkup()
+            kb.add(types.InlineKeyboardButton(f"📷 Next {min(self.LOSER_BATCH, len(losers) - nxt)} stopped-out "
+                                              f"trades ({nxt} of {len(losers)} shown)", callback_data=f"sxl:{nxt}"))
+            self.bot.send_message(chat_id, f"🛑 {nxt} of {len(losers)} stopped-out trades shown.", reply_markup=kb)
+        else:
+            self.bot.send_message(chat_id, f"✅ All {len(losers)} stopped-out trades shown.")
 
 
     # ------------------------------------------------------------ دستورها
@@ -268,7 +290,10 @@ class Telegram:
             chat_id = c.message.chat.id
             action, _, rest = c.data.partition(":")
             sym, _, tf = rest.partition(":")
-            if action == "sxb" and sym in STRUCTURE_SYMBOLS and tf:
+            if action == "sxl":                                 # ۵ عکس باخت بعدی
+                bot.answer_callback_query(c.id)
+                self.send_loser_batch(chat_id, int(sym) if sym.isdigit() else 0)
+            elif action == "sxb" and sym in STRUCTURE_SYMBOLS and tf:
                 bot.answer_callback_query(c.id, f"Backtesting {sym}…")
                 self.send_gap_backtest(chat_id, sym, tf)
             elif action in ("sxb", "sxbp"):                     # انتخاب جفت / تایم‌فریم بک‌تست

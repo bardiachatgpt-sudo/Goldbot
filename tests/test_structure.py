@@ -351,10 +351,22 @@ class TestGapBacktest(unittest.TestCase):
         texts = [c.args[1] for c in tg.bot.send_message.call_args_list]
         report = next(t for t in texts if "GAP BACKTEST" in t)
         self.assertIn("(3 days)", report)                                           # فقط ۳ روز اخیر
-        albums = [len(c.args[1]) for c in tg.bot.send_media_group.call_args_list]
         losses = int(report.split("❌ ")[1].split(" ")[0])
-        self.assertEqual(sum(albums), losses)                                       # یک عکس برای هر باخت
-        self.assertTrue(all(a <= 10 for a in albums))
+        albums = [len(c.args[1]) for c in tg.bot.send_media_group.call_args_list]
+        self.assertEqual(albums, [min(5, losses)])                                  # اول فقط ۵ عکس
+        if losses > 5:
+            kb = tg.bot.send_message.call_args_list[-2].kwargs["reply_markup"]      # دکمه‌ی ۵تای بعدی
+            self.assertEqual(kb.keyboard[0][0].callback_data, "sxl:5")
+            with mock.patch.object(telegram_bot.time, "sleep"):
+                while True:
+                    shown = sum(len(c.args[1]) for c in tg.bot.send_media_group.call_args_list)
+                    if shown >= losses:
+                        break
+                    tg.send_loser_batch(7, shown)
+            albums = [len(c.args[1]) for c in tg.bot.send_media_group.call_args_list]
+            self.assertTrue(all(a <= 5 for a in albums))
+            self.assertEqual(sum(albums), losses)                                   # در آخر همه، یک عکس برای هر باخت
+            self.assertIn("All", tg.bot.send_message.call_args.args[1])
 
     def test_m5_filter_in_the_report(self):
         from bot import gap_backtest
