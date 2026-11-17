@@ -71,7 +71,7 @@ var is set on Render it overrides the default — it must then be changed there 
   Leg 2+ 38% −3R (L3+ ≈ 3 losses, 0–2 wins). Losers: stops < $2 (7 of 21), stops just beyond the M5 edge (5),
   sells in the lower half / buys in the upper half of an M5 range (7), late legs (3).
 
-- 16 Nov 16:30 → 17 Nov ~13:35 Tehran (since NY open, ~21 h, M5 filter, legs 1–2, setup 2 rule), from the live bot:
+- 16 Nov 16:30 → 17 Nov ~13:35 Tehran (since NY open, ~21 h, M5 filter, legs 1–2, with the setup 2 rule that was later removed), from the live bot:
   | pair | trades | win | R | old rule (fixed 1:1) | Leg 1 | Leg 2 | avg stop |
   | XAUUSD | 41 | 51% | +0.3 | 40, +0.0 | −3R | +3R | $3.38 |
   | USDJPY | 37 | 57% | +5.0 | 37, +5.0 | +9R | −4R | 4.3 pips |
@@ -86,13 +86,11 @@ var is set on Render it overrides the default — it must then be changed there 
   server time zone (GMT+2/+3), broker symbol names, digits. Plan: gold first to settle the format; build M5/M15 from
   M1; run the gap backtest here in the cloud session (no TradingView needed); report month by month and first vs
   second 3 months; optionally keep compressed copies in `data/` (repo should then be private).
-- **Same-direction gap during an open trade (rule given by the user, 17 Nov; not coded yet):** still ONE position, no
-  second trade. If the open trade is Leg 1 and a same-direction gap (Leg 2) forms and ITS entry triggers: the open
-  trade's TP moves to setup 2's TP (entry2 ± its own 1:1 risk). Only after price has gone at least HALF of setup 2's
-  profit (0.5R of setup 2, user confirmed) does the open trade's SL move to near entry2 (how near: proposed 1 pipette
-  beyond entry2, not confirmed yet). Open trade Leg 2 → the
-  new gap is Leg 3 → ignored. Assumed (to confirm): TP only moves farther, never closer; TP1 hit before entry2 → close.
-  Today gaps that form while a trade is open are not even detected (gap.trades skips them) — show/count them too.
+- **Setup 2 during an open trade — TRIED AND REMOVED (user, 17 Nov):** rule was: one position; a same-direction
+  Leg 2 gap during a Leg 1 trade, once its entry triggered, moved the TP to setup 2's TP, and after half of setup 2's
+  profit moved the SL to 1 pipette beyond entry2. Coded in 35b3a7f, deployed, one day on 3 pairs (table above), then
+  the user said "go back to the previous state" → reverted in 244ee0d (fixed 1:1 TP, gaps during an open trade are
+  ignored again). Do not bring it back unless the user asks; the code is in git history.
 - Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
 - In an M5 range: sell only in the upper half, buy only in the lower half; stop a little beyond the M5 edge.
 - Entry on candle 4 tends to be best (report by entry candle 4/5/6+).
