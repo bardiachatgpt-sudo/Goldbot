@@ -82,6 +82,15 @@ var is set on Render it overrides the default — it must then be changed there 
   Leg 2+ 38% −3R (L3+ ≈ 3 losses, 0–2 wins). Losers: stops < $2 (7 of 21), stops just beyond the M5 edge (5),
   sells in the lower half / buys in the upper half of an M5 range (7), late legs (3).
 
+- 16 Nov 16:30 → 17 Nov ~13:35 Tehran (since NY open, ~21 h, M5 filter, legs 1–2, setup 2 rule), from the live bot:
+  | pair | trades | win | R | old rule (fixed 1:1) | Leg 1 | Leg 2 | avg stop |
+  | XAUUSD | 41 | 51% | +0.3 | 40, +0.0 | −3R | +3R | $3.38 |
+  | USDJPY | 37 | 57% | +5.0 | 37, +5.0 | +9R | −4R | 4.3 pips |
+  | EURUSD | 46 | 57% | +6.6 | 44, +8.0 | +7R | 0R | 2.4 pips |
+  Setup 2 happened 1 / 1 / 3 times (+0.26R; −1R; +1.6R). Leg and session effects flip between pairs → no rule
+  change from one day. Spread kills it on FX: EURUSD stop 2.4 pips (1 pip spread ≈ 0.4R per trade), USDJPY 4.3 pips;
+  gold ≈ 0.07R per trade. Waiting for the 6-month broker CSVs.
+
 ## Ideas for later (do NOT code until the user asks)
 - Broker data (planned, user will send later): ~6 months of M1 CSV per pair exported from their broker
   (MT5 Symbols → Bars → Export preferred; keep the Spread column but do not use it yet). Needed from the user: broker
