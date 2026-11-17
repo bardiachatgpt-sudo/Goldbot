@@ -208,3 +208,19 @@ closed at each entry). Same data without it:
 | USDJPY | 4,088 trades, 47.4%, −214R (1,795 gaps rejected by M5) | 4,342 trades, 48.1%, −162R |
 | EURUSD | 3,967 trades, 45.8%, −331R (2,042 rejected by M5) | 4,359 trades, 47.2%, −243R |
 → The M5 filter (1:1 target must be inside the M5 box) makes results WORSE on both pairs over 5½ months.
+
+### Filter search: can the losing situations be filtered out in advance? (17 Nov)
+Base: broker data, current rules WITHOUT the M5 filter (it was worse), no Off. 18 features measured only from candles
+closed before the entry: tr15/30/60 (move in trade direction / ATR), er15/30/60 (straightness), mv10, bigbar,
+stop/ATR, gap height/ATR, candle-1 range/ATR, pos60 (place in the 60-bar range, 1 = good edge), room60 (room to the
+60-bar extreme in R), ATR vs its 60-bar median, entry candle, leg, side, hour. Learned on 15 Jan–31 Mar, checked on
+1 Apr–17 Jun (never used for choosing).
+- USDJPY: train 2,169 trades 47.2% −123R; test 1,865 trades 49.2% −31R. The worst train buckets mostly did NOT stay
+  bad (e.g. small candle 1: 41% train → 52% test). Held in both: tiny gap (gap ≤ 0.2 ATR) 44.5%/44.5%; big 60-bar
+  move in the trade direction (tr60 > 2) 45.5%/45.5%; very straight last 30 bars (er30 > 0.29) 46%/45%. Best kept set
+  (skip gap ≤ 0.58 ATR): test 756 trades, 49.6%, −6R — about break-even BEFORE spread/commission.
+- EURUSD: train 46.9% −124R; test 48.2% −70R. Fairly consistent: entry on candle 4 (first candle after the gap)
+  44%/47%. Best train rule (skip tr30 ≤ 2.4) → test 47.4%, −42R. No profitable subset.
+→ With these measurable features, losing trades cannot be filtered out well enough: the best honest result is about
+  50% at 1:1 (break-even before costs). The patterns seen by eye do not survive as rules. Next idea must change the
+  setup itself (exit / target, entry, higher-timeframe direction), or another market (gold).
