@@ -12,6 +12,8 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
   (`git fetch --depth=50 origin main && git merge-base --is-ancestor origin/main HEAD && git push origin <branch>:main`);
   Render auto-deploys from `main` (3–5 min). A few Telegram 409 lines during a deploy are normal.
 - Be honest about results (small samples, no spread, look-ahead). Ideas the user rejected stay rejected.
+- **Data files the user sends (CSV etc.): just keep them. Do NOT run a backtest or analysis until the user asks**
+  (17 Nov: "I don't want a backtest now, just keep these until I tell you").
 
 ## What the bot does now
 Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs). No alerts, no channel
