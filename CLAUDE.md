@@ -131,6 +131,8 @@ var is set on Render it overrides the default — it must then be changed there 
   pictures), `bot/mtf.py` (M1 + M5 picture), `bot/structure3.py`, `bot/structure.py`, `bot/data.py` (TradingView
   candles), `bot/config.py` (symbols, timeframes, sessions), `bot/main.py`.
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
+- `data/` — the user's broker CSVs (gzip), list in `data/README.md`. Keep every file the user sends there; do not
+  analyse until asked. The repo should be private (user confirmed, 17 Nov).
 - Tests: `python -m unittest discover -s tests` (all in `tests/test_structure.py`).
 - Old features (alerts, pin-bar/range setups, MACD, range backtest) were removed on purpose; in git history before 678dacb.
 
