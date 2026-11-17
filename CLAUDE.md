@@ -98,8 +98,13 @@ var is set on Render it overrides the default — it must then be changed there 
 
 ## Ideas for later (do NOT code until the user asks)
 - **`HYPOTHESES.md`** — parked hypotheses, kept apart at the user's request ("keep it separately until I say").
-  H1: win/loss sequence on EURUSD (after a win next trade 44%, after a loss 75%) → "wait after a win?". Use only
-  when the user asks.
+  H1: win/loss sequence on EURUSD (after a win next trade 44%, after a loss 75%) → "wait after a win?".
+  H2 (USDJPY only, 15 Jan broker data): losses = tight M1 range, selling the low after a climax, against the M1 trend,
+  selling before the range top; wins = sell at the M5 range top, big Tokyo swings, with the M5 channel.
+  Use only when the user asks.
+- **Day-by-day review of USDJPY broker data (user's request, 17 Nov):** started at Thu 15 Jan 2026 (2–14 Jan only
+  warm up the M5 structure). Next: Fri 16 Jan when the user says "روز بعد". Per day: summary, table of trades
+  (day number / backtest number), two overview pictures (Tokyo; London+NY), reasons for losses and wins.
 - Broker data (planned, user will send later): ~6 months of M1 CSV per pair exported from their broker
   (MT5 Symbols → Bars → Export preferred; keep the Spread column but do not use it yet). Needed from the user: broker
   server time zone (GMT+2/+3), broker symbol names, digits. Plan: gold first to settle the format; build M5/M15 from

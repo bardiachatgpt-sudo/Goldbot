@@ -35,3 +35,33 @@ How to use when asked: add report lines only (win % after a win / after a loss; 
 previous trade; time since previous exit < 5 / 5–15 / > 15 min), check on gold, USDJPY, EURUSD over several days and
 on the 6-month broker CSVs. Only if it repeats, test a rule ("skip / wait N minutes after a win") against the
 current one.
+
+## H2 · USDJPY behaviour: why gap trades lose / win (17 Nov, from the user's broker data) — **USDJPY only**
+Applies to **USDJPY** (yen) behaviour; not checked on gold or EURUSD — do not assume it holds there.
+Source: `data/USDJPY_M1_…csv.gz`, Thu 15 Jan 2026 (server day), current bot rules (M5 filter with full 500-bar M5
+history from 2 Jan, legs 1–2, no Off session, fixed 1:1). 30 trades, 17 wins, +4R (day numbers 1–30 = backtest
+#304–#333). Tokyo 12/18 +6R, London 0/2, London+NY 2/6, NY 3/4. Spread 0.1 pip almost all day.
+
+Plain numbers did NOT separate winners from losers that day: stop 5.5 vs 5.0 pips, place in the M5 box 77 vs 80
+(0 = bottom, 100 = top), entry candle 4/5/6+ and minutes since the previous trade about the same. The M5 box was
+45–65 pips tall vs stops of 2–5 pips, so the M5 filter rejected almost nothing (the 1:1 target was always inside).
+What differed was the **M1 context** (read from pictures):
+
+Losses:
+- **H2a · tight M1 range:** gaps inside a small M1 range between nearby highs/lows are small breakouts that fail;
+  buys and sells alternate and all lose (#9–#12 07:00–07:40, #20–#23 15:40–16:50 Tehran).
+- **H2b · selling the low right after a climax:** a sell gap at the bottom right after a sharp spike down → the
+  market reverses (#6 05:11, #19 12:57 after the big 12:44 bar; the afternoon then turned into a bull channel).
+- **H2c · against the M1 trend:** sells during the afternoon M1 bull channel 158.35 → 158.88 lost (#21, #22, #24).
+- **H2d · selling before the range top is reached:** #13 sold under the range top (158.63); price tagged the top,
+  stopped it, and #14 then sold the top and won.
+
+Wins:
+- **H2e · sell at the top of the M5 range** (price tagged the edge and turned): #8, #14, #15, #17.
+- **H2f · big swings inside the Tokyo range** with room for 1:1 (20–30-pip swings): #2–#5, #7.
+- **H2g · with the M5 channel:** in the late M5 bear channel, sells won 4 of 5 (#26, #28–#30).
+
+One day only. To use when the user asks: check the same patterns day by day on USDJPY; candidates to measure
+later are an "M1 range width / recent swing size" measure (H2a, H2f), "bars since a climactic spike" (H2b), M1 trend
+direction (H2c), and distance to the M5 edge in pips rather than as % of a huge box (H2d, H2e).
+Pictures were made in the session scratchpad (overview: M1 candles + M5 box edges at each moment + numbered trades).
