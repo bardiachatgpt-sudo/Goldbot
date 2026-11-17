@@ -81,6 +81,9 @@ var is set on Render it overrides the default — it must then be changed there 
   gold ≈ 0.07R per trade. Waiting for the 6-month broker CSVs.
 
 ## Ideas for later (do NOT code until the user asks)
+- **`HYPOTHESES.md`** — parked hypotheses, kept apart at the user's request ("keep it separately until I say").
+  H1: win/loss sequence on EURUSD (after a win next trade 44%, after a loss 75%) → "wait after a win?". Use only
+  when the user asks.
 - Broker data (planned, user will send later): ~6 months of M1 CSV per pair exported from their broker
   (MT5 Symbols → Bars → Export preferred; keep the Spread column but do not use it yet). Needed from the user: broker
   server time zone (GMT+2/+3), broker symbol names, digits. Plan: gold first to settle the format; build M5/M15 from
@@ -115,6 +118,7 @@ var is set on Render it overrides the default — it must then be changed there 
 - `bot/gap.py` (setup), `bot/gap_backtest.py` (backtest, reports, all-pairs table), `bot/gap_pictures.py` (loser
   pictures), `bot/mtf.py` (M1 + M5 picture), `bot/structure3.py`, `bot/structure.py`, `bot/data.py` (TradingView
   candles), `bot/config.py` (symbols, timeframes, sessions), `bot/main.py`.
+- `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
 - Tests: `python -m unittest discover -s tests` (all in `tests/test_structure.py`).
 - Old features (alerts, pin-bar/range setups, MACD, range backtest) were removed on purpose; in git history before 678dacb.
 
