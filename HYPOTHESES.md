@@ -78,3 +78,19 @@ separate wins and losses (stop 4.7 vs 4.4 pips; entry candle not consistent with
   direction at the extreme lost: #30 sell at the 20:15 low, #32–#33 buys late in the 21:30–22:30 rally.
 - **New · H2h Tokyo vs London:** Tokyo was best both days (12/18, then 9/13); the London open part was weak both
   days (day 1 London + London/NY 2/8; day 2 Tokyo+London + London 3/11).
+
+### H2 · day 3 — Mon 19 Jan 2026 (backtest #368–#406): 39 trades, 17 wins, −5R
+Tokyo 4/12 −4R · Tokyo+London 2/2 +2R · London 5/9 +1R · London+NY 4/12 −4R · NY 2/4 0R.
+- **H2c against the M1 trend — repeated a third time, strongest pattern:** #2 (buy in the 04:00–05:00 fall),
+  #3–#4 (sells in the 05:00–06:15 rally), #16–#17 (buys in the 13:20–14:20 fall), #30–#34 (five sells in the
+  18:50–20:00 rally): 10 losses out of 10.
+- **H2a tight M1 range — repeated:** 06:30–08:30 chop 157.80–157.92 (#6–#8 lost), 09:30–10:20 (#10–#11 lost),
+  17:00–18:10 chop 157.87–157.95 (#26–#28 lost).
+- **H2b fade the climax — repeated:** #1 sell after the 03:45 spike up won; #18 and #29 buys at the bottom after a
+  fall won.
+- **H2h Tokyo best — NOT repeated:** Tokyo 4/12 this day (choppy ranges + against-trend gaps). Treat as unproven.
+- Stops ≤ 2 pips: 4 wins / 10 losses this day, 29% over the 3 days — but over all Jan 15 → Jun 17 trades the
+  ≤ 2-pip bucket wins 47%, same as every other bucket, so stop size alone is NOT the reason.
+
+Summary after 3 days: the two patterns that repeated every day are **H2c (gap against the M1 trend loses)** and
+**H2a (gaps inside a tight M1 range lose)**, plus **H2b (fading a climax wins)**. Session effects did not hold.
