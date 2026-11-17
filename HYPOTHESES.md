@@ -269,3 +269,15 @@ median, entry on candle 4, leg 2, sell, hour). Fitted on Jan–Mar, tested on Ap
   Largest weights: gap/ATR + (bigger gaps better), tr15 +, ATR-above-normal +, bigbar −, tr30 −.
 → The regression finds only a very weak signal: best out-of-sample ≈ 50–52% at 1:1, i.e. about +0.02–0.05R per trade
   before costs, which the spread (≈0.03–0.12R per trade) and commission eat. Consistent with the earlier tests.
+
+### Ricci curvature / Poincaré-style topology features on EURUSD (17 Nov, user's idea)
+From the 60 M1 closes before each entry (past only), numpy only (no scipy/TDA libraries in the session):
+Forman–Ricci curvature (augmented, F(e)=4−deg(u)−deg(v)+3·triangles) of the natural visibility graph of the price
+path (`ricci_vg`) and of a 5-NN graph of the 3-D delay embedding of returns (`ricci_knn`); 0-dim persistent homology of
+the path (sublevel + superlevel): total persistence / range (`tp0`) and number of features living > 20% of the range
+(`n_holes`). Same train Jan–Mar / test Apr–Jun, no M5 filter, no Off, 4,359 trades.
+- Quintile buckets: none consistent (e.g. n_holes 6–8: 53.9% train → 48.9% test; tp0 top fifth 49.6% → 43.4%).
+- Logistic regression with ONLY these 4: AUC train 0.52, **test 0.50** (coin flip); top-scored trades 47–49% in test.
+- Added to the 19 earlier features: test AUC 0.513 (vs 0.52 without) — no improvement.
+→ The Ricci / topology view of the last hour of price does not predict which gap trades win on EURUSD M1. (Its known
+  use in finance is market-wide fragility across many assets over days/weeks, not single M1 entries.)
