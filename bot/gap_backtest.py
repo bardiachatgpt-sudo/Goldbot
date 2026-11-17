@@ -58,6 +58,15 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True):
     closed = [t for t in all_t if t.get("exit_i") is not None]
     for k, t in enumerate(closed, 1):
         t["num"] = k
+        t["gap_times"] = (idx[t["gap"][0]], idx[t["gap"][1]])
+    if m5 is not None and len(m5) >= 100:                 # ساختار M5 در لحظه‌ی ورود هر معامله
+        from .gap_pictures import m5_at
+        from .structure3 import NAMES, segment
+        for t in closed:
+            w5 = m5_at(m5, t["entry_time"])
+            if len(w5) >= 100:
+                ph = segment(w5["Close"].values.astype(float))[0][-1]
+                t["m5_state"] = NAMES[(ph["type"], ph["side"])]
     wins = [t for t in closed if t["r"] > 0]
     res = {"sym": sym, "tf": BT_TIMEFRAMES.get(tf, tf), "start": idx[0], "end": idx[-1] + step, "bars": len(m1),
            "closed": closed, "trades": len(closed), "wins": len(wins), "losses": len(closed) - len(wins),
@@ -132,6 +141,32 @@ def report_text(res, decimals=2, shown=25):
     lines.append(f"<i>No spread, commission or slippage. Inside each {tfn} candle the order of prices comes from the "
                  "candle shape, so live results can differ. Past results do not predict the future.</i>")
     return "\n".join(lines)
+
+
+def losers_text(res, decimals=2, limit=3900):
+    """فهرست همه‌ی معامله‌هایی که حد ضرر خوردند، با شماره‌ی عکس؛ چند پیام اگر طولانی باشد."""
+    p = lambda x: f"{x:.{decimals}f}"
+    tz = lambda ts: ts.tz_convert(TEHRAN)
+    losers = [t for t in res["closed"] if t["r"] < 0]
+    if not losers:
+        return []
+    head = (f"🛑 <b>Stopped-out trades · {res['sym']} {res.get('tf', 'M1')}</b> ({len(losers)}) · "
+            f"#number = picture number · Tehran time")
+    rows = []
+    for t in losers:
+        g1, g3 = t["gap_times"]
+        rows.append(f"#{t['num']} · {tz(t['entry_time']):%d %b %H:%M} · {'SELL' if t['side'] < 0 else 'BUY'} · "
+                    f"L{t.get('leg', '?')} · gap {tz(g1):%H:%M}–{tz(g3):%H:%M} · entry {p(t['entry'])} · "
+                    f"SL {p(t['sl'])} · TP {p(t['tp'])} · exit {tz(t['exit_time']):%H:%M}"
+                    + (f" · M5: {t['m5_state']}" if t.get("m5_state") else ""))
+    out, cur = [], head
+    for r in rows:
+        if len(cur) + len(r) + 1 > limit:
+            out.append(cur)
+            cur = "🛑 (continued)"
+        cur += "\n" + r
+    out.append(cur)
+    return out
 
 
 def equity_chart(res):

@@ -63,6 +63,9 @@ on purpose; they are in git history before commit 678dacb if ever needed).
     move starts at the highest high since the last buy gap; Leg 1 = no earlier sell gap in this move, Leg 2 = one
     before, etc. (gap.gap_heads / gap.leg_number; chained gaps count once). Shown in pictures, captions, the trade
     list and a Leg 1 vs Leg 2+ line in the report. Label only — no filter yet.
+  - After the report, a full list of the stopped-out trades is sent (gap_backtest.losers_text), one line each:
+    `#num · time · SELL/BUY · L<leg> · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`. #num = the picture
+    number. The user will send pictures + this list; use them to find each trade.
   - Idea to discuss later (do NOT code until the user brings it up): the user notices the best setups, when inside
     the structure, usually enter on candle 4 (right after the gap). Possible later: report results by entry candle
     (4 / 5 / 6+) and an "entry on candle 4 only" comparison; maybe require the entry inside the M5 box.

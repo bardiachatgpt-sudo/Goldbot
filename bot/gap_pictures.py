@@ -153,4 +153,6 @@ def caption(sym, t, num):
            f"TP {fmt_price(sym, t['tp'])}")
     if t.get("r") is not None:
         out += f" → {'🏆' if t['r'] > 0 else '🛑'} {t['r']:+g}R"
+    if t.get("m5_state"):
+        out += f" · M5: {t['m5_state']}"
     return out

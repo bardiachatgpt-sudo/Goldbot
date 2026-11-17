@@ -403,6 +403,13 @@ class TestGapBacktest(unittest.TestCase):
         self.assertIn("Same data without the M5 filter", txt)
         self.assertIn("Leg 1", txt)
         self.assertIn("Leg 2+", txt)
+        parts = gap_backtest.losers_text(res)                                       # همه‌ی باخت‌ها با شماره‌ی عکس
+        body = "\n".join(parts)
+        for t in res["closed"]:
+            if t["r"] < 0:
+                self.assertIn(f"#{t['num']} ·", body)
+        self.assertTrue(all(len(x) < 4096 for x in parts))
+        self.assertIn("M5:", body)
 
     def test_trade_picture(self):
         from bot import gap_backtest

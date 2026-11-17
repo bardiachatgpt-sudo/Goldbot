@@ -191,6 +191,9 @@ class Telegram:
         except Exception as e:
             print("gap backtest chart error:", e)
         self.bot.send_message(chat_id, text, parse_mode="HTML")
+        from .gap_backtest import losers_text
+        for part in losers_text(res, dec):              # فهرست کامل باخت‌ها با شماره‌ی عکس
+            self.bot.send_message(chat_id, part, parse_mode="HTML")
         if tf == "1":
             self.send_losing_trades(chat_id, sym, res, m5)
         self.bot.send_message(chat_id, "🧪 More?", reply_markup=kb)
