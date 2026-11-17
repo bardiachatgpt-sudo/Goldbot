@@ -66,6 +66,13 @@ on purpose; they are in git history before commit 678dacb if ever needed).
   - After the report, a full list of the stopped-out trades is sent (gap_backtest.losers_text), one line each:
     `#num · time · SELL/BUY · L<leg> · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`. #num = the picture
     number. The user will send pictures + this list; use them to find each trade.
+  - Later (user will say when; do NOT code yet): (1) facts from the 16–17 Nov M1 run: Leg 1 50% 0R, Leg 2+ 38% −3R;
+    L3+ looked bad (user: "take Leg 1–2 at most"); stops < $2 lost often; stops just beyond the M5 edges got hit;
+    the "3 days" counted Sunday (fix: count only days with several hours of candles). (2) The user does NOT want a
+    sell-stop entry. Wanted later: a LIVE simulator on the bot that follows bid/ask ticks — after price trades above
+    the previous high, follow it up and sell the moment it turns down (buy: mirror). Forward paper-trading only (no
+    tick history); check whether TradingView quotes give bid/ask for gold; define "turn" (cents / ATR / micro lower
+    high); needs the Render service always on.
   - Idea to discuss later (do NOT code until the user brings it up): the user notices the best setups, when inside
     the structure, usually enter on candle 4 (right after the gap). Possible later: report results by entry candle
     (4 / 5 / 6+) and an "entry on candle 4 only" comparison; maybe require the entry inside the M5 box.
