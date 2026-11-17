@@ -19,15 +19,12 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
 Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts).
 No channel posts, no live trading.
 - **🔔 Gold gap alerts** (17 Nov, `bot/gap_alerts.py`, button or `/alerts [on|off]`): a thread polls TradingView every
-  15 s (XAUUSD M1, 300 bars incl. the forming candle) only while at least one chat is subscribed. Every gold M1 gap
-  (same `find_gap` rule, ALL legs, NO M5 filter — user's choice; NOT in the Off session: a gap formed there, or an
-  entry hit there, sends nothing) → a picture when candle 3
-  closes (last 60 M1 candles + the M5 structure boxes of that moment from 600 closed M5 candles fetched at alert time,
-  drawn with `gap_pictures.draw_m5`; gap box, entry level = previous high + 1 pipette / low − 1, SL behind candle 1,
-  1:1 TP) with a caption (side, leg, session, M5 state, Tehran time). Look (user, 17 Nov): bullish candles white,
-  bearish black (black outline), light-blue background #E8F2FD, M5 box a bit darker #D2E4F8. When price trades beyond the level (checked on the forming candle and
-  on any closed candle missed between polls) → short "✅ Entry hit" message with entry / SL / TP. Chained gaps behind
-  the first one get no alert; a new separate or opposite gap replaces the waiting one. Subscribers: env
+  15 s (XAUUSD M1, 300 bars) only while at least one chat is subscribed. Every gold M1 gap (same `find_gap` rule, ALL
+  legs, NO M5 filter, not in the Off session) → ONE picture when candle 3 closes: last 60 M1 candles + the M5 structure
+  boxes of that moment (600 closed M5 candles fetched at alert time, `gap_pictures.draw_m5`) + the gap box; caption =
+  side, leg, session, M5 state, Tehran time, gap range. **Only the gap — no entry, SL, TP or "entry hit" message**
+  (user: "entry is not part of the setup, I only want the gap"). Chained gaps behind the first one get no alert. Look:
+  bullish candles white, bearish black, light-blue background #E8F2FD, M5 box #D2E4F8. Subscribers: env
   `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again).
 - Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in

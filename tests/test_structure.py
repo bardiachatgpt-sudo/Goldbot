@@ -554,7 +554,7 @@ class TestGapAlerts(unittest.TestCase):
         return pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c},
                             index=pd.date_range("2026-11-16 10:00", periods=len(rows), freq="1min", tz="UTC"))
 
-    def test_gap_picture_then_entry_message(self):
+    def test_gap_picture_only(self):
         from bot.gap_alerts import GapAlerter
         rows = self.FLAT + self.SELL
         a = GapAlerter("XAUUSD")
@@ -562,17 +562,14 @@ class TestGapAlerts(unittest.TestCase):
         ev = a.poll(self.frame(rows[:39]))                                # کندل ۳ بسته شد (۳۸)، ۳۹ در حال تشکیل
         self.assertEqual([k for k, _ in ev], ["gap"])
         g = ev[0][1]
-        self.assertEqual((g["side"], g["sl"], g["level"]), (-1, 4011.01, 4005.01))
-        self.assertIn("SELL gap", a.gap_caption(g))
+        self.assertEqual((g["side"], g["gap_hi"], g["gap_lo"]), (-1, 4008, 4005))
+        cap = a.gap_caption(g)
+        self.assertIn("SELL gap", cap)
+        self.assertNotIn("Entry", cap)
+        self.assertNotIn("SL", cap)
         self.assertEqual(a.picture(g)[:4], b"\x89PNG")
-        self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: چیزی تکراری نیست
-        ev = a.poll(self.frame(rows[:40]))                                # در حال تشکیل: سقف 4002.5 > 4002.01
-        self.assertEqual([k for k, _ in ev], ["entry"])
-        e = ev[0][1]
-        self.assertAlmostEqual(e["entry"], 4002.01)
-        self.assertAlmostEqual(e["tp"], 4002.01 - (4011.01 - 4002.01))
-        self.assertIn("Entry hit", a.entry_text(e))
-        self.assertEqual(a.poll(self.frame(rows[:40] + [(4002.2, 4003, 3990, 3991)])), [])   # گپ تمام شده
+        self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: تکراری نیست
+        self.assertEqual(a.poll(self.frame(rows[:41])), [])               # بعدش: پیام ورود نیست
 
     def test_no_alerts_in_the_off_session(self):
         from bot.gap_alerts import GapAlerter
@@ -596,9 +593,9 @@ class TestGapAlerts(unittest.TestCase):
         a = GapAlerter("XAUUSD")
         tg.alert_tick(a, self.frame(rows[:36]))
         tg.alert_tick(a, self.frame(rows[:39]))
-        tg.alert_tick(a, self.frame(rows[:40]))
+        tg.alert_tick(a, self.frame(rows[:41]))
         self.assertEqual(tg.bot.send_photo.call_count, 1)
-        self.assertIn("Entry hit", tg.bot.send_message.call_args.args[1])
+        self.assertNotIn("Entry", str(tg.bot.send_message.call_args_list[1:]))
         with mock.patch.object(telegram_bot, "ALERT_FILE", os.devnull):
             tg.toggle_alerts(7)
         self.assertNotIn(7, tg.alert_chats)

@@ -1,13 +1,9 @@
-"""هشدار زنده‌ی گپ طلا روی M1 (تلگرام، با عکس).
+"""هشدار زنده‌ی گپ طلا روی M1 (تلگرام، با عکس) — فقط خود گپ.
 
-هر ~۱۵ ثانیه کندل‌های M1 طلا از TradingView (همراه کندل در حال تشکیل) گرفته می‌شود.
-- با بسته شدن کندل ۳ هر گپ (همان قاعده‌ی gap.find_gap: سه کندل هم‌رنگ، کف ۱ > سقف ۳ برای فروش) یک عکس فرستاده
-  می‌شود: جعبه‌ی گپ، سطح ورود فعلی (سقف/کف کندل قبلی ± ۱ پیپت)، حد ضرر پشت کندل ۱ و حد سود ۱:۱.
-  همه‌ی گپ‌ها (همه‌ی لگ‌ها، بدون فیلتر M5) — خواست کاربر، ۱۷ نوامبر — ولی نه در سشن Off (بیرون توکیو/لندن/
-  نیویورک): گپی که آنجا تشکیل شود یا ورودش آنجا بخورد پیامی ندارد.
-  گپ‌های زنجیره‌ای پشت گپ اول (۲-۳-۴ …) هشدار جدا ندارند؛ گپ جدا یا خلاف جهت جای قبلی را می‌گیرد.
-- وقتی قیمت (حتی وسط کندل در حال تشکیل) ۱ پیپت از سقف کندل قبلی بالاتر برود (خرید: پایین‌تر از کف)، پیام کوتاه
-  «ورود خورد» با ورود، حد ضرر و حد سود ۱:۱. بعد از آن، آن گپ تمام است.
+هر ~۱۵ ثانیه کندل‌های M1 طلا از TradingView گرفته می‌شود. با بسته شدن کندل ۳ هر گپ (همان قاعده‌ی gap.find_gap:
+سه کندل هم‌رنگ، کف ۱ > سقف ۳ برای فروش) یک عکس فرستاده می‌شود: ۶۰ کندل M1، جعبه‌ی گپ، و ساختار M5 همان لحظه.
+ورود، حد ضرر و حد سود نشان داده نمی‌شوند (کاربر، ۱۷ نوامبر: «فقط گپ را می‌خواهم»).
+همه‌ی گپ‌ها (همه‌ی لگ‌ها، بدون فیلتر M5)، ولی نه در سشن Off. گپ‌های زنجیره‌ای پشت گپ اول (۲-۳-۴ …) هشدار جدا ندارند.
 """
 import io
 
@@ -15,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 from .config import TEHRAN, session_of
-from .gap import _r, find_gap, gap_heads, leg_number, pip
+from .gap import find_gap, gap_heads, leg_number
 
 ALERT_SYMBOL = "XAUUSD"
 PICTURE_BARS = 60
@@ -27,19 +23,18 @@ UP_FACE, DOWN_FACE, EDGE = "white", "black", "black"   # صعودی سفید، �
 class GapAlerter:
     def __init__(self, sym=ALERT_SYMBOL):
         self.sym = sym
-        self.pp = pip(sym)
         self.last_closed = None        # زمان آخرین کندل بسته‌شده‌ای که بررسی شد
-        self.pending = None            # گپ در انتظار ورود
+        self.last = None               # آخرین گپ (برای تشخیص زنجیره)
 
     def _fmt(self, x):
         return f"{x:.2f}" if self.sym == "XAUUSD" else f"{x:.5f}"
 
     def poll(self, df):
-        """df: کندل‌های M1 (Open/High/Low/Close، زمان = شروع کندل)، ردیف آخر = کندل در حال تشکیل.
-        خروجی: فهرست رویدادها [("gap", dict) | ("entry", dict)] به ترتیب."""
+        """df: کندل‌های M1 (Open/High/Low/Close، زمان = شروع کندل)، ردیف آخر = کندل در حال تشکیل (نادیده).
+        خروجی: فهرست گپ‌های تازه [("gap", dict)] به ترتیب."""
         if df is None or len(df) < 30:
             return []
-        closed, live = df.iloc[:-1], df.iloc[-1]
+        closed = df.iloc[:-1]
         o, h, l, c = (closed[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
         t = closed.index
         events = []
@@ -49,78 +44,28 @@ class GapAlerter:
         new = np.where(t > self.last_closed)[0]
         heads = gap_heads(o, h, l, c) if len(new) else None
         for i in new:                                      # کندل‌های تازه بسته‌شده، به ترتیب
-            ev = self._entry_on_closed(i, h, l, t)
-            if ev:
-                events.append(ev)
             side, zone = find_gap(o, h, l, c, i)
             if not side:
                 continue
-            p = self.pending
+            p = self.last
             if p is not None and p["side"] == side and t[i - 2] <= p["chain"]:
                 p["chain"] = t[i]                          # زنجیره‌ی همان گپ: هشدار جدا ندارد
                 continue
-            sl = _r(h[i - 2] + self.pp if side < 0 else l[i - 2] - self.pp)
-            self.pending = p = {"side": side, "t1": t[i - 2], "t3": t[i], "chain": t[i], "gap_hi": zone[0],
-                                "gap_lo": zone[1], "sl": sl, "leg": leg_number(heads, h, l, i - 2, side),
-                                "session": session_of(t[i])}
-            if p["session"] != "Off":                      # سشن Off: هشدار نمی‌دهد (کاربر آنجا معامله نمی‌کند)
-                events.append(("gap", dict(p, level=self._level(i, h, l), window=closed.tail(PICTURE_BARS))))
+            self.last = p = {"side": side, "t1": t[i - 2], "t3": t[i], "chain": t[i], "gap_hi": zone[0],
+                             "gap_lo": zone[1], "leg": leg_number(heads, h, l, i - 2, side),
+                             "session": session_of(t[i])}
+            if p["session"] != "Off":                      # سشن Off: هشدار نمی‌دهد
+                events.append(("gap", dict(p, window=closed.tail(PICTURE_BARS))))
         self.last_closed = t[-1]
-        ev = self._entry_live(live, h, l)                  # کندل در حال تشکیل
-        if ev:
-            events.append(ev)
         return events
 
-    def _level(self, i, h, l):
-        """سطح ورود برای کندل بعد از i: سقف کندل i + ۱ پیپت (فروش) / کف − ۱ پیپت (خرید)."""
-        return _r(h[i] + self.pp if self.pending["side"] < 0 else l[i] - self.pp)
-
-    def _entry(self, level, when):
-        p, s = self.pending, self.pending["side"]
-        risk = abs(p["sl"] - level)
-        self.pending = None
-        if risk <= 0 or (p["sl"] - level) * s > 0:         # ورود آن طرف حد ضرر: معامله نیست
-            return None
-        if p["session"] == "Off" or session_of(when) == "Off":   # گپ یا ورود در سشن Off: پیام نمی‌دهد
-            return None
-        return ("entry", dict(p, entry=level, tp=_r(level + s * risk), risk=risk, when=when))
-
-    def _entry_on_closed(self, i, h, l, t):
-        """کندل i (تازه بسته شده) از سطح کندل قبلش رد شده؟ (اگر بین دو بار گرفتن داده جا مانده باشد)"""
-        p = self.pending
-        if p is None or t[i] <= p["t3"] or i < 1:
-            return None
-        lvl = _r(h[i - 1] + self.pp if p["side"] < 0 else l[i - 1] - self.pp)
-        hit = h[i] >= lvl if p["side"] < 0 else l[i] <= lvl
-        return self._entry(lvl, t[i]) if hit else None
-
-    def _entry_live(self, live, h, l):
-        p = self.pending
-        if p is None or live.name <= p["t3"]:
-            return None
-        lvl = _r(h[-1] + self.pp if p["side"] < 0 else l[-1] - self.pp)
-        hit = float(live["High"]) >= lvl if p["side"] < 0 else float(live["Low"]) <= lvl
-        return self._entry(lvl, live.name) if hit else None
-
-    # ------------------------------------------------------------ پیام‌ها
+    # ------------------------------------------------------------ پیام
     def gap_caption(self, g):
         s = g["side"]
         m5 = f" · M5: {g['m5_state']}" if g.get("m5_state") and g["m5_state"] != "-" else ""
-        lvl, sl = g["level"], g["sl"]
-        tp = _r(lvl + s * abs(sl - lvl))
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
         return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}{m5}\n"
-                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}\n"
-                f"Entry if price trades {'above' if s < 0 else 'below'} {self._fmt(lvl)} "
-                f"({'previous high + 1 pipette' if s < 0 else 'previous low − 1 pipette'}; moves with each candle)\n"
-                f"SL {self._fmt(sl)} · TP 1:1 ≈ {self._fmt(tp)} (stop ${abs(sl - lvl):.2f})")
-
-    def entry_text(self, e):
-        s = e["side"]
-        when = e["when"].tz_convert(TEHRAN).strftime("%H:%M")
-        return (f"✅ Entry hit · {'🔴 SELL' if s < 0 else '🟢 BUY'} {self.sym} at {self._fmt(e['entry'])} "
-                f"({when} Tehran candle) · SL {self._fmt(e['sl'])} · TP 1:1 {self._fmt(e['tp'])} "
-                f"(stop ${e['risk']:.2f}) · Leg {e['leg']}")
+                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}")
 
     def picture(self, g, m5=None):
         """m5: کندل‌های M5 بسته‌شده (اختیاری) → جعبه‌های ساختار M5 زیر کندل‌های M1؛ نامش در g['m5_state']."""
@@ -132,9 +77,7 @@ class GapAlerter:
         w = g["window"]
         o, h, l, c = (w[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
         n, s = len(w), g["side"]
-        lvl, sl = g["level"], g["sl"]
-        tp = lvl + s * abs(sl - lvl)
-        lo, hi = min(l.min(), sl, tp), max(h.max(), sl, tp)
+        lo, hi = l.min(), h.max()
         pad = (hi - lo) * 0.05 or 1.0
         fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
         fig.patch.set_facecolor(BG)
@@ -158,14 +101,10 @@ class GapAlerter:
                     va="bottom" if s < 0 else "top", fontweight="bold", color=gc)
             ax.text(g3, l[g3] - pad * 0.3 if s < 0 else h[g3] + pad * 0.3, "3", ha="center",
                     va="top" if s < 0 else "bottom", fontweight="bold", color=gc)
-        for y, col, name in ((lvl, "#EA580C", f"ENTRY {'>' if s < 0 else '<'} {self._fmt(lvl)}"),
-                             (sl, "#DC2626", f"SL {self._fmt(sl)}"), (tp, "#16A34A", f"TP 1:1 {self._fmt(tp)}")):
-            ax.hlines(y, max(g3, 0) + 0.5, n + 3, color=col, lw=1.5, ls=(0, (5, 3)))
-            ax.text(n + 3.2, y, name, color=col, va="center", fontsize=9, fontweight="bold")
         step = max(1, n // 9)
         ax.set_xticks(range(0, n, step))
         ax.set_xticklabels([d.strftime("%H:%M") for d in w.index.tz_convert(TEHRAN)[::step]], fontsize=9)
-        ax.set_xlim(-1, n + 12)
+        ax.set_xlim(-1, n + 2)
         ax.set_ylim(lo - pad, hi + pad * 3)
         ax.grid(color="#D6E3F2")
         for sp in ax.spines.values():

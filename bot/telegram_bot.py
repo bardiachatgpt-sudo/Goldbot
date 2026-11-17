@@ -26,7 +26,7 @@ HELP = ("📐 This bot only draws market structure (spike / channel / trading ra
         "🔬 M1 + M5: M1 candles; each M5 structure is a light-blue box (range flat, channel slanted) with its "
         "top and bottom price, and the M1 gap setup on it (gap, entry, stop, 1:1 target, result).\n\n"
         "🧪 Gap backtest: pick a pair and M1, M5 or M15; the gap setup runs on all available candles.\n\n"
-        "🔔 Gold gap alerts: every gold M1 gap as it forms (picture), and a message when its entry is hit.\n\n"
+        "🔔 Gold gap alerts: a picture of every gold M1 gap as it forms, with the M5 structure.\n\n"
         "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
             f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
 
@@ -72,26 +72,21 @@ class Telegram:
         on = (chat_id not in self.alert_chats) if on is None else on
         (self.alert_chats.add if on else self.alert_chats.discard)(chat_id)
         self._save_alert_chats()
-        self.bot.send_message(chat_id, "🔔 Gold M1 gap alerts are ON: a picture when a gap forms (candle 3 closed) "
-                                       "and a message when its entry is hit. Tap again to turn off." if on else
+        self.bot.send_message(chat_id, "🔔 Gold M1 gap alerts are ON: a picture with the M5 structure each time a gap "
+                                       "forms (candle 3 closed; not in the Off session). Tap again to turn off." if on else
                               "🔕 Gold gap alerts are OFF.")
 
     def alert_tick(self, alerter, df, m5_source=None):
         """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست. عکس گپ همراه ساختار M5 همان لحظه."""
         for kind, ev in alerter.poll(df):
-            png = None
-            if kind == "gap":
-                try:
-                    png = alerter.picture(ev, m5_source() if m5_source else None)
-                except Exception as e:
-                    print("alert picture error:", e)
-                    png = alerter.picture(ev)
+            try:
+                png = alerter.picture(ev, m5_source() if m5_source else None)
+            except Exception as e:
+                print("alert picture error:", e)
+                png = alerter.picture(ev)
             for chat in list(self.alert_chats):
                 try:
-                    if kind == "gap":
-                        self.bot.send_photo(chat, png, caption=alerter.gap_caption(ev))
-                    else:
-                        self.bot.send_message(chat, alerter.entry_text(ev))
+                    self.bot.send_photo(chat, png, caption=alerter.gap_caption(ev))
                 except Exception as e:
                     print("alert send error:", chat, e)
 
