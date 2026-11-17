@@ -258,3 +258,14 @@ Full report with the bot's rules (M5 filter, legs 1–2, 1:1) + first-90-min win
   (max DD 49%); at 2% → $373 (max DD 76%). Longest losing streak 7.
 - EURUSD: 863 trades, 45.3%, −81R (after spread −119R), avg stop 3.6 pips. Months: Jan −23, Feb −43, Mar −22, Apr +3,
   May +11, Jun −7. Tokyo −36, London −29, NY −16. $1,000 at 1% → $426 (DD 64%); at 2% → $166 (DD 88%). Streak 9.
+
+### Logistic regression on all trades (17 Nov) — EURUSD and USDJPY, broker data, no M5 filter, no Off
+Same 19 past-only features (tr/er 15/30/60, mv10, bigbar, stop/ATR, gap/ATR, candle-1/ATR, pos60, room60, ATR vs
+median, entry on candle 4, leg 2, sell, hour). Fitted on Jan–Mar, tested on Apr–Jun (L2-regularised, numpy IRLS).
+- EURUSD (4,359 trades): AUC train 0.55, **test 0.52** (0.5 = coin flip). Taking only the trades the model likes best
+  (threshold fixed on train): top 50% → 50.0% win, 0R; top 30% → 50.4%, +4R; top 10% → 52.5%, +8R (162 trades).
+  Largest weights: tr15 + (a short recent move in the trade direction helps), bigbar −, ATR-above-normal +, mv10 −.
+- USDJPY (4,340): AUC train 0.55, test 0.52. Top 50% → 50.7%, +13R; top 30% → 51.4%, +15R; top 10% → 52.0%, +8R.
+  Largest weights: gap/ATR + (bigger gaps better), tr15 +, ATR-above-normal +, bigbar −, tr30 −.
+→ The regression finds only a very weak signal: best out-of-sample ≈ 50–52% at 1:1, i.e. about +0.02–0.05R per trade
+  before costs, which the spread (≈0.03–0.12R per trade) and commission eat. Consistent with the earlier tests.
