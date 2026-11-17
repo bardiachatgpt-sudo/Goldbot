@@ -148,3 +148,28 @@ direction at the extreme (sell the low right after a sharp fall / buy the top ri
 long channel ≈ 5; news spikes (23 Jan) — the worst single losses, mostly counted under "against the trend".
 Wins (~121): with the M1 trend / M5 channel ≈ 25+; fading a climax (after a sharp move, in the turn direction) ≈ 17;
 from the edge of a range (sell its top, buy its bottom) ≈ 12; the rest in normal swings with room for 1:1.
+
+### H2 · week 2 — 26–30 Jan 2026 (backtest #544–#727): 184 trades, 89 wins (48%), −6R
+| day | trades | wins | R | Tokyo | T+London | London | London+NY | NY |
+|---|---|---|---|---|---|---|---|---|
+| Mon 26 | 44 | 24 | +4 | 6/16 −4 | 1/1 | 6/12 0 | 5/7 +3 | 6/8 +4 |
+| Tue 27 | 38 | 14 | −10 | 6/16 −4 | 1/3 | 2/6 −2 | 4/7 +1 | 1/6 −4 |
+| Wed 28 | 33 | 18 | +3 | 5/11 −1 | 1/2 | 4/5 +3 | 4/8 0 | 4/7 +1 |
+| Thu 29 | 29 | 17 | +5 | 8/15 +1 | 1/1 | 2/4 0 | 4/5 +3 | 2/4 0 |
+| Fri 30 | 40 | 16 | −8 | 1/12 −10 | 3/3 | 3/7 −1 | 5/5 +5 | 4/13 −5 |
+| week | 184 | 89 | −6 | 26/70 −18 | 7/10 +4 | 17/34 0 | 22/32 +12 | 17/38 −4 |
+- **Sessions flipped vs week 1:** Tokyo was the worst this week (37%, −18R) and London+NY the best (+12R) — the
+  opposite of week 1. Session is NOT a usable filter.
+- **H2c against the M1 trend — held again every day** (e.g. Tue sells in the 06:15–08:30 rally, Tue buys after the
+  13:20 crash, Thu buys in the 03:50 and 06:00–07:00 falls, Fri sell against the 04:00 rally, Mon buys in the
+  16:40–19:00 fall). With-trend gaps in the Mon morning fall and afternoon rallies, Tue afternoon fall, Fri
+  15:40–18:50 rally mostly won.
+- **H2a choppy tight range — strongly held this week:** Mon 06:00–09:30 and 10:20–11:30 (≈9 losses), Fri the whole
+  Tokyo session inside 153.75–154.00 (1 win in 12 — the worst block of the two weeks).
+- **H2b climax — held mostly:** selling the low / buying the top right after a sharp move lost (Thu #2 04:06,
+  Fri #34 22:25, Wed #23 19:12, Tue #19 12:04); fading after it often won (Mon #30, Wed #22, #27–#28, Thu #25 19:20).
+- **News spikes again:** Tue 13:20 (154.5 → 153.3 in a minute), Wed 18:40 (152.9 → 153.7), Thu 19:10 crash; gaps
+  against them lost.
+
+Two weeks together (15–30 Jan): 427 trades, 210 wins, −7R. Stable patterns: **H2c** (every day), **H2a** when choppy,
+**H2b** mostly, news spikes. Unstable: sessions, stop size, entry candle.

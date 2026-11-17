@@ -106,7 +106,9 @@ var is set on Render it overrides the default — it must then be changed there 
   warm up the M5 structure). Done: 15–23 Jan (7 days, 243 trades, −1R; H2:
   against-M1-trend losses on every day; climax rule mostly held; late-trend H2i new; tight range only bad when choppy;
   sessions unstable, London+NY overlap weakest). The user does not want the pictures sent (I look at them myself) and
-  wants short answers. Next: Mon 26 Jan on "روز بعد". Per day: summary, table of trades
+  wants short answers. Week 2 (26–30 Jan) done: 184 trades, −6R; sessions
+  flipped (Tokyo worst, London+NY best) → sessions not usable; H2c held every day; choppy range very bad (Fri Tokyo
+  1/12). Two weeks: 427 trades, 210 wins, −7R. Next: week of 2 Feb when asked. Per day: summary, table of trades
   (day number / backtest number), two overview pictures (Tokyo; London+NY), reasons for losses and wins.
 - Broker data (planned, user will send later): ~6 months of M1 CSV per pair exported from their broker
   (MT5 Symbols → Bars → Export preferred; keep the Spread column but do not use it yet). Needed from the user: broker
