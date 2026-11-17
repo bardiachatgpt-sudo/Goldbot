@@ -103,9 +103,10 @@ var is set on Render it overrides the default — it must then be changed there 
   selling before the range top; wins = sell at the M5 range top, big Tokyo swings, with the M5 channel.
   Use only when the user asks.
 - **Day-by-day review of USDJPY broker data (user's request, 17 Nov):** started at Thu 15 Jan 2026 (2–14 Jan only
-  warm up the M5 structure). Done: 15, 16, 19, 20 Jan (H2: against-M1-trend and
-  tight-M1-range losses repeated all 4 days; fading climaxes won, trading in the climax direction at the extreme lost;
-  Tokyo best on 3 of 4 days; stop size alone is not the reason). Next: Wed 21 Jan on "روز بعد". Per day: summary, table of trades
+  warm up the M5 structure). Done: 15–23 Jan (7 days, 243 trades, −1R; H2:
+  against-M1-trend losses on every day; climax rule mostly held; late-trend H2i new; tight range only bad when choppy;
+  sessions unstable, London+NY overlap weakest). The user does not want the pictures sent (I look at them myself) and
+  wants short answers. Next: Mon 26 Jan on "روز بعد". Per day: summary, table of trades
   (day number / backtest number), two overview pictures (Tokyo; London+NY), reasons for losses and wins.
 - Broker data (planned, user will send later): ~6 months of M1 CSV per pair exported from their broker
   (MT5 Symbols → Bars → Export preferred; keep the Spread column but do not use it yet). Needed from the user: broker

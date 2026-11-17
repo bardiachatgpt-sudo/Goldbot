@@ -110,3 +110,34 @@ Tokyo 10/16 +4R · London 2/3 +1R · London+NY 4/8 0R · NY 1/5 −3R (late NY s
 
 Summary after 4 days: **H2c** held every day with almost no exception; **H2b** (fade the climax / don't trade in its
 direction at the extreme) held every day with one exception; **H2a** held every day.
+
+### H2 · days 5–7 — Wed 21, Thu 22, Fri 23 Jan 2026 (backtest #439–#543)
+| day | trades | wins | R | Tokyo | London part | NY part |
+|---|---|---|---|---|---|---|
+| Wed 21 | 35 | 19 | +3 | 10/13 +7 | T+L 0/3, L 3/4 | L+NY 1/7 −5, NY 5/8 +2 |
+| Thu 22 | 32 | 14 | −4 | 8/17 −1 | T+L 1/3, L 1/3 | L+NY 4/7 +1, NY 0/2 |
+| Fri 23 | 38 | 18 | −2 | 7/13 +1 | T+L 1/2, L 7/8 +6 | L+NY 3/10 −4, NY 0/5 −5 |
+- **H2c against the M1 trend — held again on all three days, the strongest pattern:** Wed: #8 (sell in the
+  06:35–07:00 rally), #11–#12 and #14 (buys in the 09:40–11:40 fall), #17, #22, #24 (sells in rallies) lost.
+  Thu: a clean M1/M5 bull channel 05:10–10:40 — every sell inside it lost (#5, #8, #10, #14, #15) while the buys
+  with it won (#6, #9, #12, #13, #16). Fri: the 19:50 → 01:00 crash 158.2 → 155.7 (~250 pips) — all five buys inside
+  it lost (#34–#38), the sells with it won (#31, #32).
+- **H2b climax — mostly held:** selling the low right after a sharp fall lost (Wed #15 11:45, #21 16:36; Thu #30–#32
+  20:17–20:42 after the 18:40–20:00 fall; #32 stayed open overnight); buying right after the spike top lost
+  (Wed #23 17:56). Fading won (Wed #4 05:14, #19–#20 at the 16:20 low, #33–#34 after the 23:00 spike). Counter-example:
+  Wed #32 sold right after the 23:00 spike and lost before #33–#34 won.
+- **New · H2i late trend:** after a long M1 channel, gaps in its direction near the top/end lose — Thu #17, #18,
+  #20 (buys 11:20–12:23 as the 05:10–10:40 bull channel topped and rolled over), Thu #11 (buy at a spike top inside
+  the channel).
+- **H2a tight range — mixed this time:** Fri 03:40–10:00 Tokyo range only 158.45–158.75: 7 wins / 6 losses (not
+  all losses); Fri 13:00–19:30 quiet range 158.0–158.3: about even. So a tight range is not always a loss — it seems
+  to cost most when the gaps alternate direction every few minutes (chop), as on days 1–4.
+- **Sessions:** Tokyo best on Wed only; Thu −1, Fri +1. London alone was good on Wed and Fri. The London+NY overlap
+  and late NY were weak on all three days (L+NY −5, +1, −4; NY after ~22:30 Tehran usually losing, spread 0.7–1.2).
+- **News / big moves:** Fri 11:10 a spike 159.2 → 157.4 in minutes, and the 19:50–01:00 crash: gaps against these
+  moves were the worst losses of the week.
+
+Summary after 7 days (15–23 Jan, 243 trades, 121 wins, −1R): H2c (against the M1 trend loses) held on every day and
+is the clearest; H2b (don't trade in the climax direction at the extreme; fading it tends to win) held most days;
+H2i (late in a long channel) new; H2a only when the range is choppy; session effects are not stable (London+NY
+overlap weakest overall).
