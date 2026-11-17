@@ -282,7 +282,7 @@ class TestGapSetup(unittest.TestCase):
         t = gap.trades(*candles(rows), sym="XAUUSD")[-1]
         self.assertIsNone(t["entry_i"])
 
-    def test_chained_gaps_keep_the_first_candle_1(self):
+    def test_chained_gaps_keep_the_first_three_candle_gap(self):
         from bot import gap
         rows = [(110, 111, 108, 108.5),       # ۱
                 (108.5, 108.6, 103, 103.5),   # ۲
@@ -292,10 +292,18 @@ class TestGapSetup(unittest.TestCase):
                 (95.5, 97.5, 95.4, 97.2),     # ۶: سقف 97.5 > 97 → فروش روی 97.01
                 (97.2, 97.3, 80, 80.5)]
         t = gap.trades(*candles(rows), sym="XAUUSD")[0]
-        self.assertEqual(t["gap"], (0, 4))                             # کندل ۱ همان اولین، زنجیره تا کندل ۵
+        self.assertEqual(t["gap"], (0, 2))                             # فقط سه کندل گپ اول
         self.assertAlmostEqual(t["sl"], 111.01)                        # حد ضرر پشت اولین کندل ۱
         self.assertAlmostEqual(t["entry"], 97.01)
-        self.assertEqual((t["gap_lo"], t["gap_hi"]), (97, 108))        # جعبه کل زنجیره
+        self.assertEqual((t["gap_lo"], t["gap_hi"]), (105, 108))       # جعبه‌ی همان گپ اول
+
+    def test_long_chain_never_moves_candle_1(self):
+        from bot import gap
+        rows = [(200 - 4 * k, 201 - 4 * k, 196.5 - 4 * k, 197 - 4 * k) for k in range(12)]   # ۱۲ کندل نزولی پشت‌سرهم
+        rows += [(152, 160, 151, 159), (159, 159.5, 100, 101)]                              # برگشت، بعد ریزش
+        t = gap.trades(*candles(rows), sym="XAUUSD")[0]
+        self.assertEqual(t["gap"], (0, 2))                             # همه‌ی گپ‌های بعدی زنجیره‌اند
+        self.assertAlmostEqual(t["sl"], 201.01)
 
     def test_buy_is_the_mirror(self):
         from bot import gap

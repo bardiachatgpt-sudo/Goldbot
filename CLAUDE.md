@@ -62,13 +62,10 @@ on purpose; they are in git history before commit 678dacb if ever needed).
   - Idea to discuss later (do NOT code until the user brings it up): the user notices the best setups, when inside
     the structure, usually enter on candle 4 (right after the gap). Possible later: report results by entry candle
     (4 / 5 / 6+) and an "entry on candle 4 only" comparison; maybe require the entry inside the M5 box.
-  - Chained gaps (confirmed by the user's screenshot of trade #10): same-direction gaps that overlap (1-2-3, then
-    2-3-4 …) are one chain — candle 1 (and the stop) stay at the FIRST gap; the gap box covers the chain; following
-    starts after the last candle of the chain. A separate or opposite gap replaces the waiting one. Gap backtest (🧪 Gap backtest / under each pair / `/backtest XAUUSD 5`): pair → M1, M5 or M15 → runs
-    bot/gap.py on the last 3 trading days (bot/gap_backtest.py): numbered trades, wins, R, buys vs sells, $1,000 at
-    1% and 2%, equity chart. No spread yet. On M1 it then sends zoomed pictures of the stopped-out trades
-    (bot/gap_pictures.py) with the M5 structure as it was at entry (500 closed M5 candles), 5 at a time with a
-    "📷 Next 5" button (kept in memory per chat; lost on restart).
+  - A gap is always exactly 3 candles. Same-direction gaps that keep forming right behind it (2-3-4, 3-4-5 … each
+    overlapping the previous one) are ignored: candle 1, the gap box and the stop stay those of the FIRST gap, and
+    following starts after its candle 3 (user's screenshots of trades #10 and #8). A separate or opposite gap
+    replaces the waiting one.
   - First real result, gold M1, 6 days: 393 trades, 52% wins, +13R without spread; with a ~0.3 spread (avg stop
     ~3) it would be roughly −20R. Sells won because gold fell that week. Suggested next: add spread, then try the
     M5 direction filter, the M5 edges as targets, or a minimum gap/stop size.
