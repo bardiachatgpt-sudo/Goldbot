@@ -64,6 +64,9 @@ var is set on Render it overrides the default — it must then be changed there 
   last buy gap; Leg 1 = no earlier sell gap in this move, Leg 2 = one before (chained gaps count once).
 - **Session** of each trade (`config.session_of`, local hours, DST-aware): Tokyo 9–18 Tokyo, London 8–17 London,
   NY 8–17 New York; overlaps joined ("London+NY"); outside all = "Off".
+- **The user trades these setups only in the first 90 minutes of each session** (Tokyo 09:00–10:30 Tokyo time,
+  London 08:00–09:30, NY 08:00–09:30 local; said 17 Nov). Not a bot rule yet (ask first). Broker-data check in
+  HYPOTHESES.md: same ~47–48% win rate as all day.
 - **No trades in the "Off" session** (outside Tokyo/London/NY: spread is high; the user does not trade it — 17 Nov).
   Bot rule: `gap.trades(session_ok=gap.in_session(times))` — an entry whose candle is Off is skipped (reason "off",
   pending gap dropped like the other skips); used in the backtest (all variants), the all-pairs table and the

@@ -238,3 +238,17 @@ stop/ATR, gap height/ATR, candle-1 range/ATR, pos60 (place in the 60-bar range, 
 USDJPY 2R by month: Jan +39, Feb −51, Mar −5, Apr +53, May +14, Jun −29 (big swings). → 2R on USDJPY is about
 break-even before costs (+21R over 2,493 trades ≈ +0.01R/trade) and clearly negative after spread. EURUSD negative at
 every target. Changing the target alone does not create an edge.
+
+### Only the first 90 minutes of each session (user's practice, 17 Nov)
+The user takes these setups ONLY from each session open to 90 min after: Tokyo 09:00–10:30 Tokyo time, London
+08:00–09:30 London time, New York 08:00–09:30 NY time (weekdays). Broker data 15 Jan–17 Jun, entries only inside
+those windows, fixed 1:1:
+| pair | M5 filter | trades | win | R | after spread | Jan–Mar | Apr–Jun |
+|---|---|---|---|---|---|---|---|
+| USDJPY | no | 1,118 | 47.9% | −48 | −111 | −33 | −15 |
+| USDJPY | yes | 928 | 47.8% | −40 | −98 | −22 | −18 |
+| EURUSD | no | 1,088 | 47.3% | −58 | −97 | −45 | −13 |
+| EURUSD | yes | 863 | 45.3% | −81 | −119 | −88 | +7 |
+By window (USDJPY no M5): Tokyo 48.1% −14, London 48.4% −12, NY 46.9% −22. (USDJPY with M5, London alone 51.7% +11 —
+one bucket, likely chance.) → Same ~47–48% win rate as all day: fewer trades, so smaller totals, but the same
+−0.04R per trade. The session-open window alone does not create an edge.
