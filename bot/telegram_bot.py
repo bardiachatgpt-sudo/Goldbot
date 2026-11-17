@@ -28,7 +28,7 @@ class Telegram:
     LOSER_BATCH = 5                     # عکس باخت‌ها ۵تا ۵تا
 
     def __init__(self, token):
-        self.losers = {}                # چت → (نماد، کندل‌ها، M5، معامله‌های بازنده) آخرین بک‌تست
+        self.losers = {}                # چت → آخرین بک‌تست M1: نماد، کندل‌ها، M5، باخت‌ها، بردها، رقم اعشار
         self.bot = telebot.TeleBot(token, parse_mode=None) if token else None
         if self.bot:
             self._register_handlers()
@@ -235,28 +235,46 @@ class Telegram:
         for part in losers_text(res, dec):              # فهرست کامل باخت‌ها با شماره‌ی عکس
             self.bot.send_message(chat_id, part, parse_mode="HTML")
         if tf == "1":
-            self.send_losing_trades(chat_id, sym, res, m5)
+            self.send_losing_trades(chat_id, sym, res, m5, dec)
+            if any(t["r"] > 0 for t in res["closed"]):
+                kb.row(types.InlineKeyboardButton("🏆 Winning trades: list + pictures", callback_data="sxwl"))
         self.bot.send_message(chat_id, "🧪 More?", reply_markup=kb)
 
-    def send_losing_trades(self, chat_id, sym, res, m5):
-        """معامله‌هایی که حد ضرر خوردند: اول ۵ عکس، بقیه با دکمه‌ی «۵تای بعدی»."""
+    def send_losing_trades(self, chat_id, sym, res, m5, dec=2):
+        """معامله‌هایی که حد ضرر خوردند: اول ۵ عکس، بقیه با دکمه‌ی «۵تای بعدی». بردها هم برای دکمه‌ی 🏆 نگه داشته می‌شوند."""
         losers = [t for t in res["closed"] if t["r"] < 0]
+        self.losers[chat_id] = {"sym": sym, "candles": res["candles"], "m5": m5, "loss": losers,
+                                "win": [t for t in res["closed"] if t["r"] > 0], "res": res, "dec": dec}
         if not losers:
             return
-        self.losers[chat_id] = (sym, res["candles"], m5, losers)
         self.bot.send_message(chat_id, f"🛑 {len(losers)} stopped-out trades. Zoomed pictures with the M5 structure at "
                                        f"the moment of entry, {self.LOSER_BATCH} at a time:")
         self.send_loser_batch(chat_id, 0)
 
-    def send_loser_batch(self, chat_id, start):
-        """عکس معامله‌های بازنده‌ی start تا start+5 و دکمه‌ی ۵تای بعدی."""
+    def send_winners(self, chat_id):
+        """فهرست کامل بردها (با شماره و تاریخ) و ۵ عکس اول."""
+        from .gap_backtest import trades_text
+        saved = self.losers.get(chat_id)
+        if saved is None:
+            self.bot.send_message(chat_id, "⚠️ This backtest is no longer in memory (the bot restarted). "
+                                           "Run the backtest again.")
+            return
+        if not saved["win"]:
+            self.bot.send_message(chat_id, "No winning trades in this backtest.")
+            return
+        for part in trades_text(saved["res"], "win", saved["dec"]):
+            self.bot.send_message(chat_id, part, parse_mode="HTML")
+        self.send_loser_batch(chat_id, 0, kind="win")
+
+    def send_loser_batch(self, chat_id, start, kind="loss"):
+        """عکس معامله‌های start تا start+5 (kind: "loss" بازنده‌ها، "win" برنده‌ها) و دکمه‌ی ۵تای بعدی."""
         from .gap_pictures import caption, trade_picture
         saved = self.losers.get(chat_id)
         if saved is None:
             self.bot.send_message(chat_id, "⚠️ This backtest is no longer in memory (the bot restarted). "
                                            "Run the backtest again.")
             return
-        sym, candles, m5, losers = saved
+        sym, candles, m5, losers = saved["sym"], saved["candles"], saved["m5"], saved[kind]
         batch = losers[start:start + self.LOSER_BATCH]
         media = []
         for t in batch:
@@ -264,7 +282,7 @@ class Telegram:
                 png = trade_picture(sym, candles, m5, t, t["num"])
                 media.append(types.InputMediaPhoto(png, caption=caption(sym, t, t["num"])))
             except Exception as e:
-                print("loser picture error:", t.get("num"), e)
+                print("trade picture error:", t.get("num"), e)
         for attempt in range(3):
             try:
                 if media:
@@ -273,16 +291,17 @@ class Telegram:
             except Exception as e:                     # محدودیت تعداد پیام تلگرام (429): صبر و دوباره
                 info = getattr(e, "result_json", None)
                 params = info.get("parameters", {}) if isinstance(info, dict) else {}
-                print("losing trades album error:", e)
+                print("trade pictures album error:", e)
                 time.sleep(min(int(params.get("retry_after", 5)) + 1, 60))
         nxt = start + len(batch)
+        what, icon, cb = (("stopped-out", "🛑", "sxl") if kind == "loss" else ("winning", "🏆", "sxw"))
         if nxt < len(losers):
             kb = types.InlineKeyboardMarkup()
-            kb.add(types.InlineKeyboardButton(f"📷 Next {min(self.LOSER_BATCH, len(losers) - nxt)} stopped-out "
-                                              f"trades ({nxt} of {len(losers)} shown)", callback_data=f"sxl:{nxt}"))
-            self.bot.send_message(chat_id, f"🛑 {nxt} of {len(losers)} stopped-out trades shown.", reply_markup=kb)
+            kb.add(types.InlineKeyboardButton(f"📷 Next {min(self.LOSER_BATCH, len(losers) - nxt)} {what} "
+                                              f"trades ({nxt} of {len(losers)} shown)", callback_data=f"{cb}:{nxt}"))
+            self.bot.send_message(chat_id, f"{icon} {nxt} of {len(losers)} {what} trades shown.", reply_markup=kb)
         else:
-            self.bot.send_message(chat_id, f"✅ All {len(losers)} stopped-out trades shown.")
+            self.bot.send_message(chat_id, f"✅ All {len(losers)} {what} trades shown.")
 
 
     # ------------------------------------------------------------ دستورها
@@ -340,9 +359,13 @@ class Telegram:
                 bot.answer_callback_query(c.id, "Running all pairs…")
                 self.send_all_pairs(chat_id)
                 return
-            if action == "sxl":                                 # ۵ عکس باخت بعدی
+            if action == "sxwl":                                # فهرست بردها + ۵ عکس اول
                 bot.answer_callback_query(c.id)
-                self.send_loser_batch(chat_id, int(sym) if sym.isdigit() else 0)
+                self.send_winners(chat_id)
+                return
+            if action in ("sxl", "sxw"):                        # ۵ عکس باخت / برد بعدی
+                bot.answer_callback_query(c.id)
+                self.send_loser_batch(chat_id, int(sym) if sym.isdigit() else 0, "loss" if action == "sxl" else "win")
             elif action == "sxb" and sym in STRUCTURE_SYMBOLS and tf:
                 bot.answer_callback_query(c.id, f"Backtesting {sym}…")
                 self.send_gap_backtest(chat_id, sym, tf)

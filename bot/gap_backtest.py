@@ -175,12 +175,18 @@ def report_text(res, decimals=2, shown=25):
 
 def losers_text(res, decimals=2, limit=3900):
     """فهرست همه‌ی معامله‌هایی که حد ضرر خوردند، با شماره‌ی عکس؛ چند پیام اگر طولانی باشد."""
+    return trades_text(res, "loss", decimals, limit)
+
+
+def trades_text(res, kind="loss", decimals=2, limit=3900):
+    """فهرست همه‌ی معامله‌های بازنده (kind="loss") یا برنده ("win")، یک خط برای هر کدام با شماره‌ی عکس و تاریخ."""
     p = lambda x: f"{x:.{decimals}f}"
     tz = lambda ts: ts.tz_convert(TEHRAN)
-    losers = [t for t in res["closed"] if t["r"] < 0]
+    losers = [t for t in res["closed"] if (t["r"] < 0 if kind == "loss" else t["r"] > 0)]
     if not losers:
         return []
-    head = (f"🛑 <b>Stopped-out trades · {res['sym']} {res.get('tf', 'M1')}</b> ({len(losers)}) · "
+    icon, title = ("🛑", "Stopped-out trades") if kind == "loss" else ("🏆", "Winning trades")
+    head = (f"{icon} <b>{title} · {res['sym']} {res.get('tf', 'M1')}</b> ({len(losers)}) · "
             f"#number = picture number · Tehran time")
     rows = []
     for t in losers:
@@ -194,7 +200,7 @@ def losers_text(res, decimals=2, limit=3900):
     for r in rows:
         if len(cur) + len(r) + 1 > limit:
             out.append(cur)
-            cur = "🛑 (continued)"
+            cur = f"{icon} (continued)"
         cur += "\n" + r
     out.append(cur)
     return out

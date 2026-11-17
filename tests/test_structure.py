@@ -414,6 +414,33 @@ class TestGapBacktest(unittest.TestCase):
         self.assertIn("By session", txt)
         self.assertTrue(all(t.get("session") for t in res["closed"]))
 
+    def test_winning_trades_button(self):
+        tg = make_bot()
+        m1 = gappy_m1(6000)
+        m5 = m1.resample("5min", label="left", closed="left").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
+
+        def fake(sym, n, m, interval=None, timeout=20):
+            return m1 if interval == "1" else m5
+
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake), \
+                mock.patch.object(telegram_bot.time, "sleep"):
+            tg.send_gap_backtest(7, "XAUUSD")
+            kb = tg.bot.send_message.call_args.kwargs["reply_markup"]
+            self.assertIn("sxwl", [b.callback_data for row in kb.keyboard for b in row])
+            tg.bot.reset_mock()
+            tg.send_winners(7)
+        texts = [c.args[1] for c in tg.bot.send_message.call_args_list]
+        listing = next(t for t in texts if "Winning trades" in t)
+        wins = tg.losers[7]["win"]
+        for t in wins:
+            self.assertIn(f"#{t['num']} ·", "\n".join(x for x in texts if "Winning trades" in x or "continued" in x))
+        albums = [len(c.args[1]) for c in tg.bot.send_media_group.call_args_list]
+        self.assertEqual(albums, [min(5, len(wins))])
+        caps = [m.caption for m in tg.bot.send_media_group.call_args.args[1]]
+        self.assertTrue(all(c.startswith(f"#{t['num']} ") for c, t in zip(caps, wins)))      # شماره‌ی عکس = شماره‌ی فهرست
+        self.assertIn("Tehran", listing)
+
     def test_trade_picture(self):
         from bot import gap_backtest
         from bot.gap_pictures import caption, trade_picture

@@ -28,7 +28,9 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   comparisons "without the M5 filter" and "with all legs", $1,000 at 1% and 2%, latest trades); then a full list of
   stopped-out trades `#num · time · SELL/BUY · L<leg> · session · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`
   (#num = picture number); on M1 the zoomed loser pictures (`bot/gap_pictures.py`), 5 at a time with "📷 Next 5"
-  (kept in memory per chat; lost on restart).
+  (kept in memory per chat; lost on restart). On M1 a "🏆 Winning trades: list + pictures" button sends the same
+  list for the winners (same numbering as the report) and their pictures, 5 at a time (callbacks sxwl / sxw:n;
+  losers sxl:n).
 - **🌍 All pairs · 24h** (also in the backtest pair menu): gap setup on M1, last 1440 M1 candles, every pair, with and
   without the M5 filter; one summary table per variant: trades, win %, R, and a separate $1,000 account per pair at
   2% risk (final $ and growth %), totals, best/worst pair.
@@ -57,7 +59,7 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
 
 ## Ideas for later (do NOT code until the user asks)
 - Fix "3 days" counting a Sunday with few candles (count only days with several hours of data).
-- Add spread to backtests; minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
+- Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
 - In an M5 range: sell only in the upper half, buy only in the lower half; stop a little beyond the M5 edge.
 - Entry on candle 4 tends to be best (report by entry candle 4/5/6+).
 - The user does NOT want a sell-stop entry. Wanted later: a LIVE simulator following bid/ask ticks — after price trades
