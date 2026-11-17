@@ -24,7 +24,8 @@ No channel posts, no live trading.
   entry hit there, sends nothing) → a picture when candle 3
   closes (last 60 M1 candles + the M5 structure boxes of that moment from 600 closed M5 candles fetched at alert time,
   drawn with `gap_pictures.draw_m5`; gap box, entry level = previous high + 1 pipette / low − 1, SL behind candle 1,
-  1:1 TP) with a caption (side, leg, session, M5 state, Tehran time). When price trades beyond the level (checked on the forming candle and
+  1:1 TP) with a caption (side, leg, session, M5 state, Tehran time). Look (user, 17 Nov): bullish candles white,
+  bearish black (black outline), light-blue background #E8F2FD, M5 box a bit darker #D2E4F8. When price trades beyond the level (checked on the forming candle and
   on any closed candle missed between polls) → short "✅ Entry hit" message with entry / SL / TP. Chained gaps behind
   the first one get no alert; a new separate or opposite gap replaces the waiting one. Subscribers: env
   `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again).

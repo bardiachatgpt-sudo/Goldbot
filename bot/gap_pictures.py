@@ -69,7 +69,7 @@ def watch_rows(sym, m1, t):
     return out
 
 
-def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False):
+def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False, fill=M5_FILL):
     """جعبه‌های ساختار M5 (از کندل‌های M5 بسته‌شده‌ی h5w) زیر کندل‌های M1 با زمان‌های times. خروجی: نام فاز آخر."""
     if h5w is None or len(h5w) < 100:
         return "-"
@@ -95,7 +95,7 @@ def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False):
         upper, lower = _edges(ph, c5, h5, l5, piv5, p5[xs])
         upper = np.clip(upper, lo - span, hi + span)
         lower = np.clip(lower, lo - span, hi + span)
-        ax.fill_between(xs, lower, upper, color=M5_FILL, alpha=0.9, lw=0, zorder=1)
+        ax.fill_between(xs, lower, upper, color=fill, alpha=0.9, lw=0, zorder=1)
         ax.plot(xs, upper, color=M5_LINE, lw=2.2, zorder=2)
         ax.plot(xs, lower, color=M5_LINE, lw=2.2, zorder=2)
         if len(xs) >= 8:

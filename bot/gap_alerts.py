@@ -19,6 +19,9 @@ from .gap import _r, find_gap, gap_heads, leg_number, pip
 
 ALERT_SYMBOL = "XAUUSD"
 PICTURE_BARS = 60
+BG = "#E8F2FD"                  # پس‌زمینه‌ی آبی کم‌رنگ (همان رنگ جعبه‌ی M5 در عکس‌های دیگر)
+BOX = "#D2E4F8"                 # جعبه‌ی M5 روی این پس‌زمینه کمی پررنگ‌تر
+UP_FACE, DOWN_FACE, EDGE = "white", "black", "black"   # صعودی سفید، نزولی مشکی (خواست کاربر)
 
 
 class GapAlerter:
@@ -134,16 +137,17 @@ class GapAlerter:
         lo, hi = min(l.min(), sl, tp), max(h.max(), sl, tp)
         pad = (hi - lo) * 0.05 or 1.0
         fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
-        fig.patch.set_facecolor("white")
+        fig.patch.set_facecolor(BG)
+        ax.set_facecolor(BG)
         span = hi - lo or 1.0
         g["m5_state"] = draw_m5(ax, self.sym, m5_at(m5, w.index[-1] + pd.Timedelta(minutes=1)) if m5 is not None
-                                else None, w.index, lo, hi, span, pad, labels_left=True)
+                                else None, w.index, lo, hi, span, pad, labels_left=True, fill=BOX)
         for i in range(n):
             up = c[i] >= o[i]
-            col = "#16A34A" if up else "#DC2626"
-            ax.vlines(i, l[i], h[i], color=col, lw=1, zorder=5)
+            ax.vlines(i, l[i], h[i], color=EDGE, lw=1, zorder=5)
             ax.add_patch(patches.Rectangle((i - 0.33, min(o[i], c[i])), 0.66, max(abs(c[i] - o[i]), 1e-6),
-                                           facecolor=col, edgecolor=col, zorder=5))
+                                           facecolor=UP_FACE if up else DOWN_FACE, edgecolor=EDGE, lw=0.9,
+                                           zorder=5))
         g1 = w.index.get_indexer([g["t1"]])[0]
         g3 = w.index.get_indexer([g["t3"]])[0]
         gc = "#F97316" if s < 0 else "#14B8A6"
@@ -163,12 +167,14 @@ class GapAlerter:
         ax.set_xticklabels([d.strftime("%H:%M") for d in w.index.tz_convert(TEHRAN)[::step]], fontsize=9)
         ax.set_xlim(-1, n + 12)
         ax.set_ylim(lo - pad, hi + pad * 3)
-        ax.grid(color="#EEF0F4")
+        ax.grid(color="#D6E3F2")
+        for sp in ax.spines.values():
+            sp.set_color("#A9CDF3")
         ax.set_title(f"{self.sym} M1 · {'SELL' if s < 0 else 'BUY'} gap · Leg {g['leg']} · "
                      f"{g['t3'].tz_convert(TEHRAN):%a %d %b %H:%M} Tehran", loc="left", fontweight="bold")
         plt.tight_layout()
         buf = io.BytesIO()
-        fig.savefig(buf, format="png", facecolor="white")
+        fig.savefig(buf, format="png", facecolor=BG)
         plt.close(fig)
         return buf.getvalue()
 
