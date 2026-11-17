@@ -303,19 +303,39 @@ class TestGapBacktest(unittest.TestCase):
         self.assertIn("Risk 2% per trade", txt)
         self.assertEqual(gap_backtest.equity_chart(res)[:4], b"\x89PNG")
 
-    def test_one_tap_in_the_bot(self):
+    def test_one_tap_in_the_bot_sends_losing_trade_pictures(self):
         tg = make_bot()
         calls = []
+        m1 = gappy_m1(6000)
+        m5 = m1.resample("5min", label="left", closed="left").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
 
         def fake(sym, n, m, interval=None, timeout=20):
             calls.append((sym, n, interval))
-            return gappy_m1()
+            return m1 if interval == "1" else m5
 
-        with mock.patch.object(telegram_bot, "get_closed_candles", fake):
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake), \
+                mock.patch.object(telegram_bot.time, "sleep"):
             tg.send_gap_backtest(7, "XAUUSD")
-        self.assertEqual(calls, [("XAUUSD", 5001, "1")])
-        self.assertEqual(tg.bot.send_photo.call_args.args[1][:4], b"\x89PNG")       # نمودار موجودی
-        self.assertIn("GAP BACKTEST", tg.bot.send_message.call_args.args[1])
+        self.assertEqual(calls, [("XAUUSD", 5001, "1"), ("XAUUSD", 1700, "5")])
+        texts = [c.args[1] for c in tg.bot.send_message.call_args_list]
+        report = next(t for t in texts if "GAP BACKTEST" in t)
+        self.assertIn("(3 days)", report)                                           # فقط ۳ روز اخیر
+        albums = [len(c.args[1]) for c in tg.bot.send_media_group.call_args_list]
+        losses = int(report.split("❌ ")[1].split(" ")[0])
+        self.assertEqual(sum(albums), losses)                                       # یک عکس برای هر باخت
+        self.assertTrue(all(a <= 10 for a in albums))
+
+    def test_trade_picture(self):
+        from bot import gap_backtest
+        from bot.gap_pictures import caption, trade_picture
+        m1 = gappy_m1(3000)
+        m5 = m1.resample("5min", label="left", closed="left").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
+        res = gap_backtest.run("XAUUSD", m1, "1", days=None)
+        t = next(t for t in res["closed"] if t["r"] < 0)
+        self.assertEqual(trade_picture("XAUUSD", res["candles"], m5, t, t["num"])[:4], b"\x89PNG")
+        self.assertIn(f"#{t['num']}", caption("XAUUSD", t, t["num"]))
 
 
 class TestGapBacktestTimeframesAndPairs(unittest.TestCase):
@@ -340,10 +360,11 @@ class TestGapBacktestTimeframesAndPairs(unittest.TestCase):
 
         with mock.patch.object(telegram_bot, "get_closed_candles", fake):
             tg.send_gap_backtest(7, "EURUSD", "15")
-        self.assertEqual(calls, [("EURUSD", "15")])
-        txt = tg.bot.send_message.call_args.args[1]
-        self.assertIn("GAP BACKTEST", txt)
+        self.assertEqual(calls, [("EURUSD", "15")])                               # M15: بدون M5
+        texts = [c.args[1] for c in tg.bot.send_message.call_args_list]
+        txt = next(t for t in texts if "GAP BACKTEST" in t)
         self.assertIn("EURUSD · M15", txt)
+        tg.bot.send_media_group.assert_not_called()                                 # عکس باخت‌ها فقط برای M1
         btns = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
         self.assertEqual(btns, ["sxb:EURUSD:15", "sxbp:EURUSD", "sxbp"])
 

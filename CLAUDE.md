@@ -57,8 +57,9 @@ on purpose; they are in git history before commit 678dacb if ever needed).
     gap before entry replaces the waiting one. No spread. Stop = candle 1 + 1 pipette.
   - M5 box edges are meant as targets (user chose "b"), but the user said to leave the edges out for now — no edge
     rule is coded. Gap backtest (🧪 Gap backtest / under each pair / `/backtest XAUUSD 5`): pair → M1, M5 or M15 → runs
-    bot/gap.py on up to 5000 candles (bot/gap_backtest.py): trades, wins, R, buys vs sells, $1,000 at 1% and 2%,
-    equity chart. No spread yet.
+    bot/gap.py on the last 3 trading days (bot/gap_backtest.py): numbered trades, wins, R, buys vs sells, $1,000 at
+    1% and 2%, equity chart. No spread yet. On M1 it then sends a zoomed picture of every stopped-out trade
+    (bot/gap_pictures.py) with the M5 structure as it was at entry (500 closed M5 candles), in albums of 10.
   - First real result, gold M1, 6 days: 393 trades, 52% wins, +13R without spread; with a ~0.3 spread (avg stop
     ~3) it would be roughly −20R. Sells won because gold fell that week. Suggested next: add spread, then try the
     M5 direction filter, the M5 edges as targets, or a minimum gap/stop size.

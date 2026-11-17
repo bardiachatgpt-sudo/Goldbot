@@ -14,6 +14,7 @@ BALANCE = 1000.0
 RISKS = (1.0, 2.0)
 M1_BARS = 5000          # حداکثر کندل که از TradingView گرفته می‌شود (M1 ≈ ۴–۶ روز، M5 ≈ ۳ هفته، M15 ≈ ۲ ماه)
 BT_TIMEFRAMES = {"1": "M1", "5": "M5", "15": "M15"}
+DAYS = 3                # بک‌تست روی ۳ روز معاملاتی اخیر
 
 
 def account(closed, risk_pct, balance=BALANCE):
@@ -27,9 +28,21 @@ def account(closed, risk_pct, balance=BALANCE):
     return bal, max_dd, curve
 
 
-def run(sym, m1, tf="1"):
-    """m1: کندل‌های تایم‌فریم tf (Open/High/Low/Close، زمان = شروع کندل). خروجی: dict نتیجه."""
+def last_days(df, days=DAYS):
+    """فقط days روز معاملاتی آخر (روزهایی که کندل دارند، به وقت UTC)."""
+    dates = sorted(set(df.index.tz_convert("UTC").date))
+    if len(dates) <= days:
+        return df
+    start = pd.Timestamp(dates[-days], tz="UTC")
+    return df[df.index >= start]
+
+
+def run(sym, m1, tf="1", days=DAYS):
+    """m1: کندل‌های تایم‌فریم tf (Open/High/Low/Close، زمان = شروع کندل). خروجی: dict نتیجه.
+    days: فقط این تعداد روز معاملاتی آخر (None = همه)."""
     step = pd.Timedelta(minutes=int(tf))
+    if days:
+        m1 = last_days(m1, days)
     o, h, l, c = (m1[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     idx = m1.index
     all_t = trades(o, h, l, c, sym)
@@ -39,13 +52,15 @@ def run(sym, m1, tf="1"):
         if t.get("exit_i") is not None:
             t["exit_time"] = idx[t["exit_i"]] + step
     closed = [t for t in all_t if t.get("exit_i") is not None]
+    for k, t in enumerate(closed, 1):
+        t["num"] = k
     wins = [t for t in closed if t["r"] > 0]
     res = {"sym": sym, "tf": BT_TIMEFRAMES.get(tf, tf), "start": idx[0], "end": idx[-1] + step, "bars": len(m1),
            "closed": closed, "trades": len(closed), "wins": len(wins), "losses": len(closed) - len(wins),
            "net_r": sum(t["r"] for t in closed),
            "open": [t for t in all_t if t.get("entry_i") is not None and t.get("exit_i") is None],
            "waiting": [t for t in all_t if t.get("entry_i") is None], "accounts": {},
-           "days": len(set(idx.tz_convert(TEHRAN).date))}
+           "days": len(set(idx.tz_convert("UTC").date)), "candles": m1}
     for side, key in ((-1, "sells"), (1, "buys")):
         cs = [t for t in closed if t["side"] == side]
         res[key] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
@@ -86,7 +101,7 @@ def report_text(res, decimals=2, shown=25):
         for t in res["closed"][-shown:]:
             icon = "🏆" if t["r"] > 0 else "🛑"
             side = "SELL" if t["side"] < 0 else "BUY"
-            lines.append(f"{icon} {tz(t['entry_time']):%d %b %H:%M} {side} {p(t['entry'])} → {p(t['exit'])} "
+            lines.append(f"{icon} #{t['num']} {tz(t['entry_time']):%d %b %H:%M} {side} {p(t['entry'])} → {p(t['exit'])} "
                          f"({t['r']:+g}R)")
         if len(res["closed"]) > shown:
             lines.append(f"<i>… {len(res['closed']) - shown} earlier trades not listed</i>")

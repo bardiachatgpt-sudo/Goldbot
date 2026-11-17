@@ -165,11 +165,13 @@ class Telegram:
             self.bot.send_chat_action(chat_id, "upload_photo")
         except Exception:
             pass
-        df = get_closed_candles(sym, M1_BARS + 1, MIN_BARS, tf, timeout=90)
+        need = {"1": M1_BARS, "5": 1200, "15": 600}[tf]           # ۳ روز اخیر + کمی بیشتر
+        df = get_closed_candles(sym, need + 1, MIN_BARS, tf, timeout=90)
         if df is None:
             self.bot.send_message(chat_id, f"⚠️ {sym} {tfn}: could not fetch candles, try again in a minute.")
             return
         res = run(sym, df, tf)
+        m5 = get_closed_candles(sym, 1700, MIN_BARS, "5", timeout=60) if tf == "1" else None   # ساختار M5
         dec = len(fmt_price(sym, 1.0).split(".")[1])
         text = report_text(res, dec)
         kb = types.InlineKeyboardMarkup(row_width=3)
@@ -184,7 +186,38 @@ class Telegram:
             self.bot.send_photo(chat_id, equity_chart(res))
         except Exception as e:
             print("gap backtest chart error:", e)
-        self.bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=kb)
+        self.bot.send_message(chat_id, text, parse_mode="HTML")
+        if tf == "1":
+            self.send_losing_trades(chat_id, sym, res, m5)
+        self.bot.send_message(chat_id, "🧪 More?", reply_markup=kb)
+
+    def send_losing_trades(self, chat_id, sym, res, m5):
+        """عکس بزرگ‌نمایی‌شده‌ی هر معامله‌ای که حد ضرر خورد، با ساختار M5 همان لحظه، در آلبوم‌های ۱۰تایی."""
+        from .gap_pictures import caption, trade_picture
+        losers = [t for t in res["closed"] if t["r"] < 0]
+        if not losers:
+            return
+        self.bot.send_message(chat_id, f"🛑 {len(losers)} stopped-out trades: a zoomed picture of each one, "
+                                       f"with the M5 structure at the moment of entry (light-blue boxes).")
+        media = []
+        for t in losers:
+            try:
+                png = trade_picture(sym, res["candles"], m5, t, t["num"])
+                media.append(types.InputMediaPhoto(png, caption=caption(sym, t, t["num"])))
+            except Exception as e:
+                print("loser picture error:", t.get("num"), e)
+        for j in range(0, len(media), 10):
+            for attempt in range(3):
+                try:
+                    self.bot.send_media_group(chat_id, media[j:j + 10])
+                    break
+                except Exception as e:                 # محدودیت تعداد پیام تلگرام (429): صبر و دوباره
+                    info = getattr(e, "result_json", None)
+                    params = info.get("parameters", {}) if isinstance(info, dict) else {}
+                    print("losing trades album error:", e)
+                    time.sleep(min(int(params.get("retry_after", 5)) + 1, 60))
+            time.sleep(2)
+
 
     # ------------------------------------------------------------ دستورها
     def _register_handlers(self):
