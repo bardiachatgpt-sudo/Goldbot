@@ -10,7 +10,7 @@ from telebot import types
 from .config import MIN_BARS, PERIODS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
-VERSION = "structure · gold + majors + Dow Jones · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
+VERSION = "structure · gold, USDJPY, EURUSD · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
 MENU_STRUCTURE = "📐 Structure"
 MENU_BACKTEST = "🧪 Gap backtest"
 MENU_ALL = "🌍 All pairs"
