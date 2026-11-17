@@ -65,3 +65,16 @@ One day only. To use when the user asks: check the same patterns day by day on U
 later are an "M1 range width / recent swing size" measure (H2a, H2f), "bars since a climactic spike" (H2b), M1 trend
 direction (H2c), and distance to the M5 edge in pips rather than as % of a huge box (H2d, H2e).
 Pictures were made in the session scratchpad (overview: M1 candles + M5 box edges at each moment + numbered trades).
+
+### H2 · day 2 — Fri 16 Jan 2026 (backtest #334–#367): 34 trades, 16 wins, −2R
+Tokyo 9/13 +5R · Tokyo+London 1/4 −2R · London 2/7 −3R · London+NY 3/6 0R · NY 1/4 −2R. Plain numbers again did not
+separate wins and losses (stop 4.7 vs 4.4 pips; entry candle not consistent with day 1).
+- **H2c against the M1 trend — repeated strongly:** #4 (buy in the 04:30–05:00 fall), #8 and #11 (sells in the
+  07:30–10:15 M1 bull channel), #13 (buy in the 10:20–11:10 fall), #25 and #26 (buys in the 16:00–18:00 fall): all 6
+  lost. With-trend gaps in the same legs won (#9, #10, #12 buys in the bull channel).
+- **H2a tight M1 range — repeated:** 11:00–14:30 choppy range 158.00–158.25 → #14–#22: 2 wins, 7 losses.
+- **H2b climax — repeated, and its mirror:** fading a climax won: #3 sell after the 04:25 spike up, #5 buy after the
+  06:10 spike down to 157.96, #27 buy after the 18:30 low, #28 sell after the 19:10 spike up. Trading in the climax
+  direction at the extreme lost: #30 sell at the 20:15 low, #32–#33 buys late in the 21:30–22:30 rally.
+- **New · H2h Tokyo vs London:** Tokyo was best both days (12/18, then 9/13); the London open part was weak both
+  days (day 1 London + London/NY 2/8; day 2 Tokyo+London + London 3/11).
