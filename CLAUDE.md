@@ -15,7 +15,10 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
 
 ## What the bot does now
 Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs). No alerts, no channel
-posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, US30 (Dow Jones).
+posts, no live trading. Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
+crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
+`config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env
+var is set on Render it overrides the default — it must then be changed there too).
 - **📐 Structure** → pair → timeframe (M1, M5, M15, M30, H1, H4, D1) → two pictures: last 500 candles with the
   structure, and a zoom on the last two structures. Under the timeframes:
   - **🔬 M1 candles + M5 structure + gap setup** (`/structure XAUUSD mtf`, `bot/mtf.py`): white background, grey M1

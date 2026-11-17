@@ -26,8 +26,9 @@ ALL_SYMBOLS = {
     "US30": ["OANDA:US30USD", "FOREXCOM:DJI", "CAPITALCOM:US30", "TVC:DJI"],     # داوجونز (CFD تقریباً ۲۳ ساعته)
 }
 
-# نمادهای دکمه‌ها: طلا، ماژورها و داوجونز (با STRUCTURE_PAIRS در Render عوض می‌شود)
-_SX = os.environ.get("STRUCTURE_PAIRS", "XAUUSD,EURUSD,GBPUSD,USDJPY,USDCHF,USDCAD,AUDUSD,NZDUSD,US30")
+# نمادهای دکمه‌ها: فقط طلا، ین ژاپن و یورو (خواست کاربر، ۱۷ نوامبر؛ با STRUCTURE_PAIRS در Render عوض می‌شود).
+# بقیه در ALL_SYMBOLS می‌مانند تا اگر لازم شد با یک خط برگردند.
+_SX = os.environ.get("STRUCTURE_PAIRS", "XAUUSD,USDJPY,EURUSD")
 STRUCTURE_SYMBOLS = [s for s in (p.strip().upper() for p in _SX.split(",")) if s in ALL_SYMBOLS] or ["XAUUSD"]
 
 # تایم‌فریم TradingView → نام

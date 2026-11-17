@@ -129,13 +129,12 @@ def make_bot():
 
 
 class TestStructureBot(unittest.TestCase):
-    def test_pairs_are_gold_majors_and_dow(self):
+    def test_pairs_are_gold_yen_euro(self):
         tg = make_bot()
         tg.ask_structure(7)
         kb = tg.bot.send_message.call_args.kwargs["reply_markup"]
         self.assertEqual([b.callback_data for row in kb.keyboard for b in row],
-                         ["sxp:XAUUSD", "sxp:EURUSD", "sxp:GBPUSD", "sxp:USDJPY", "sxp:USDCHF",
-                          "sxp:USDCAD", "sxp:AUDUSD", "sxp:NZDUSD", "sxp:US30"])
+                         ["sxp:XAUUSD", "sxp:USDJPY", "sxp:EURUSD"])
         self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row],
                          ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs"])
 
@@ -619,7 +618,7 @@ class TestLegFilterAndAllPairs(unittest.TestCase):
             {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
 
         def fake(sym, n, m, interval=None, timeout=20):
-            if sym == "US30":
+            if sym == "EURUSD":
                 return None                                                          # یک جفت بدون داده
             return m1 if interval == "1" else m5
 
@@ -639,7 +638,7 @@ class TestLegFilterAndAllPairs(unittest.TestCase):
         self.assertIn("Without the M5 filter", txt)
         for sym in config.STRUCTURE_SYMBOLS:
             self.assertIn(sym, txt)
-        self.assertIn("US30      no data", txt)
+        self.assertIn("EURUSD    no data", txt)
         self.assertIn("$1000", txt)
         self.assertLess(len(txt), 4096)
 
