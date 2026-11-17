@@ -53,6 +53,17 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
 - Levels (entry, SL, TP) are rounded to 8 decimals (`gap._r`): before this, float error (1.09977 − 0.00001 =
   1.0997599999…) made ~30% of exactly-1-pipette entries/stops miss (EURUSD #10 late entry, 17 Nov fix).
 - Stop: 1 pipette beyond candle 1. Target 1:1. One trade at a time. No spread in any backtest yet.
+- **Setup 2 during an open trade** (user's rule, 17 Nov, `gap.trades(manage=True)` default, `_manage_bar`): still ONE
+  position. A same-direction gap that forms while a trade is open (only if its leg ≤ MAX_LEG, so Leg 1 trade → Leg 2
+  gap; Leg 2 trade → Leg 3 ignored) is followed like a normal gap; when ITS entry triggers (prev high/low ± 1 pipette)
+  the open trade's TP moves to setup 2's TP (entry2 ± its own 1:1 risk) — only if farther and (with the M5 filter)
+  inside the M5 box. When price then reaches HALF of setup 2's profit (0.5R of setup 2), the open trade's SL moves to
+  1 pipette beyond entry2 (only if tighter). SL/TP/entry2/half2 are hit in price-path order inside each candle
+  (`_walk`). If the trade closes before setup 2's entry, that gap waits for a normal entry. r = (exit − entry) /
+  original risk (e.g. +0.25R, +1.7R); result TP / SL / "SL+" (moved SL). Trade dict: sl0/tp0 (original), sl/tp
+  (final), moves [{kind tp|sl, i, price, entry2, gap…}]. Report: "🎯 Setup 2 moved TP in N trades" and
+  "🔁 old rule (fixed 1:1, no setup 2)"; lists/captions show "TP→x · SL→y"; pictures draw TP/SL as steps + GAP 2 box.
+  Opposite gaps during an open trade are still ignored.
 - **M5 filter:** no trade if the 1:1 target lies outside the M5 structure box of that moment (500 M5 candles closed
   then) — `gap.m5_target_filter`.
 - **Leg filter: only Leg 1 and Leg 2** (`gap.MAX_LEG = 2`). For a sell, the move starts at the highest high since the
@@ -74,13 +85,6 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   server time zone (GMT+2/+3), broker symbol names, digits. Plan: gold first to settle the format; build M5/M15 from
   M1; run the gap backtest here in the cloud session (no TradingView needed); report month by month and first vs
   second 3 months; optionally keep compressed copies in `data/` (repo should then be private).
-- **Same-direction gap during an open trade (rule given by the user, 17 Nov; not coded yet):** still ONE position, no
-  second trade. If the open trade is Leg 1 and a same-direction gap (Leg 2) forms and ITS entry triggers: the open
-  trade's TP moves to setup 2's TP (entry2 ± its own 1:1 risk). Only after price has gone at least HALF of setup 2's
-  profit (0.5R of setup 2, user confirmed) does the open trade's SL move to near entry2 (how near: proposed 1 pipette
-  beyond entry2, not confirmed yet). Open trade Leg 2 → the
-  new gap is Leg 3 → ignored. Assumed (to confirm): TP only moves farther, never closer; TP1 hit before entry2 → close.
-  Today gaps that form while a trade is open are not even detected (gap.trades skips them) — show/count them too.
 - Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
 - In an M5 range: sell only in the upper half, buy only in the lower half; stop a little beyond the M5 edge.
 - Entry on candle 4 tends to be best (report by entry candle 4/5/6+).

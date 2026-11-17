@@ -82,8 +82,8 @@ def trade_picture(sym, m1, m5, t, num=None):
     o, h, l, c = (w[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     n = len(w)
     s = t["side"]
-    lo = min(l.min(), t["sl"], t["tp"])
-    hi = max(h.max(), t["sl"], t["tp"])
+    lo = min(l.min(), t["sl"], t["tp"], t.get("sl0", t["sl"]), t.get("tp0", t["tp"]))
+    hi = max(h.max(), t["sl"], t["tp"], t.get("sl0", t["sl"]), t.get("tp0", t["tp"]))
     span = (hi - lo) or 1.0
     pad = span * 0.04
 
@@ -158,11 +158,43 @@ def trade_picture(sym, m1, m5, t, num=None):
     ax.text((g1 + g3) / 2, (t["gap_hi"] + t["gap_lo"]) / 2, "GAP", color="#7C2D12" if s < 0 else "#134E4A",
             fontsize=8, fontweight="bold", ha="center", va="center", zorder=9)
     ax.axvline(xe - 0.5, color=MUTED, lw=1, ls=":", zorder=3)
-    for y, col, name in ((t["sl"], SL_COL, "SL"), (t["tp"], TP_COL, "TP 1:1"), (t["entry"], TEXT, "ENTRY")):
-        ax.hlines(y, xe - 0.5, xx + 0.5, color=col, lw=1.6 if name != "ENTRY" else 1.0,
-                  ls=(0, (5, 3)) if name != "ENTRY" else ":", zorder=7)
-        ax.text(xx + 0.8, y, f"{name} {fmt_price(sym, y)}", color=col, fontsize=9, fontweight="bold",
-                va="center", zorder=9)
+    def steps(y0, kind):
+        """خط پله‌ای حد ضرر/سود: از ورود تا هر جابه‌جایی، بعد سطح تازه تا خروج."""
+        out, x0, y = [], xe - 0.5, y0
+        for m in t.get("moves", []):
+            if m["kind"] == kind:
+                out.append((x0, m["i"] - a, y))
+                x0, y = m["i"] - a, m["price"]
+        out.append((x0, xx + 0.5, y))
+        return out
+
+    for y0, col, name, kind in ((t.get("sl0", t["sl"]), SL_COL, "SL", "sl"),
+                                (t.get("tp0", t["tp"]), TP_COL, "TP", "tp")):
+        segs = steps(y0, kind)
+        for k, (x0, x1, y) in enumerate(segs):
+            last = k == len(segs) - 1
+            ax.hlines(y, x0, x1, color=col, lw=1.6 if last else 1.1, ls=(0, (5, 3)), alpha=1 if last else 0.55,
+                      zorder=7)
+            if k:
+                ax.vlines(x0, segs[k - 1][2], y, color=col, lw=1, ls=":", zorder=7)
+            label = (f"{name} 1:1" if name == "TP" and len(segs) == 1 else name) if not k else \
+                (f"{name} setup 2" if name == "TP" else f"{name} moved")
+            ax.text(x1 + 0.8 if last else x0 + 0.3, y, f"{label} {fmt_price(sym, y)}", color=col, fontsize=9,
+                    fontweight="bold", va="center" if last else ("bottom" if (y > t["entry"]) else "top"), zorder=9)
+    ax.hlines(t["entry"], xe - 0.5, xx + 0.5, color=TEXT, lw=1.0, ls=":", zorder=7)
+    ax.text(xx + 0.8, t["entry"], f"ENTRY {fmt_price(sym, t['entry'])}", color=TEXT, fontsize=9, fontweight="bold",
+            va="center", zorder=9)
+    for m in t.get("moves", []):                           # گپ و ورود ستاپ دوم
+        if m["kind"] != "tp":
+            continue
+        q1, q3, qe = m["gap"][0] - a, m["gap"][1] - a, m["i"] - a
+        ax.add_patch(patches.Rectangle((q1 - 0.5, m["gap_lo"]), q3 - q1 + 1, m["gap_hi"] - m["gap_lo"],
+                                       facecolor=gc, alpha=0.25, edgecolor=gc, lw=1.2, ls="--", zorder=6))
+        ax.text((q1 + q3) / 2, (m["gap_hi"] + m["gap_lo"]) / 2, f"GAP 2 · L{m['leg']}", color="#7C2D12"
+                if s < 0 else "#134E4A", fontsize=7.5, fontweight="bold", ha="center", va="center", zorder=9)
+        ax.plot(qe, m["entry2"], "v" if s < 0 else "^", color=MUTED, ms=10, zorder=10, mec="white", mew=1)
+        ax.text(qe + 0.4, m["entry2"], f" setup 2 entry {fmt_price(sym, m['entry2'])}", color=MUTED, fontsize=8,
+                va="bottom" if s < 0 else "top", zorder=9)
     ax.plot(xe, t["entry"], "v" if s < 0 else "^", color=TEXT, ms=12, zorder=10, mec="white", mew=1)
     if t.get("exit_i") is not None:
         win = t["r"] > 0
@@ -209,6 +241,8 @@ def trade_picture(sym, m1, m5, t, num=None):
     ax.grid(color=GRID, lw=0.6)
     when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%a %d %b %H:%M")
     res = "" if t.get("r") is None else f" · {'WIN' if t['r'] > 0 else 'LOSS'} {t['r']:+g}R"
+    if t.get("moves"):
+        res += " · TP/SL moved by setup 2"
     head = f"#{num} " if num else ""
     leg = (f" · Leg {t['leg']}" if t.get("leg") else "") + (f" · {t['session']}" if t.get("session") else "")
     ax.set_title(f"{head}{sym} M1 · {'SELL' if s < 0 else 'BUY'} gap{leg} · {when} Tehran{res}\nM5 at entry: {now5}",
@@ -224,8 +258,11 @@ def caption(sym, t, num):
     when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%a %d %b %H:%M")
     side = "SELL" if t["side"] < 0 else "BUY"
     leg = (f" · Leg {t['leg']}" if t.get("leg") else "") + (f" · {t['session']}" if t.get("session") else "")
-    out = (f"#{num} {side}{leg} {when} Tehran · entry {fmt_price(sym, t['entry'])} · SL {fmt_price(sym, t['sl'])} · "
-           f"TP {fmt_price(sym, t['tp'])}")
+    out = (f"#{num} {side}{leg} {when} Tehran · entry {fmt_price(sym, t['entry'])} · "
+           f"SL {fmt_price(sym, t.get('sl0', t['sl']))} · TP {fmt_price(sym, t.get('tp0', t['tp']))}")
+    for m in t.get("moves", []):
+        out += (f" · setup 2 → TP {fmt_price(sym, m['price'])}" if m["kind"] == "tp"
+                else f" · SL → {fmt_price(sym, m['price'])}")
     if t.get("r") is not None:
         out += f" → {'🏆' if t['r'] > 0 else '🛑'} {t['r']:+g}R"
     if t.get("m5_state"):
