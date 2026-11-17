@@ -135,7 +135,8 @@ def trade_picture(sym, m1, m5, t, num=None):
     when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%d %b %H:%M")
     res = "" if t.get("r") is None else f" · {'WIN' if t['r'] > 0 else 'LOSS'} {t['r']:+g}R"
     head = f"#{num} " if num else ""
-    ax.set_title(f"{head}{sym} M1 · {'SELL' if s < 0 else 'BUY'} gap · {when} Tehran{res}\nM5 at entry: {now5}",
+    leg = f" · Leg {t['leg']}" if t.get("leg") else ""
+    ax.set_title(f"{head}{sym} M1 · {'SELL' if s < 0 else 'BUY'} gap{leg} · {when} Tehran{res}\nM5 at entry: {now5}",
                  color=TEXT, fontsize=12.5, fontweight="bold", loc="left")
     plt.tight_layout()
     buf = io.BytesIO()
@@ -147,7 +148,8 @@ def trade_picture(sym, m1, m5, t, num=None):
 def caption(sym, t, num):
     when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%d %b %H:%M")
     side = "SELL" if t["side"] < 0 else "BUY"
-    out = (f"#{num} {side} {when} Tehran · entry {fmt_price(sym, t['entry'])} · SL {fmt_price(sym, t['sl'])} · "
+    leg = f" · Leg {t['leg']}" if t.get("leg") else ""
+    out = (f"#{num} {side}{leg} {when} Tehran · entry {fmt_price(sym, t['entry'])} · SL {fmt_price(sym, t['sl'])} · "
            f"TP {fmt_price(sym, t['tp'])}")
     if t.get("r") is not None:
         out += f" → {'🏆' if t['r'] > 0 else '🛑'} {t['r']:+g}R"

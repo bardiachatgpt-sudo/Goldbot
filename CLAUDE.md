@@ -59,6 +59,10 @@ on purpose; they are in git history before commit 678dacb if ever needed).
     the box top), the trade is not taken (the user saw those mostly fail). The box comes from the 500 M5 candles
     closed at that moment (gap.m5_target_filter). Used on the M1 + M5 picture (skipped gaps drawn dotted) and in the
     M1/M5 backtests, which also report the same data without the filter.
+  - Leg label (user: "we usually take the first leg"): each trade is labelled Leg 1 / Leg 2 / … — for a sell, the
+    move starts at the highest high since the last buy gap; Leg 1 = no earlier sell gap in this move, Leg 2 = one
+    before, etc. (gap.gap_heads / gap.leg_number; chained gaps count once). Shown in pictures, captions, the trade
+    list and a Leg 1 vs Leg 2+ line in the report. Label only — no filter yet.
   - Idea to discuss later (do NOT code until the user brings it up): the user notices the best setups, when inside
     the structure, usually enter on candle 4 (right after the gap). Possible later: report results by entry candle
     (4 / 5 / 6+) and an "entry on candle 4 only" comparison; maybe require the entry inside the M5 box.

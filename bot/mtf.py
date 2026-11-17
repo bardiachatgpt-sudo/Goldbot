@@ -184,6 +184,9 @@ def render(sym, m5, m1, layer="gaps", m5_full=None):
             ax.hlines(t["sl"], e - 0.5, x_end + 0.5, color=SL_COL, lw=1.0, ls=(0, (3, 2)), zorder=7)
             ax.hlines(t["tp"], e - 0.5, x_end + 0.5, color=TP_COL, lw=1.0, ls=(0, (3, 2)), zorder=7)
             ax.plot(e, t["entry"], "v" if s_ < 0 else "^", color=M1_LINE, ms=7, zorder=9, mec="white", mew=0.6)
+            if t.get("leg"):                             # لگ ۱ یا ۲ کنار ورود
+                ax.text(e, t["entry"] + (pad * 0.6 if s_ < 0 else -pad * 0.6), f"L{t['leg']}", color=M1_LINE,
+                        fontsize=7, fontweight="bold", ha="center", va="bottom" if s_ < 0 else "top", zorder=9)
             if t["exit_i"] is not None:
                 win = t["r"] > 0
                 ax.plot(t["exit_i"], t["exit"], "o", color=TP_COL if win else SL_COL, ms=5.5, zorder=9,

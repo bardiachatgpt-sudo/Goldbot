@@ -305,6 +305,19 @@ class TestGapSetup(unittest.TestCase):
         self.assertEqual(t["gap"], (0, 2))                             # همه‌ی گپ‌های بعدی زنجیره‌اند
         self.assertAlmostEqual(t["sl"], 201.01)
 
+    def test_leg_one_and_two(self):
+        from bot import gap
+        rows = [(110, 111, 108, 108.5), (108.5, 108.6, 101, 101.5), (101.5, 105, 100, 100.5),   # گپ فروش اول
+                (100.5, 102, 99, 99.5), (99.5, 102.5, 99.4, 102.2), (102.2, 102.3, 92, 92.5),     # فروش، حد سود
+                (92.5, 93, 91, 91.5), (91.5, 91.6, 85, 85.5), (85.5, 88, 84, 84.5)]              # گپ فروش دوم
+        heads = gap.gap_heads(*candles(rows))
+        self.assertEqual(heads, [(0, -1), (5, -1)])
+        o, h, l, c = candles(rows)
+        self.assertEqual(gap.leg_number(heads, h, l, 0, -1), 1)       # اولین گپ این حرکت نزولی
+        self.assertEqual(gap.leg_number(heads, h, l, 5, -1), 2)       # قبلش در همین حرکت یک گپ فروش بوده
+        t = gap.trades(o, h, l, c, sym="XAUUSD")[0]
+        self.assertEqual(t["leg"], 1)
+
     def test_buy_is_the_mirror(self):
         from bot import gap
         rows = [(2 * 105 - o, 2 * 105 - lo, 2 * 105 - hi, 2 * 105 - cl) for o, hi, lo, cl in self.SELL]
@@ -388,6 +401,8 @@ class TestGapBacktest(unittest.TestCase):
         txt = gap_backtest.report_text(res)
         self.assertIn("Not taken (1:1 target outside the M5 box)", txt)
         self.assertIn("Same data without the M5 filter", txt)
+        self.assertIn("Leg 1", txt)
+        self.assertIn("Leg 2+", txt)
 
     def test_trade_picture(self):
         from bot import gap_backtest

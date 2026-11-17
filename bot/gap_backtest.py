@@ -72,6 +72,9 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True):
     for side, key in ((-1, "sells"), (1, "buys")):
         cs = [t for t in closed if t["side"] == side]
         res[key] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
+    for name, pick in (("leg1", lambda t: t.get("leg", 1) == 1), ("leg2", lambda t: t.get("leg", 1) >= 2)):
+        cs = [t for t in closed if pick(t)]
+        res[name] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
     res["avg_risk"] = sum(abs(t["sl"] - t["entry"]) for t in closed) / len(closed) if closed else 0.0
     for rp in RISKS:
         final, dd, curve = account(closed, rp)
@@ -95,6 +98,10 @@ def report_text(res, decimals=2, shown=25):
              f"📈 Net: <b>{res['net_r']:+.0f}R</b>  (win +{RR:g}R, loss −1R)",
              f"   🔴 Sells: {res['sells'][0]} trades, {res['sells'][1]} wins, {res['sells'][2]:+.0f}R",
              f"   🟢 Buys: {res['buys'][0]} trades, {res['buys'][1]} wins, {res['buys'][2]:+.0f}R"]
+    for key, name in (("leg1", "1️⃣ Leg 1 (first gap of the move)"), ("leg2", "2️⃣ Leg 2+ (a gap came before in the move)")):
+        if key in res:
+            n_, w_, r_ = res[key]
+            lines.append(f"   {name}: {n_} trades, {w_} wins ({w_ / n_ * 100 if n_ else 0:.0f}%), {r_:+.0f}R")
     if res["trades"]:
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
@@ -116,7 +123,8 @@ def report_text(res, decimals=2, shown=25):
         for t in res["closed"][-shown:]:
             icon = "🏆" if t["r"] > 0 else "🛑"
             side = "SELL" if t["side"] < 0 else "BUY"
-            lines.append(f"{icon} #{t['num']} {tz(t['entry_time']):%d %b %H:%M} {side} {p(t['entry'])} → {p(t['exit'])} "
+            leg = f" L{t['leg']}" if t.get("leg") else ""
+            lines.append(f"{icon} #{t['num']} {tz(t['entry_time']):%d %b %H:%M} {side}{leg} {p(t['entry'])} → {p(t['exit'])} "
                          f"({t['r']:+g}R)")
         if len(res["closed"]) > shown:
             lines.append(f"<i>… {len(res['closed']) - shown} earlier trades not listed</i>")

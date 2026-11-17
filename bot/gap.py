@@ -80,6 +80,29 @@ def _exit(path, sl, tp, side):
     return None
 
 
+def gap_heads(o, h, l, c, same_color=True):
+    """همه‌ی گپ‌ها، مستقل از معامله‌ها: [(i1, side)]. گپ‌های زنجیره‌ای پشت‌سرهم (هم‌جهت) یک گپ حساب می‌شوند."""
+    heads, last = [], {1: -10, -1: -10}
+    for i in range(2, len(c)):
+        side, _ = find_gap(o, h, l, c, i, same_color)
+        if not side:
+            continue
+        if i - 2 > last[side]:                             # گپ تازه (نه ادامه‌ی زنجیره)
+            heads.append((i - 2, side))
+        last[side] = i
+    return heads
+
+
+def leg_number(heads, h, l, i1, side):
+    """شماره‌ی لگ گپی که کندل ۱ آن i1 است: ۱ اگر در همین حرکت قبلش گپ هم‌جهتی نبوده، ۲ اگر یکی بوده و …
+    حرکت (فروش) از بالاترین سقف بعد از آخرین گپ خلاف جهت شروع می‌شود؛ خرید: از پایین‌ترین کف."""
+    opp = [k for k, sd in heads if sd == -side and k < i1]
+    a = opp[-1] if opp else 0
+    seg = h[a:i1 + 1] if side < 0 else l[a:i1 + 1]
+    start = a + int(seg.argmax() if side < 0 else seg.argmin())
+    return 1 + sum(1 for k, sd in heads if sd == side and start <= k < i1)
+
+
 def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None):
     """معامله‌های ستاپ گپ روی کندل‌ها (آرایه‌ها). هر معامله:
     {side, gap: (i1, i3), gap_hi, gap_lo, entry_i, entry, sl, tp, exit_i, exit, result, r}
@@ -88,6 +111,7 @@ def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None):
     می‌شود و اگر skipped یک لیست باشد، به آن اضافه می‌شود."""
     n = len(c)
     pp = pip(sym)
+    heads = gap_heads(o, h, l, c, same_color)
     out, pending, open_t = [], None, None
     for i in range(n):
         if open_t is not None:                             # ۱) معامله‌ی باز
@@ -130,7 +154,8 @@ def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None):
                 # کندل ۱، جعبه و حد ضرر همان گپ اول می‌مانند
                 pending["chain"] = i
             else:                                          # گپ جدا یا خلاف جهت: جای قبلی را می‌گیرد
-                pending = {"side": side, "gap": (i - 2, i), "gap_hi": zone[0], "gap_lo": zone[1], "entry_i": None}
+                pending = {"side": side, "gap": (i - 2, i), "gap_hi": zone[0], "gap_lo": zone[1], "entry_i": None,
+                           "leg": leg_number(heads, h, l, i - 2, side)}
     if pending is not None:
         out.append(pending)
     return out
