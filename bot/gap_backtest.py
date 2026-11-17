@@ -7,7 +7,7 @@ import io
 
 import pandas as pd
 
-from .config import TEHRAN, label
+from .config import TEHRAN, label, session_of
 from .gap import RR, m5_target_filter, trades
 
 BALANCE = 1000.0
@@ -59,6 +59,7 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True):
     for k, t in enumerate(closed, 1):
         t["num"] = k
         t["gap_times"] = (idx[t["gap"][0]], idx[t["gap"][1]])
+        t["session"] = session_of(t["entry_time"])
     if m5 is not None and len(m5) >= 100:                 # ساختار M5 در لحظه‌ی ورود هر معامله
         from .gap_pictures import m5_at
         from .structure3 import NAMES, segment
@@ -81,6 +82,12 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True):
     for side, key in ((-1, "sells"), (1, "buys")):
         cs = [t for t in closed if t["side"] == side]
         res[key] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
+    sessions = {}                                         # نتیجه‌ی هر سشن (همپوشانی‌ها جدا)
+    for t in closed:
+        n_, w_, r_ = sessions.get(t["session"], (0, 0, 0.0))
+        sessions[t["session"]] = (n_ + 1, w_ + (t["r"] > 0), r_ + t["r"])
+    order = ["Tokyo", "Tokyo+London", "London", "London+NY", "NY", "Off"]
+    res["sessions"] = sorted(sessions.items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else 99)
     for name, pick in (("leg1", lambda t: t.get("leg", 1) == 1), ("leg2", lambda t: t.get("leg", 1) >= 2)):
         cs = [t for t in closed if pick(t)]
         res[name] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
@@ -111,6 +118,10 @@ def report_text(res, decimals=2, shown=25):
         if key in res:
             n_, w_, r_ = res[key]
             lines.append(f"   {name}: {n_} trades, {w_} wins ({w_ / n_ * 100 if n_ else 0:.0f}%), {r_:+.0f}R")
+    if res.get("sessions"):
+        lines.append("   🕐 By session:")
+        for name, (n_, w_, r_) in res["sessions"]:
+            lines.append(f"      {name}: {n_} trades, {w_} wins ({w_ / n_ * 100 if n_ else 0:.0f}%), {r_:+.0f}R")
     if res["trades"]:
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
@@ -132,7 +143,7 @@ def report_text(res, decimals=2, shown=25):
         for t in res["closed"][-shown:]:
             icon = "🏆" if t["r"] > 0 else "🛑"
             side = "SELL" if t["side"] < 0 else "BUY"
-            leg = f" L{t['leg']}" if t.get("leg") else ""
+            leg = (f" L{t['leg']}" if t.get("leg") else "") + (f" {t['session']}" if t.get("session") else "")
             lines.append(f"{icon} #{t['num']} {tz(t['entry_time']):%d %b %H:%M} {side}{leg} {p(t['entry'])} → {p(t['exit'])} "
                          f"({t['r']:+g}R)")
         if len(res["closed"]) > shown:
@@ -156,7 +167,8 @@ def losers_text(res, decimals=2, limit=3900):
     for t in losers:
         g1, g3 = t["gap_times"]
         rows.append(f"#{t['num']} · {tz(t['entry_time']):%d %b %H:%M} · {'SELL' if t['side'] < 0 else 'BUY'} · "
-                    f"L{t.get('leg', '?')} · gap {tz(g1):%H:%M}–{tz(g3):%H:%M} · entry {p(t['entry'])} · "
+                    f"L{t.get('leg', '?')} · {t.get('session', '?')} · gap {tz(g1):%H:%M}–{tz(g3):%H:%M} · "
+                    f"entry {p(t['entry'])} · "
                     f"SL {p(t['sl'])} · TP {p(t['tp'])} · exit {tz(t['exit_time']):%H:%M}"
                     + (f" · M5: {t['m5_state']}" if t.get("m5_state") else ""))
     out, cur = [], head

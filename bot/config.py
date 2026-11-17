@@ -48,3 +48,21 @@ FLAGS = {
 
 def label(name):
     return f"{FLAGS.get(name, '')} {name}".strip()
+
+
+# سشن‌ها با ساعت محلی هر بازار (تغییر ساعت تابستانی خودکار): نام، منطقه‌ی زمانی، شروع، پایان
+SESSIONS = [
+    ("Tokyo", "Asia/Tokyo", 9, 18),
+    ("London", "Europe/London", 8, 17),
+    ("NY", "America/New_York", 8, 17),
+]
+
+
+def session_of(ts):
+    """زمان (با منطقه‌ی زمانی) → «Tokyo»، «London»، «NY»، همپوشانی مثل «London+NY»، یا «Off» (بیرون هر سه)."""
+    names = []
+    for name, tz, a, b in SESSIONS:
+        local = ts.tz_convert(tz)
+        if local.weekday() < 5 and a <= local.hour < b:
+            names.append(name)
+    return "+".join(names) or "Off"

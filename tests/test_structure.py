@@ -410,6 +410,8 @@ class TestGapBacktest(unittest.TestCase):
                 self.assertIn(f"#{t['num']} ·", body)
         self.assertTrue(all(len(x) < 4096 for x in parts))
         self.assertIn("M5:", body)
+        self.assertIn("By session", txt)
+        self.assertTrue(all(t.get("session") for t in res["closed"]))
 
     def test_trade_picture(self):
         from bot import gap_backtest
@@ -466,6 +468,18 @@ class TestLastLegAgainstTheChannel(unittest.TestCase):
         c = np.array(up + fall) + rng.normal(0, 0.05, len(up) + len(fall))
         ph, _ = structure3.segment(c)
         self.assertEqual(ph[-1]["side"], -1)                            # پایه‌ی آخر نزولی است، نه «کانال صعودی»
+
+
+class TestSessions(unittest.TestCase):
+    def test_session_names(self):
+        ts = lambda s: pd.Timestamp(s, tz="UTC")
+        self.assertEqual(config.session_of(ts("2026-11-17 02:00")), "Tokyo")          # ۱۱:۰۰ توکیو
+        self.assertEqual(config.session_of(ts("2026-11-17 08:30")), "Tokyo+London")   # ۱۷:۳۰ توکیو، ۰۸:۳۰ لندن
+        self.assertEqual(config.session_of(ts("2026-11-17 14:00")), "London+NY")      # ۱۴:۰۰ لندن، ۰۹:۰۰ نیویورک
+        self.assertEqual(config.session_of(ts("2026-11-17 19:00")), "NY")
+        self.assertEqual(config.session_of(ts("2026-11-17 23:30")), "Off")
+        self.assertEqual(config.session_of(ts("2026-07-14 09:30")), "London")         # تابستان: ۱۰:۳۰ لندن، ۱۸:۳۰ توکیو
+        self.assertEqual(config.session_of(ts("2026-07-14 12:30")), "London+NY")      # تابستان: ۰۸:۳۰ نیویورک
 
 
 class TestPollingSurvivesConflict(unittest.TestCase):

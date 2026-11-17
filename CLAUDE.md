@@ -64,7 +64,9 @@ on purpose; they are in git history before commit 678dacb if ever needed).
     before, etc. (gap.gap_heads / gap.leg_number; chained gaps count once). Shown in pictures, captions, the trade
     list and a Leg 1 vs Leg 2+ line in the report. Label only — no filter yet.
   - After the report, a full list of the stopped-out trades is sent (gap_backtest.losers_text), one line each:
-    `#num · time · SELL/BUY · L<leg> · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`. #num = the picture
+    `#num · time · SELL/BUY · L<leg> · session · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`.
+    Session (config.session_of, local market hours, DST-aware): Tokyo 9–18 Tokyo, London 8–17 London, NY 8–17 NY;
+    overlaps joined ("London+NY"); outside all three = "Off". The report has a by-session block. #num = the picture
     number. The user will send pictures + this list; use them to find each trade.
   - Later (user will say when; do NOT code yet): (1) facts from the 16–17 Nov M1 run: Leg 1 50% 0R, Leg 2+ 38% −3R;
     L3+ looked bad (user: "take Leg 1–2 at most"); stops < $2 lost often; stops just beyond the M5 edges got hit;
