@@ -66,3 +66,25 @@ def session_of(ts):
         if local.weekday() < 5 and a <= local.hour < b:
             names.append(name)
     return "+".join(names) or "Off"
+
+
+# بازه‌ی بک‌تست: از آخرین شروع یک سشن تا الان، یا ۷۲ ساعت معاملاتی آخر
+PERIODS = {
+    "T": ("🇯🇵 Since the last Tokyo open", "since the last Tokyo open", "Asia/Tokyo", 9),
+    "L": ("🇬🇧 Since the last London open", "since the last London open", "Europe/London", 8),
+    "N": ("🇺🇸 Since the last New York open", "since the last New York open", "America/New_York", 8),
+    "72": ("🗓 Last 72 trading hours", "last 72 trading hours", None, None),
+}
+
+
+def last_session_start(code, now):
+    """آخرین شروع سشن (T/L/N) تا زمان now (هر دو با منطقه‌ی زمانی)، فقط روزهای کاری. خروجی به وقت UTC."""
+    import pandas as pd
+    _, _, tz, hour = PERIODS[code]
+    local_now = now.tz_convert(tz)
+    for back in range(0, 8):
+        day = (local_now - pd.Timedelta(days=back)).normalize()
+        start = day.replace(hour=hour)
+        if start <= local_now and start.weekday() < 5:
+            return start.tz_convert("UTC")
+    return (now - pd.Timedelta(days=1)).tz_convert("UTC")

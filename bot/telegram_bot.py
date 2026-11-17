@@ -7,13 +7,13 @@ import time
 import telebot
 from telebot import types
 
-from .config import MIN_BARS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
+from .config import MIN_BARS, PERIODS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
 VERSION = "structure · gold + majors + Dow Jones · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
 MENU_STRUCTURE = "📐 Structure"
 MENU_BACKTEST = "🧪 Gap backtest"
-MENU_ALL = "🌍 All pairs · 24h"
+MENU_ALL = "🌍 All pairs"
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
         "Pick a pair, then a timeframe.\n\n"
@@ -141,31 +141,50 @@ class Telegram:
     def backtest_pairs(self):
         kb = types.InlineKeyboardMarkup(row_width=3)
         kb.add(*[types.InlineKeyboardButton(label(n), callback_data="sxbp:" + n) for n in STRUCTURE_SYMBOLS])
-        kb.row(types.InlineKeyboardButton("🌍 All pairs · M1 · last 24h (with / without M5)", callback_data="sxa"))
+        kb.row(types.InlineKeyboardButton("🌍 All pairs · M1 (with / without M5)", callback_data="sxa"))
         return kb
 
-    def send_all_pairs(self, chat_id):
-        """ستاپ گپ روی M1، ۲۴ ساعت اخیر، برای همه‌ی جفت‌ها؛ با و بدون فیلتر M5؛ یک جدول خلاصه."""
+    @staticmethod
+    def period_keyboard(prefix):
+        """از آخرین شروع توکیو / لندن / نیویورک تا الان، یا ۷۲ ساعت معاملاتی آخر. callback: prefix + کد بازه."""
+        kb = types.InlineKeyboardMarkup(row_width=1)
+        kb.add(*[types.InlineKeyboardButton(name, callback_data=f"{prefix}{code}") for code, (name, *_) in PERIODS.items()])
+        return kb
+
+    def ask_all_pairs(self, chat_id):
+        self.bot.send_message(chat_id, "🌍 All pairs · M1 gap setup · from when?", reply_markup=self.period_keyboard("sxap:"))
+
+    def send_all_pairs(self, chat_id, code="72"):
+        """ستاپ گپ روی M1 برای همه‌ی جفت‌ها، از آخرین شروع سشن (T/L/N) یا ۷۲ ساعت آخر؛ با و بدون فیلتر M5."""
         import threading
 
+        import pandas as pd
+        code = code if code in PERIODS else "72"
+        period = PERIODS[code][1]
+
         def work():
-            from .gap_backtest import ALL_BARS, all_pairs_text, run
-            msg = self.bot.send_message(chat_id, f"⏳ Gap setup on all {len(STRUCTURE_SYMBOLS)} pairs · M1 · last 24h…")
+            from .config import last_session_start
+            from .gap_backtest import all_pairs_text, period_fetch, run
+            msg = self.bot.send_message(chat_id, f"⏳ Gap setup on all {len(STRUCTURE_SYMBOLS)} pairs · M1 · {period}…")
+            n, last = period_fetch(code, "1", pd.Timestamp.now(tz="UTC"))
             rows = []
             for k, sym in enumerate(STRUCTURE_SYMBOLS, 1):
                 try:
-                    self.bot.edit_message_text(f"⏳ Gap setup on all pairs · M1 · last 24h… {k}/{len(STRUCTURE_SYMBOLS)} "
+                    self.bot.edit_message_text(f"⏳ Gap setup on all pairs · M1 · {period}… {k}/{len(STRUCTURE_SYMBOLS)} "
                                                f"({sym})", chat_id, msg.message_id)
                 except Exception:
                     pass
                 try:
-                    m1 = get_closed_candles(sym, ALL_BARS + 60, MIN_BARS, "1", timeout=60)
-                    m5 = get_closed_candles(sym, 900, MIN_BARS, "5", timeout=60) if m1 is not None else None
+                    m1 = get_closed_candles(sym, min(n + 60, 5000) + 1, MIN_BARS, "1", timeout=60)
+                    m5 = get_closed_candles(sym, min(n // 5 + 560, 5000), MIN_BARS, "5", timeout=60) \
+                        if m1 is not None else None
                     if m1 is None:
                         rows.append((sym, None, None, "no data"))
                         continue
-                    rf = run(sym, m1, "1", days=None, m5=m5, compare=False, last_bars=ALL_BARS)
-                    rn = run(sym, m1, "1", days=None, m5=None, compare=False, last_bars=ALL_BARS)
+                    since = None if code == "72" else last_session_start(code, m1.index[-1])
+                    kw = dict(days=None, compare=False, last_bars=last, since=since, period=period)
+                    rf = run(sym, m1, "1", m5=m5, **kw)
+                    rn = run(sym, m1, "1", m5=None, **kw)
                     rows.append((sym, rf, rn, None))
                 except Exception as e:
                     print("all pairs error:", sym, e)
@@ -175,9 +194,10 @@ class Telegram:
             except Exception:
                 pass
             kb = types.InlineKeyboardMarkup()
-            kb.add(types.InlineKeyboardButton("🔄 Run again", callback_data="sxa"),
+            kb.add(types.InlineKeyboardButton("🔄 Run again", callback_data=f"sxap:{code}"),
+                   types.InlineKeyboardButton("🕐 Other period", callback_data="sxa"),
                    types.InlineKeyboardButton("🧪 One pair in detail", callback_data="sxbp"))
-            self.bot.send_message(chat_id, all_pairs_text(rows), parse_mode="HTML", reply_markup=kb)
+            self.bot.send_message(chat_id, all_pairs_text(rows, period=period), parse_mode="HTML", reply_markup=kb)
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -197,29 +217,41 @@ class Telegram:
         self.bot.send_message(chat_id, f"🧪 Gap backtest · {label(sym)} · which timeframe?",
                               reply_markup=self.backtest_tf_keyboard(sym))
 
-    def send_gap_backtest(self, chat_id, sym, tf="1"):
-        """همه‌ی کندل‌هایی که TradingView می‌دهد (تا M1_BARS) روی M1، M5 یا M15 با قاعده‌ی گپ؛ گزارش + نمودار."""
-        from .gap_backtest import BT_TIMEFRAMES, M1_BARS, equity_chart, report_text, run
+    def ask_period(self, chat_id, sym, tf):
+        from .gap_backtest import BT_TIMEFRAMES
+        self.bot.send_message(chat_id, f"🧪 Gap backtest · {label(sym)} · {BT_TIMEFRAMES.get(tf, tf)} · from when?",
+                              reply_markup=self.period_keyboard(f"sxr:{sym}:{tf}:"))
+
+    def send_gap_backtest(self, chat_id, sym, tf="1", code="72"):
+        """ستاپ گپ روی M1، M5 یا M15، از آخرین شروع سشن (T/L/N) تا الان یا ۷۲ ساعت معاملاتی آخر؛ گزارش + نمودار."""
+        import pandas as pd
+
+        from .config import last_session_start
+        from .gap_backtest import BT_TIMEFRAMES, equity_chart, period_fetch, report_text, run
         from .mtf import fmt_price
         tf = tf if tf in BT_TIMEFRAMES else "1"
-        tfn = BT_TIMEFRAMES[tf]
-        wait = self.bot.send_message(chat_id, f"⏳ Backtesting the gap setup on {label(sym)} {tfn} "
-                                              f"(up to {M1_BARS} candles)…")
+        code = code if code in PERIODS else "72"
+        tfn, period = BT_TIMEFRAMES[tf], PERIODS[code][1]
+        wait = self.bot.send_message(chat_id, f"⏳ Backtesting the gap setup on {label(sym)} {tfn} · {period}…")
         try:
             self.bot.send_chat_action(chat_id, "upload_photo")
         except Exception:
             pass
-        need = {"1": M1_BARS, "5": 1200, "15": 600}[tf]           # ۳ روز اخیر + کمی بیشتر
-        df = get_closed_candles(sym, need + 1, MIN_BARS, tf, timeout=90)
+        n, last = period_fetch(code, tf, pd.Timestamp.now(tz="UTC"))
+        extra = 560 if tf == "5" else 60                            # M5: ۵۰۰ کندل قبل برای ساختار
+        df = get_closed_candles(sym, min(n + extra, 5000) + 1, MIN_BARS, tf, timeout=90)
         if df is None:
             self.bot.send_message(chat_id, f"⚠️ {sym} {tfn}: could not fetch candles, try again in a minute.")
             return
-        m5 = df if tf == "5" else (get_closed_candles(sym, 1700, MIN_BARS, "5", timeout=60) if tf == "1" else None)
-        res = run(sym, df, tf, m5=m5)                     # فیلتر ساختار M5 برای M1 و M5
+        m5 = df if tf == "5" else (get_closed_candles(sym, min(n // 5 + 560, 5000), MIN_BARS, "5", timeout=60)
+                                   if tf == "1" else None)
+        since = None if code == "72" else last_session_start(code, df.index[-1])
+        res = run(sym, df, tf, days=None, m5=m5, last_bars=last, since=since, period=period)   # فیلتر M5 برای M1 و M5
         dec = len(fmt_price(sym, 1.0).split(".")[1])
         text = report_text(res, dec)
         kb = types.InlineKeyboardMarkup(row_width=3)
-        kb.add(types.InlineKeyboardButton("🔄 Run again", callback_data=f"sxb:{sym}:{tf}"),
+        kb.add(types.InlineKeyboardButton("🔄 Run again", callback_data=f"sxr:{sym}:{tf}:{code}"),
+               types.InlineKeyboardButton("🕐 Other period", callback_data=f"sxb:{sym}:{tf}"),
                types.InlineKeyboardButton("⏱ Other timeframe", callback_data=f"sxbp:{sym}"),
                types.InlineKeyboardButton("🧪 Other pair", callback_data="sxbp"))
         try:
@@ -335,8 +367,10 @@ class Telegram:
             sym = parts[1].upper() if len(parts) > 1 else None
             if sym is not None and sym not in STRUCTURE_SYMBOLS:
                 bot.send_message(m.chat.id, f"Unknown pair. Available: {', '.join(STRUCTURE_SYMBOLS)}")
-            elif sym and len(parts) > 2 and parts[2] in BT_TIMEFRAMES:          # /backtest XAUUSD 5
-                self.send_gap_backtest(m.chat.id, sym, parts[2])
+            elif sym and len(parts) > 3 and parts[2] in BT_TIMEFRAMES and parts[3].upper() in PERIODS:
+                self.send_gap_backtest(m.chat.id, sym, parts[2], parts[3].upper())   # /backtest XAUUSD 1 L
+            elif sym and len(parts) > 2 and parts[2] in BT_TIMEFRAMES:          # /backtest XAUUSD 5 → بازه؟
+                self.ask_period(m.chat.id, sym, parts[2])
             else:
                 self.ask_backtest(m.chat.id, sym)
 
@@ -346,7 +380,7 @@ class Telegram:
                 self.ask_backtest(m.chat.id)
                 return
             if (m.text or "").strip() == MENU_ALL:
-                self.send_all_pairs(m.chat.id)
+                self.ask_all_pairs(m.chat.id)
                 return
             self.ask_structure(m.chat.id)
 
@@ -355,9 +389,18 @@ class Telegram:
             chat_id = c.message.chat.id
             action, _, rest = c.data.partition(":")
             sym, _, tf = rest.partition(":")
-            if action == "sxa":                                 # همه‌ی جفت‌ها · ۲۴ ساعت
+            if action == "sxa":                                 # همه‌ی جفت‌ها: انتخاب بازه
+                bot.answer_callback_query(c.id)
+                self.ask_all_pairs(chat_id)
+                return
+            if action == "sxap":                                # همه‌ی جفت‌ها: اجرا
                 bot.answer_callback_query(c.id, "Running all pairs…")
-                self.send_all_pairs(chat_id)
+                self.send_all_pairs(chat_id, sym)
+                return
+            if action == "sxr" and sym in STRUCTURE_SYMBOLS:    # بک‌تست یک جفت: تایم‌فریم و بازه انتخاب شده
+                tf, _, code = tf.partition(":")
+                bot.answer_callback_query(c.id, f"Backtesting {sym}…")
+                self.send_gap_backtest(chat_id, sym, tf, code)
                 return
             if action == "sxwl":                                # فهرست بردها + ۵ عکس اول
                 bot.answer_callback_query(c.id)
@@ -366,9 +409,9 @@ class Telegram:
             if action in ("sxl", "sxw"):                        # ۵ عکس باخت / برد بعدی
                 bot.answer_callback_query(c.id)
                 self.send_loser_batch(chat_id, int(sym) if sym.isdigit() else 0, "loss" if action == "sxl" else "win")
-            elif action == "sxb" and sym in STRUCTURE_SYMBOLS and tf:
-                bot.answer_callback_query(c.id, f"Backtesting {sym}…")
-                self.send_gap_backtest(chat_id, sym, tf)
+            elif action == "sxb" and sym in STRUCTURE_SYMBOLS and tf:   # تایم‌فریم انتخاب شد → از کی؟
+                bot.answer_callback_query(c.id)
+                self.ask_period(chat_id, sym, tf)
             elif action in ("sxb", "sxbp"):                     # انتخاب جفت / تایم‌فریم بک‌تست
                 bot.answer_callback_query(c.id)
                 self.ask_backtest(chat_id, sym if sym in STRUCTURE_SYMBOLS else None)

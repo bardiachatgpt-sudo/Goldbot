@@ -137,7 +137,7 @@ class TestStructureBot(unittest.TestCase):
                          ["sxp:XAUUSD", "sxp:EURUSD", "sxp:GBPUSD", "sxp:USDJPY", "sxp:USDCHF",
                           "sxp:USDCAD", "sxp:AUDUSD", "sxp:NZDUSD", "sxp:US30"])
         self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row],
-                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs · 24h"])
+                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs"])
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
@@ -369,10 +369,11 @@ class TestGapBacktest(unittest.TestCase):
         with mock.patch.object(telegram_bot, "get_closed_candles", fake), \
                 mock.patch.object(telegram_bot.time, "sleep"):
             tg.send_gap_backtest(7, "XAUUSD")
-        self.assertEqual(calls, [("XAUUSD", 5001, "1"), ("XAUUSD", 1700, "5")])
+        self.assertEqual(calls, [("XAUUSD", 4381, "1"), ("XAUUSD", 1424, "5")])          # ۷۲ ساعت M1 + ساختار M5
         texts = [c.args[1] for c in tg.bot.send_message.call_args_list]
         report = next(t for t in texts if "GAP BACKTEST" in t)
-        self.assertIn("(3 days)", report)                                           # فقط ۳ روز اخیر
+        self.assertIn("last 72 trading hours", report)
+        self.assertIn("4320 M1 candles", report)                                    # دقیقاً ۷۲ ساعت
         losses = int(report.split("❌ ")[1].split(" ")[0])
         albums = [len(c.args[1]) for c in tg.bot.send_media_group.call_args_list]
         self.assertEqual(albums, [min(5, losses)])                                  # اول فقط ۵ عکس
@@ -481,7 +482,7 @@ class TestGapBacktestTimeframesAndPairs(unittest.TestCase):
         self.assertIn("EURUSD · M15", txt)
         tg.bot.send_media_group.assert_not_called()                                 # عکس باخت‌ها فقط برای M1
         btns = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxb:EURUSD:15", "sxbp:EURUSD", "sxbp"])
+        self.assertEqual(btns, ["sxr:EURUSD:15:72", "sxb:EURUSD:15", "sxbp:EURUSD", "sxbp"])
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):
@@ -552,6 +553,29 @@ class TestLegFilterAndAllPairs(unittest.TestCase):
         self.assertIn("US30      no data", txt)
         self.assertIn("$1000", txt)
         self.assertLess(len(txt), 4096)
+
+
+class TestPeriods(unittest.TestCase):
+    def test_last_session_start(self):
+        ts = lambda s: pd.Timestamp(s, tz="UTC")
+        now = ts("2026-11-17 10:00")                                                 # سه‌شنبه
+        self.assertEqual(config.last_session_start("T", now), ts("2026-11-17 00:00"))  # ۰۹:۰۰ توکیو
+        self.assertEqual(config.last_session_start("L", now), ts("2026-11-17 08:00"))  # ۰۸:۰۰ لندن (زمستان)
+        self.assertEqual(config.last_session_start("N", now), ts("2026-11-16 13:00"))  # دیروز ۰۸:۰۰ نیویورک
+        self.assertEqual(config.last_session_start("L", ts("2026-11-16 07:00")), ts("2026-11-13 08:00"))  # دوشنبه صبح → جمعه
+        self.assertEqual(config.last_session_start("L", ts("2026-07-14 09:00")), ts("2026-07-14 07:00"))  # تابستان
+
+    def test_period_choice_and_since_london(self):
+        from bot import gap_backtest
+        tg = make_bot()
+        tg.ask_period(7, "XAUUSD", "1")
+        btns = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
+        self.assertEqual(btns, ["sxr:XAUUSD:1:T", "sxr:XAUUSD:1:L", "sxr:XAUUSD:1:N", "sxr:XAUUSD:1:72"])
+        m1 = gappy_m1(3000)                                                          # 16 Nov 00:00 → 18 Nov 02:00 UTC
+        since = config.last_session_start("L", m1.index[-1])
+        res = gap_backtest.run("XAUUSD", m1, "1", days=None, since=since, period="since the last London open")
+        self.assertEqual(res["start"], since)                                         # از شروع لندن
+        self.assertIn("since the last London open", gap_backtest.report_text(res))
 
 
 class TestSessions(unittest.TestCase):

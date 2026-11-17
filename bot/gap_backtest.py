@@ -37,10 +37,11 @@ def last_days(df, days=DAYS):
     return df[df.index >= start]
 
 
-def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_leg=None):
+def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_leg=None, since=None, period=None):
     """m1: کندل‌های تایم‌فریم tf (Open/High/Low/Close، زمان = شروع کندل). خروجی: dict نتیجه.
     days: فقط این تعداد روز معاملاتی آخر (None = همه). last_bars: یا فقط این تعداد کندل آخر (مثلاً ۱۴۴۰ = ۲۴ ساعت M1).
     max_leg: فقط لگ ۱ تا max_leg (پیش‌فرض gap.MAX_LEG = ۲).
+    since: فقط کندل‌های از این زمان به بعد (مثلاً آخرین شروع لندن). period: متن بازه برای گزارش.
     m5: اگر باشد، فیلتر ساختار M5: حد سود بیرون از جعبه‌ی M5 همان لحظه → معامله گرفته نمی‌شود.
     compare: همان داده بدون فیلتر M5 هم حساب و در گزارش مقایسه شود."""
     from .gap import MAX_LEG
@@ -50,6 +51,8 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_l
         m1 = last_days(m1, days)
     if last_bars:
         m1 = m1.tail(last_bars)
+    if since is not None:
+        m1 = m1[m1.index >= since]
     o, h, l, c = (m1[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     idx = m1.index
     skipped = []
@@ -79,7 +82,7 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_l
            "net_r": sum(t["r"] for t in closed),
            "open": [t for t in all_t if t.get("entry_i") is not None and t.get("exit_i") is None],
            "waiting": [t for t in all_t if t.get("entry_i") is None], "accounts": {},
-           "days": len(set(idx.tz_convert("UTC").date)), "candles": m1,
+           "days": len(set(idx.tz_convert("UTC").date)), "candles": m1, "period": period,
            "m5_filter": allow is not None, "skipped": skipped, "max_leg": max_leg}
 
     def summ(ts):
@@ -118,7 +121,7 @@ def report_text(res, decimals=2, shown=25):
     tfn = res.get("tf", "M1")
     lines = [f"🧪 <b>GAP BACKTEST · {label(sym)} · {tfn}</b>",
              f"{tz(res['start']):%d %b %H:%M} → {tz(res['end']):%d %b %H:%M} Tehran · {res['bars']} {tfn} candles "
-             f"({res['days']} days)",
+             + (f"· {res['period']}" if res.get("period") else f"({res['days']} days)"),
              "📐 Gap on 3 same-colour candles → enter 1 pipette beyond the previous candle → stop behind candle 1 → "
              "target 1:1" + (" · only if the target is inside the M5 structure box" if res.get("m5_filter") else "")
              + (f" · legs 1–{res['max_leg']} only" if res.get("max_leg") else ""),
@@ -238,9 +241,22 @@ ALL_BARS = 1440         # «۲۴ ساعت اخیر» = ۱۴۴۰ کندل M1 مع
 ALL_RISK = 2.0
 
 
-def all_pairs_text(rows, risk=ALL_RISK):
+def period_fetch(code, tf, now):
+    """(تعداد کندل لازم برای این بازه، تعداد کندل آخر یا None). code: T/L/N/72."""
+    from .config import last_session_start
+    tf_min = int(tf)
+    if code == "72":
+        n = 72 * 60 // tf_min
+        return n, n
+    minutes = (now - last_session_start(code, now)).total_seconds() / 60
+    return int(minutes // tf_min) + 10, None
+
+
+def all_pairs_text(rows, risk=ALL_RISK, period="last 24h"):
     """rows: [(نماد، نتیجه با فیلتر M5، نتیجه بدون فیلتر M5، خطا)]. جدول خلاصه برای همه‌ی جفت‌ها، با و بدون فیلتر M5."""
-    head = (f"🌍 <b>GAP SETUP · ALL PAIRS · M1 · last 24h</b>\n"
+    start = next((r[1]["start"] for r in rows if r[1] is not None), None)
+    when = f" (from {start.tz_convert(TEHRAN):%d %b %H:%M} Tehran)" if start is not None else ""
+    head = (f"🌍 <b>GAP SETUP · ALL PAIRS · M1 · {period}</b>{when}\n"
             f"Legs 1–2 · target 1:1 · ${BALANCE:,.0f} at {risk:g}% risk per trade · no spread")
 
     def block(title, pick):

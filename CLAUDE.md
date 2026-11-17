@@ -14,7 +14,7 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
 - Be honest about results (small samples, no spread, look-ahead). Ideas the user rejected stay rejected.
 
 ## What the bot does now
-Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 24h). No alerts, no channel
+Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs). No alerts, no channel
 posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, US30 (Dow Jones).
 - **📐 Structure** → pair → timeframe (M1, M5, M15, M30, H1, H4, D1) → two pictures: last 500 candles with the
   structure, and a zoom on the last two structures. Under the timeframes:
@@ -23,7 +23,11 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
     top/bottom price; the last box runs to now. On the M1 candles: gap boxes, entries (L1/L2 label), stop, 1:1
     target, exits; skipped gaps dotted. (M1 micro cycles with the v1 detection still exist: `layer="micro"`, hidden.)
   - **🧪 Backtest the gap setup** → M1 / M5 / M15.
-- **🧪 Gap backtest** (`/backtest XAUUSD 5`) → pair → M1, M5 or M15 → last 3 trading days (`bot/gap_backtest.py`):
+- **Backtest period** (asked after the timeframe, and for 🌍): 🇯🇵 since the last Tokyo open · 🇬🇧 since the last
+  London open · 🇺🇸 since the last New York open · 🗓 last 72 trading hours (`config.PERIODS`,
+  `config.last_session_start`: local opens Tokyo 09:00, London 08:00, NY 08:00, weekdays, DST-aware, "now" = last
+  candle). This replaced the old "3 days" (which wrongly counted a Sunday with a few candles as a day).
+- **🧪 Gap backtest** (`/backtest XAUUSD 1 L`; codes T/L/N/72) → pair → M1, M5 or M15 → period (`bot/gap_backtest.py`):
   equity chart; report (trades, wins, R, sells vs buys, Leg 1 vs Leg 2+, by session, avg stop, skipped counts,
   comparisons "without the M5 filter" and "with all legs", $1,000 at 1% and 2%, latest trades); then a full list of
   stopped-out trades `#num · time · SELL/BUY · L<leg> · session · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`
@@ -31,7 +35,7 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   (kept in memory per chat; lost on restart). On M1 a "🏆 Winning trades: list + pictures" button sends the same
   list for the winners (same numbering as the report) and their pictures, 5 at a time (callbacks sxwl / sxw:n;
   losers sxl:n).
-- **🌍 All pairs · 24h** (also in the backtest pair menu): gap setup on M1, last 1440 M1 candles, every pair, with and
+- **🌍 All pairs** (also in the backtest pair menu) → period → gap setup on M1 for every pair, with and
   without the M5 filter; one summary table per variant: trades, win %, R, and a separate $1,000 account per pair at
   2% risk (final $ and growth %), totals, best/worst pair.
 
@@ -58,7 +62,6 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   sells in the lower half / buys in the upper half of an M5 range (7), late legs (3).
 
 ## Ideas for later (do NOT code until the user asks)
-- Fix "3 days" counting a Sunday with few candles (count only days with several hours of data).
 - Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
 - In an M5 range: sell only in the upper half, buy only in the lower half; stop a little beyond the M5 edge.
 - Entry on candle 4 tends to be best (report by entry candle 4/5/6+).
