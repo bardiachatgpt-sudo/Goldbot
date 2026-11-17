@@ -68,6 +68,7 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_l
         t["num"] = k
         t["gap_times"] = (idx[t["gap"][0]], idx[t["gap"][1]])
         t["session"] = session_of(t["entry_time"])
+        t["weekday"] = t["entry_time"].tz_convert(TEHRAN).strftime("%a")      # روز هفته به وقت تهران
     if m5 is not None and len(m5) >= 100:                 # ساختار M5 در لحظه‌ی ورود هر معامله
         from .gap_pictures import m5_at
         from .structure3 import NAMES, segment
@@ -103,6 +104,12 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_l
         sessions[t["session"]] = (n_ + 1, w_ + (t["r"] > 0), r_ + t["r"])
     order = ["Tokyo", "Tokyo+London", "London", "London+NY", "NY", "Off"]
     res["sessions"] = sorted(sessions.items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else 99)
+    days = {}                                             # نتیجه‌ی هر روز هفته (وقت تهران)
+    for t in closed:
+        n_, w_, r_ = days.get(t["weekday"], (0, 0, 0.0))
+        days[t["weekday"]] = (n_ + 1, w_ + (t["r"] > 0), r_ + t["r"])
+    week = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]
+    res["weekdays"] = sorted(days.items(), key=lambda kv: week.index(kv[0]) if kv[0] in week else 99)
     for name, pick in (("leg1", lambda t: t.get("leg", 1) == 1), ("leg2", lambda t: t.get("leg", 1) >= 2)):
         cs = [t for t in closed if pick(t)]
         res[name] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
@@ -138,6 +145,10 @@ def report_text(res, decimals=2, shown=25):
         lines.append("   🕐 By session:")
         for name, (n_, w_, r_) in res["sessions"]:
             lines.append(f"      {name}: {n_} trades, {w_} wins ({w_ / n_ * 100 if n_ else 0:.0f}%), {r_:+.0f}R")
+    if res.get("weekdays"):
+        lines.append("   📅 By weekday (Tehran):")
+        for name, (n_, w_, r_) in res["weekdays"]:
+            lines.append(f"      {name}: {n_} trades, {w_} wins ({w_ / n_ * 100 if n_ else 0:.0f}%), {r_:+.0f}R")
     if res["trades"]:
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
@@ -166,7 +177,7 @@ def report_text(res, decimals=2, shown=25):
             icon = "🏆" if t["r"] > 0 else "🛑"
             side = "SELL" if t["side"] < 0 else "BUY"
             leg = (f" L{t['leg']}" if t.get("leg") else "") + (f" {t['session']}" if t.get("session") else "")
-            lines.append(f"{icon} #{t['num']} {tz(t['entry_time']):%d %b %H:%M} {side}{leg} {p(t['entry'])} → {p(t['exit'])} "
+            lines.append(f"{icon} #{t['num']} {tz(t['entry_time']):%a %d %b %H:%M} {side}{leg} {p(t['entry'])} → {p(t['exit'])} "
                          f"({t['r']:+g}R)")
         if len(res["closed"]) > shown:
             lines.append(f"<i>… {len(res['closed']) - shown} earlier trades not listed</i>")
@@ -194,7 +205,7 @@ def trades_text(res, kind="loss", decimals=2, limit=3900):
     rows = []
     for t in losers:
         g1, g3 = t["gap_times"]
-        rows.append(f"#{t['num']} · {tz(t['entry_time']):%d %b %H:%M} · {'SELL' if t['side'] < 0 else 'BUY'} · "
+        rows.append(f"#{t['num']} · {tz(t['entry_time']):%a %d %b %H:%M} · {'SELL' if t['side'] < 0 else 'BUY'} · "
                     f"L{t.get('leg', '?')} · {t.get('session', '?')} · gap {tz(g1):%H:%M}–{tz(g3):%H:%M} · "
                     f"entry {p(t['entry'])} · "
                     f"SL {p(t['sl'])} · TP {p(t['tp'])} · exit {tz(t['exit_time']):%H:%M}"

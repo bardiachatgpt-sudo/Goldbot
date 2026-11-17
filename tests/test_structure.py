@@ -413,6 +413,8 @@ class TestGapBacktest(unittest.TestCase):
         self.assertTrue(all(len(x) < 4096 for x in parts))
         self.assertIn("M5:", body)
         self.assertIn("By session", txt)
+        self.assertIn("By weekday (Tehran)", txt)
+        self.assertTrue(all(t.get("weekday") in ("Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri") for t in res["closed"]))
         self.assertTrue(all(t.get("session") for t in res["closed"]))
 
     def test_winning_trades_button(self):

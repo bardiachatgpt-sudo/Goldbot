@@ -54,6 +54,8 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   last buy gap; Leg 1 = no earlier sell gap in this move, Leg 2 = one before (chained gaps count once).
 - **Session** of each trade (`config.session_of`, local hours, DST-aware): Tokyo 9–18 Tokyo, London 8–17 London,
   NY 8–17 New York; overlaps joined ("London+NY"); outside all = "Off".
+- **Weekday** of each trade (Tehran time, e.g. "Mon 16 Nov 02:48") in every list, caption and picture title; the
+  report has "📅 By weekday (Tehran)". The user wants session / weekday / leg per trade for later data analysis.
 
 ## Results so far (gold M1, no spread)
 - 6 days: 393 trades, 52%, +13R (before same-colour/M5/leg rules). With ~0.3 spread (avg stop ~$3) ≈ −20R.

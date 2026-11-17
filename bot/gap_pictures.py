@@ -132,7 +132,7 @@ def trade_picture(sym, m1, m5, t, num=None):
     for sp in ax.spines.values():
         sp.set_color(GRID)
     ax.grid(color=GRID, lw=0.6)
-    when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%d %b %H:%M")
+    when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%a %d %b %H:%M")
     res = "" if t.get("r") is None else f" · {'WIN' if t['r'] > 0 else 'LOSS'} {t['r']:+g}R"
     head = f"#{num} " if num else ""
     leg = (f" · Leg {t['leg']}" if t.get("leg") else "") + (f" · {t['session']}" if t.get("session") else "")
@@ -146,7 +146,7 @@ def trade_picture(sym, m1, m5, t, num=None):
 
 
 def caption(sym, t, num):
-    when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%d %b %H:%M")
+    when = t["entry_time"].tz_convert("Asia/Tehran").strftime("%a %d %b %H:%M")
     side = "SELL" if t["side"] < 0 else "BUY"
     leg = (f" · Leg {t['leg']}" if t.get("leg") else "") + (f" · {t['session']}" if t.get("session") else "")
     out = (f"#{num} {side}{leg} {when} Tehran · entry {fmt_price(sym, t['entry'])} · SL {fmt_price(sym, t['sl'])} · "
