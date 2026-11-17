@@ -136,7 +136,7 @@ class TestStructureBot(unittest.TestCase):
         self.assertEqual([b.callback_data for row in kb.keyboard for b in row],
                          ["sxp:XAUUSD", "sxp:USDJPY", "sxp:EURUSD"])
         self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row],
-                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs"])
+                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs", "🔔 Gold gap alerts"])
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
@@ -541,6 +541,56 @@ class TestRiseSharpDropLowRange(unittest.TestCase):
             self.assertEqual(names[0], ("CHANNEL", 1), (seed, names))
             self.assertIn(("SPIKE", -1), names, (seed, names))
             self.assertEqual(names[names.index(("SPIKE", -1)) + 1], ("RANGE", 0), (seed, names))
+
+
+class TestGapAlerts(unittest.TestCase):
+    """هشدار زنده‌ی گپ طلا: عکس با بسته شدن کندل ۳، پیام وقتی ورود خورد."""
+    FLAT = [(4000.0, 4000.5, 3999.5, 4000.2)] * 35            # کندل‌های بی‌گپ قبل از ستاپ
+    SELL = [(4010, 4011, 4008, 4008.5), (4008.5, 4008.6, 4001, 4001.5), (4001.5, 4005, 4000, 4000.5),
+            (4000.5, 4002, 3999, 3999.5), (3999.5, 4002.5, 3999.4, 4002.2)]
+
+    def frame(self, rows):
+        o, h, l, c = zip(*rows)
+        return pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c},
+                            index=pd.date_range("2026-11-16 10:00", periods=len(rows), freq="1min", tz="UTC"))
+
+    def test_gap_picture_then_entry_message(self):
+        from bot.gap_alerts import GapAlerter
+        rows = self.FLAT + self.SELL
+        a = GapAlerter("XAUUSD")
+        self.assertEqual(a.poll(self.frame(rows[:36])), [])               # اولین بار: فقط شروع
+        ev = a.poll(self.frame(rows[:39]))                                # کندل ۳ بسته شد (۳۸)، ۳۹ در حال تشکیل
+        self.assertEqual([k for k, _ in ev], ["gap"])
+        g = ev[0][1]
+        self.assertEqual((g["side"], g["sl"], g["level"]), (-1, 4011.01, 4005.01))
+        self.assertIn("SELL gap", a.gap_caption(g))
+        self.assertEqual(a.picture(g)[:4], b"\x89PNG")
+        self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: چیزی تکراری نیست
+        ev = a.poll(self.frame(rows[:40]))                                # در حال تشکیل: سقف 4002.5 > 4002.01
+        self.assertEqual([k for k, _ in ev], ["entry"])
+        e = ev[0][1]
+        self.assertAlmostEqual(e["entry"], 4002.01)
+        self.assertAlmostEqual(e["tp"], 4002.01 - (4011.01 - 4002.01))
+        self.assertIn("Entry hit", a.entry_text(e))
+        self.assertEqual(a.poll(self.frame(rows[:40] + [(4002.2, 4003, 3990, 3991)])), [])   # گپ تمام شده
+
+    def test_button_turns_alerts_on_and_sends_to_subscribers(self):
+        from bot.gap_alerts import GapAlerter
+        tg = make_bot()
+        tg.alert_chats = set()
+        with mock.patch.object(telegram_bot, "ALERT_FILE", os.devnull):
+            tg.toggle_alerts(7)
+        self.assertIn(7, tg.alert_chats)
+        rows = self.FLAT + self.SELL
+        a = GapAlerter("XAUUSD")
+        tg.alert_tick(a, self.frame(rows[:36]))
+        tg.alert_tick(a, self.frame(rows[:39]))
+        tg.alert_tick(a, self.frame(rows[:40]))
+        self.assertEqual(tg.bot.send_photo.call_count, 1)
+        self.assertIn("Entry hit", tg.bot.send_message.call_args.args[1])
+        with mock.patch.object(telegram_bot, "ALERT_FILE", os.devnull):
+            tg.toggle_alerts(7)
+        self.assertNotIn(7, tg.alert_chats)
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):

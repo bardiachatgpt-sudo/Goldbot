@@ -4,3 +4,4 @@ bot_state.json
 .venv/
 venv/
 .env
+alert_subs.json

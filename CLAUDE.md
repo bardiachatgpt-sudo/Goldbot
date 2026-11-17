@@ -16,8 +16,16 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
   (17 Nov: "I don't want a backtest now, just keep these until I tell you").
 
 ## What the bot does now
-Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs). No alerts, no channel
-posts, no live trading. Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
+Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts).
+No channel posts, no live trading.
+- **🔔 Gold gap alerts** (17 Nov, `bot/gap_alerts.py`, button or `/alerts [on|off]`): a thread polls TradingView every
+  15 s (XAUUSD M1, 300 bars incl. the forming candle) only while at least one chat is subscribed. Every gold M1 gap
+  (same `find_gap` rule, ALL legs, NO M5 filter, all hours the market is open — user's choice) → a picture when candle 3
+  closes (last 45 candles, gap box, entry level = previous high + 1 pipette / low − 1, SL behind candle 1, 1:1 TP) with
+  a caption (side, leg, session, Tehran time). When price trades beyond the level (checked on the forming candle and
+  on any closed candle missed between polls) → short "✅ Entry hit" message with entry / SL / TP. Chained gaps behind
+  the first one get no alert; a new separate or opposite gap replaces the waiting one. Subscribers: env
+  `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again). Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
 `config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env
 var is set on Render it overrides the default — it must then be changed there too).

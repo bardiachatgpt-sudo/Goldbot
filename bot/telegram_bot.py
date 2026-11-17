@@ -2,6 +2,9 @@
 
 جفت (طلا، ماژورها، داوجونز) ← تایم‌فریم ← دو عکس: آخرین ۵۰۰ کندل با ساختار، و بزرگ‌نمایی دو ساختار آخر.
 """
+import json
+import os
+import threading
 import time
 
 import telebot
@@ -10,16 +13,20 @@ from telebot import types
 from .config import MIN_BARS, PERIODS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
-VERSION = "structure · gold, USDJPY, EURUSD · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
+VERSION = "gold M1 gap alerts · structure · gold, USDJPY, EURUSD · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
 MENU_STRUCTURE = "📐 Structure"
 MENU_BACKTEST = "🧪 Gap backtest"
 MENU_ALL = "🌍 All pairs"
+MENU_ALERTS = "🔔 Gold gap alerts"
+ALERT_FILE = "alert_subs.json"          # چت‌هایی که هشدار گپ طلا را روشن کرده‌اند (با دیپلوی تازه پاک می‌شود)
+ALERT_POLL = 15                         # ثانیه بین هر بار گرفتن کندل‌ها
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
         "Pick a pair, then a timeframe.\n\n"
         "🔬 M1 + M5: M1 candles; each M5 structure is a light-blue box (range flat, channel slanted) with its "
         "top and bottom price, and the M1 gap setup on it (gap, entry, stop, 1:1 target, result).\n\n"
         "🧪 Gap backtest: pick a pair and M1, M5 or M15; the gap setup runs on all available candles.\n\n"
+        "🔔 Gold gap alerts: every gold M1 gap as it forms (picture), and a message when its entry is hit.\n\n"
         "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
             f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
 
@@ -30,6 +37,7 @@ class Telegram:
     def __init__(self, token):
         self.losers = {}                # چت → آخرین بک‌تست M1: نماد، کندل‌ها، M5، باخت‌ها، بردها، رقم اعشار
         self.bot = telebot.TeleBot(token, parse_mode=None) if token else None
+        self.alert_chats = self._load_alert_chats()
         if self.bot:
             self._register_handlers()
 
@@ -39,7 +47,59 @@ class Telegram:
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
         kb.add(types.KeyboardButton(MENU_STRUCTURE), types.KeyboardButton(MENU_BACKTEST),
                types.KeyboardButton(MENU_ALL))
+        kb.row(types.KeyboardButton(MENU_ALERTS))
         return kb
+
+    # ------------------------------------------------------------ هشدار گپ طلا
+    @staticmethod
+    def _load_alert_chats():
+        chats = {int(x) for x in os.environ.get("ALERT_CHAT_IDS", "").replace(" ", "").split(",") if x}
+        try:
+            with open(ALERT_FILE) as f:
+                chats |= {int(x) for x in json.load(f)}
+        except Exception:
+            pass
+        return chats
+
+    def _save_alert_chats(self):
+        try:
+            with open(ALERT_FILE, "w") as f:
+                json.dump(sorted(self.alert_chats), f)
+        except Exception as e:
+            print("alert file error:", e)
+
+    def toggle_alerts(self, chat_id, on=None):
+        on = (chat_id not in self.alert_chats) if on is None else on
+        (self.alert_chats.add if on else self.alert_chats.discard)(chat_id)
+        self._save_alert_chats()
+        self.bot.send_message(chat_id, "🔔 Gold M1 gap alerts are ON: a picture when a gap forms (candle 3 closed) "
+                                       "and a message when its entry is hit. Tap again to turn off." if on else
+                              "🔕 Gold gap alerts are OFF.")
+
+    def alert_tick(self, alerter, df):
+        """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست."""
+        for kind, ev in alerter.poll(df):
+            for chat in list(self.alert_chats):
+                try:
+                    if kind == "gap":
+                        self.bot.send_photo(chat, alerter.picture(ev), caption=alerter.gap_caption(ev))
+                    else:
+                        self.bot.send_message(chat, alerter.entry_text(ev))
+                except Exception as e:
+                    print("alert send error:", chat, e)
+
+    def alert_loop(self):
+        from .gap_alerts import GapAlerter, live_candles
+        alerter = GapAlerter()
+        while True:
+            try:
+                if self.alert_chats:
+                    self.alert_tick(alerter, live_candles())
+                else:
+                    alerter.last_closed = None         # کسی گوش نمی‌دهد: وقتی روشن شد از همان لحظه شروع کن
+            except Exception as e:
+                print("alert loop error:", e)
+            time.sleep(ALERT_POLL)
 
     def structure_pairs(self):
         kb = types.InlineKeyboardMarkup(row_width=3)
@@ -374,8 +434,16 @@ class Telegram:
             else:
                 self.ask_backtest(m.chat.id, sym)
 
+        @bot.message_handler(commands=["alerts"])
+        def on_alerts(m):                                        # /alerts · /alerts on · /alerts off
+            parts = m.text.split()
+            self.toggle_alerts(m.chat.id, None if len(parts) < 2 else parts[1].lower() == "on")
+
         @bot.message_handler(func=lambda m: True)
         def on_text(m):                                          # دکمه‌های پایین چت یا هر پیام دیگر
+            if (m.text or "").strip() == MENU_ALERTS:
+                self.toggle_alerts(m.chat.id)
+                return
             if (m.text or "").strip() == MENU_BACKTEST:
                 self.ask_backtest(m.chat.id)
                 return
@@ -440,9 +508,11 @@ class Telegram:
         try:                                     # منوی دستورها در تلگرام
             self.bot.set_my_commands([types.BotCommand("start", "Menu"),
                                       types.BotCommand("structure", "📐 Market structure"),
-                                      types.BotCommand("backtest", "🧪 Gap setup backtest (M1 / M5 / M15)")])
+                                      types.BotCommand("backtest", "🧪 Gap setup backtest (M1 / M5 / M15)"),
+                                      types.BotCommand("alerts", "🔔 Gold M1 gap alerts on/off")])
         except Exception as e:
             print("set_my_commands error:", e)
+        threading.Thread(target=self.alert_loop, daemon=True).start()     # هشدار زنده‌ی گپ طلا
         # هر خطایی (مثلاً 409 وقتی نسخه‌ی قبلی هنگام دیپلوی هنوز در حال polling است) نباید برنامه را ببندد،
         # وگرنه Render دیپلوی را Failed می‌کند. صبر کن و دوباره وصل شو.
         skip = True
