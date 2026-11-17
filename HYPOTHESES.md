@@ -224,3 +224,17 @@ stop/ATR, gap height/ATR, candle-1 range/ATR, pos60 (place in the 60-bar range, 
 → With these measurable features, losing trades cannot be filtered out well enough: the best honest result is about
   50% at 1:1 (break-even before costs). The patterns seen by eye do not survive as rules. Next idea must change the
   setup itself (exit / target, entry, higher-timeframe direction), or another market (gold).
+
+### Bigger target: 1.5R and 2R (17 Nov) — broker data 15 Jan–17 Jun, no M5 filter, no Off, stop unchanged
+"After spread" = minus the broker spread at the entry candle (SPREAD column) / stop, per trade; commission not known.
+| pair | target | trades | win % (break-even) | R | after spread | Jan–Mar | Apr–Jun |
+|---|---|---|---|---|---|---|---|
+| USDJPY | 1R | 4,034 | 48.1% (50%) | −154 | −419 | −123 | −31 |
+| USDJPY | 1.5R | 3,204 | 38.0% (40%) | −159 | −369 | −121 | −38 |
+| USDJPY | 2R | 2,493 | 33.6% (33.3%) | **+21** | −145 | −17 | +38 |
+| EURUSD | 1R | 3,972 | 47.6% (50%) | −194 | −329 | −124 | −70 |
+| EURUSD | 1.5R | 2,791 | 37.5% (40%) | −171 | −254 | −71 | −100 |
+| EURUSD | 2R | 2,473 | 31.5% (33.3%) | −136 | −217 | −71 | −65 |
+USDJPY 2R by month: Jan +39, Feb −51, Mar −5, Apr +53, May +14, Jun −29 (big swings). → 2R on USDJPY is about
+break-even before costs (+21R over 2,493 trades ≈ +0.01R/trade) and clearly negative after spread. EURUSD negative at
+every target. Changing the target alone does not create an edge.
