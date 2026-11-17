@@ -127,6 +127,8 @@ var is set on Render it overrides the default — it must then be changed there 
   profit moved the SL to 1 pipette beyond entry2. Coded in 35b3a7f, deployed, one day on 3 pairs (table above), then
   the user said "go back to the previous state" → reverted in 244ee0d (fixed 1:1 TP, gaps during an open trade are
   ignored again). Do not bring it back unless the user asks; the code is in git history.
+- **Regression and Ricci-flow / topology features: dropped by the user (17 Nov, "forget them").** Results kept in
+  HYPOTHESES.md (both ≈ coin flip out of sample). Do not bring them back unless the user asks.
 - **No trading at news time** (user's idea, 17 Nov, after the 23 Jan USDJPY spikes): not coded. Needs either a news
   calendar (times of high-impact USD/JPY news) or a proxy (pause after an abnormally large M1 candle / range).
 - Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
