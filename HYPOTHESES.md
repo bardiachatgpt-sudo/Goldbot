@@ -199,3 +199,12 @@ only 49% there. → The climax effect is real but small; no single filter found 
 3,083 trades, 46.6%, −211R. `tr30 > 3` (with a big recent move) 43% / 44% (−18R / −83R) — the same climax effect as
 USDJPY, small. Fading (`tr30 < −3`) only 50% / 48%. `er30`, `bigbar`, `mv10`: every bucket under 50%. → On EURUSD M1
 no bucket of any of these filters reaches 50%; the setup is worse than on USDJPY.
+
+### Does the M5 filter help? (17 Nov, broker data 2 Jan–17 Jun, current rules, no Off)
+All broker-data backtests above DO use the M5 structure filter (M5 built by resampling the broker M1; 500 M5 bars
+closed at each entry). Same data without it:
+| pair | with M5 filter | without M5 filter |
+|---|---|---|
+| USDJPY | 4,088 trades, 47.4%, −214R (1,795 gaps rejected by M5) | 4,342 trades, 48.1%, −162R |
+| EURUSD | 3,967 trades, 45.8%, −331R (2,042 rejected by M5) | 4,359 trades, 47.2%, −243R |
+→ The M5 filter (1:1 target must be inside the M5 box) makes results WORSE on both pairs over 5½ months.
