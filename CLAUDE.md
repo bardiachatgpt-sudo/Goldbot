@@ -64,6 +64,9 @@ var is set on Render it overrides the default — it must then be changed there 
   last buy gap; Leg 1 = no earlier sell gap in this move, Leg 2 = one before (chained gaps count once).
 - **Session** of each trade (`config.session_of`, local hours, DST-aware): Tokyo 9–18 Tokyo, London 8–17 London,
   NY 8–17 New York; overlaps joined ("London+NY"); outside all = "Off".
+- **The user does NOT trade the "Off" session** (outside Tokyo/London/NY: spread is high) — said 17 Nov. Leave Off
+  trades out of analyses of the broker data. Not yet a bot rule (the bot still takes and reports Off trades) — ask
+  before changing the bot.
 - **Weekday** of each trade (Tehran time, e.g. "Mon 16 Nov 02:48") in every list, caption and picture title; the
   report has "📅 By weekday (Tehran)". The user wants session / weekday / leg per trade for later data analysis.
 
