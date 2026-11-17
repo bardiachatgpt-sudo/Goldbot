@@ -45,8 +45,9 @@ on purpose; they are in git history before commit 678dacb if ever needed).
 - All earlier setups (pin bar, key bar, range edges, MACD, Always In…) were dropped by the user. Do not bring them
   back. The structures above stay.
 - The user is now describing new setups one by one. First one: the **gap** (not coded yet; rules agreed so far):
-  - Sell: candle 1 low > candle 3 high, and candle 2's body overlaps that gap (candle 2 is usually red; overlap is
-    enough). Buy: the mirror (candle 1 high < candle 3 low, candle 2 body overlaps).
+  - Sell: candle 1 low > candle 3 high, and candle 2's body overlaps that gap. **All three gap candles must be the
+    same colour** (sell: all three bearish; buy: all three bullish) — the user called this "very, very important".
+    Buy: the mirror (candle 1 high < candle 3 low, candle 2 body overlaps).
   - Following starts as soon as the gap exists (close of candle 3): compare each candle's high with the previous
     candle's high (buy: lows).
   - Entry (sell): only when price trades strictly ABOVE the previous candle's high, by at least one pipette;
@@ -55,8 +56,13 @@ on purpose; they are in git history before commit 678dacb if ever needed).
   - Stop: just beyond candle 1 (sell: above its high; buy: below its low). Target 1:1.
   - Runs on M1, drawn on the M1 + M5 picture. No invalidation for now (user's choice). One trade at a time; a new
     gap before entry replaces the waiting one. No spread. Stop = candle 1 + 1 pipette.
-  - M5 box edges are meant as targets (user chose "b"), but the user said to leave the edges out for now — no edge
-    rule is coded. Gap backtest (🧪 Gap backtest / under each pair / `/backtest XAUUSD 5`): pair → M1, M5 or M15 → runs
+  - M5 filter: if the 1:1 target lies outside the current M5 structure box (sell: below the box bottom; buy: above
+    the box top), the trade is not taken (the user saw those mostly fail). The box comes from the 500 M5 candles
+    closed at that moment (gap.m5_target_filter). Used on the M1 + M5 picture (skipped gaps drawn dotted) and in the
+    M1/M5 backtests, which also report the same data without the filter.
+  - Open: the user saw cases where candle 1 was counted too late (an earlier gap already existed, so we entered
+    late). Suspected cause: chained gaps (1-2-3 then 2-3-4) — the newer gap replaces the waiting one. Waiting for
+    the user's screenshots before changing it. Gap backtest (🧪 Gap backtest / under each pair / `/backtest XAUUSD 5`): pair → M1, M5 or M15 → runs
     bot/gap.py on the last 3 trading days (bot/gap_backtest.py): numbered trades, wins, R, buys vs sells, $1,000 at
     1% and 2%, equity chart. No spread yet. On M1 it then sends a zoomed picture of every stopped-out trade
     (bot/gap_pictures.py) with the M5 structure as it was at entry (500 closed M5 candles), in albums of 10.

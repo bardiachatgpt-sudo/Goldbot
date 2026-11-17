@@ -261,6 +261,21 @@ class TestGapSetup(unittest.TestCase):
         self.assertAlmostEqual(t["tp"], 102.01 - (111.01 - 102.01))    # ۱:۱
         self.assertEqual((t["result"], t["r"]), ("TP", 1.0))
 
+    def test_three_gap_candles_must_be_the_same_colour(self):
+        from bot import gap
+        o, h, l, c = candles(self.SELL)
+        o[2], c[2] = 100.5, 101.5                                     # کندل ۳ سبز شد
+        self.assertEqual(gap.find_gap(o, h, l, c, 2)[0], 0)
+        self.assertEqual(gap.find_gap(o, h, l, c, 2, same_color=False)[0], -1)
+
+    def test_target_outside_the_m5_box_is_not_taken(self):
+        from bot import gap
+        skipped = []
+        ts = gap.trades(*candles(self.SELL), sym="XAUUSD", allow=lambda i, s, e, tp: False, skipped=skipped)
+        self.assertEqual([t for t in ts if t.get("entry_i") is not None], [])
+        self.assertEqual(len(skipped), 1)
+        self.assertAlmostEqual(skipped[0]["tp"], 102.01 - 9)
+
     def test_touching_the_previous_high_is_not_an_entry(self):
         from bot import gap
         rows = self.SELL[:4] + [(99.5, 102.0, 99.4, 101.0)]           # فقط به 102 رسید، رد نکرد
@@ -325,6 +340,19 @@ class TestGapBacktest(unittest.TestCase):
         losses = int(report.split("❌ ")[1].split(" ")[0])
         self.assertEqual(sum(albums), losses)                                       # یک عکس برای هر باخت
         self.assertTrue(all(a <= 10 for a in albums))
+
+    def test_m5_filter_in_the_report(self):
+        from bot import gap_backtest
+        m1 = gappy_m1(6000)
+        m5 = m1.resample("5min", label="left", closed="left").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
+        res = gap_backtest.run("XAUUSD", m1, "1", m5=m5)
+        self.assertTrue(res["m5_filter"])
+        n0 = res["no_filter"][0]
+        self.assertLessEqual(res["trades"], n0)
+        txt = gap_backtest.report_text(res)
+        self.assertIn("Not taken (1:1 target outside the M5 box)", txt)
+        self.assertIn("Same data without the M5 filter", txt)
 
     def test_trade_picture(self):
         from bot import gap_backtest

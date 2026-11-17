@@ -104,12 +104,12 @@ class Telegram:
             self.bot.send_chat_action(chat_id, "upload_photo")
         except Exception:
             pass
-        m5 = get_closed_candles(sym, STRUCTURE_BARS + 1, MIN_BARS, "5")
+        m5 = get_closed_candles(sym, 2 * STRUCTURE_BARS + 1, MIN_BARS, "5")      # ۵۰۰ برای جعبه‌ها + قبلش برای فیلتر
         m1 = get_closed_candles(sym, MAX_M1 + 1, MIN_BARS, "1") if m5 is not None else None
         if m5 is None or m1 is None:
             self.bot.send_message(chat_id, f"⚠️ {sym}: could not fetch M1/M5 candles, try again in a minute.")
             return
-        png, ph5, trades, now5, now1 = render(sym, m5.tail(STRUCTURE_BARS), m1)
+        png, ph5, trades, now5, now1 = render(sym, m5.tail(STRUCTURE_BARS), m1, m5_full=m5)
         chain5 = " → ".join(NAMES[(p["type"], p["side"])].title() for p in ph5[-4:]) or "-"
         waiting = [t for t in trades if t.get("entry_i") is None]
         live = [t for t in trades if t.get("entry_i") is not None and t.get("exit_i") is None]
@@ -121,7 +121,8 @@ class Telegram:
                f"M5 phases: {chain5}\n"
                f"Gap setup on these M1 candles: <b>{now1}</b>\n"
                f"Now: {state}\n"
-               f"<i>Gap = candle 1 and candle 3 do not overlap and candle 2's body covers part of the space. "
+               f"<i>Gap = 3 same-colour candles, candle 1 and candle 3 do not overlap and candle 2's body covers part "
+               f"of the space; no trade when the 1:1 target is outside the M5 box. "
                f"Sell: enter 1 pipette above the previous candle's high; stop just beyond candle 1; target 1:1 "
                f"(buy: the mirror).</i>")
         kb = types.InlineKeyboardMarkup(row_width=3)
@@ -170,8 +171,8 @@ class Telegram:
         if df is None:
             self.bot.send_message(chat_id, f"⚠️ {sym} {tfn}: could not fetch candles, try again in a minute.")
             return
-        res = run(sym, df, tf)
-        m5 = get_closed_candles(sym, 1700, MIN_BARS, "5", timeout=60) if tf == "1" else None   # ساختار M5
+        m5 = df if tf == "5" else (get_closed_candles(sym, 1700, MIN_BARS, "5", timeout=60) if tf == "1" else None)
+        res = run(sym, df, tf, m5=m5)                     # فیلتر ساختار M5 برای M1 و M5
         dec = len(fmt_price(sym, 1.0).split(".")[1])
         text = report_text(res, dec)
         kb = types.InlineKeyboardMarkup(row_width=3)

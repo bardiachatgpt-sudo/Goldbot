@@ -8,7 +8,7 @@ import io
 import pandas as pd
 
 from .config import TEHRAN, label
-from .gap import RR, trades
+from .gap import RR, m5_target_filter, trades
 
 BALANCE = 1000.0
 RISKS = (1.0, 2.0)
@@ -37,15 +37,19 @@ def last_days(df, days=DAYS):
     return df[df.index >= start]
 
 
-def run(sym, m1, tf="1", days=DAYS):
+def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True):
     """m1: کندل‌های تایم‌فریم tf (Open/High/Low/Close، زمان = شروع کندل). خروجی: dict نتیجه.
-    days: فقط این تعداد روز معاملاتی آخر (None = همه)."""
+    days: فقط این تعداد روز معاملاتی آخر (None = همه).
+    m5: اگر باشد، فیلتر ساختار M5: حد سود بیرون از جعبه‌ی M5 همان لحظه → معامله گرفته نمی‌شود.
+    compare: همان داده بدون فیلتر M5 هم حساب و در گزارش مقایسه شود."""
     step = pd.Timedelta(minutes=int(tf))
     if days:
         m1 = last_days(m1, days)
     o, h, l, c = (m1[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     idx = m1.index
-    all_t = trades(o, h, l, c, sym)
+    skipped = []
+    allow = m5_target_filter(m5, idx) if m5 is not None and len(m5) >= 100 else None
+    all_t = trades(o, h, l, c, sym, allow=allow, skipped=skipped)
     for t in all_t:
         if t.get("entry_i") is not None:
             t["entry_time"] = idx[t["entry_i"]]
@@ -60,7 +64,11 @@ def run(sym, m1, tf="1", days=DAYS):
            "net_r": sum(t["r"] for t in closed),
            "open": [t for t in all_t if t.get("entry_i") is not None and t.get("exit_i") is None],
            "waiting": [t for t in all_t if t.get("entry_i") is None], "accounts": {},
-           "days": len(set(idx.tz_convert("UTC").date)), "candles": m1}
+           "days": len(set(idx.tz_convert("UTC").date)), "candles": m1,
+           "m5_filter": allow is not None, "skipped": skipped}
+    if allow is not None and compare:                     # همان داده بدون فیلتر M5
+        base = [t for t in trades(o, h, l, c, sym) if t.get("exit_i") is not None]
+        res["no_filter"] = (len(base), sum(t["r"] > 0 for t in base), sum(t["r"] for t in base))
     for side, key in ((-1, "sells"), (1, "buys")):
         cs = [t for t in closed if t["side"] == side]
         res[key] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
@@ -80,7 +88,8 @@ def report_text(res, decimals=2, shown=25):
     lines = [f"🧪 <b>GAP BACKTEST · {label(sym)} · {tfn}</b>",
              f"{tz(res['start']):%d %b %H:%M} → {tz(res['end']):%d %b %H:%M} Tehran · {res['bars']} {tfn} candles "
              f"({res['days']} days)",
-             "📐 Gap on 3 candles → enter 1 pipette beyond the previous candle → stop behind candle 1 → target 1:1",
+             "📐 Gap on 3 same-colour candles → enter 1 pipette beyond the previous candle → stop behind candle 1 → "
+             "target 1:1" + (" · only if the target is inside the M5 structure box" if res.get("m5_filter") else ""),
              "━━━━━━━━━━━━━━━━",
              f"📊 Trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate <b>{wr:.0f}%</b>",
              f"📈 Net: <b>{res['net_r']:+.0f}R</b>  (win +{RR:g}R, loss −1R)",
@@ -90,6 +99,12 @@ def report_text(res, decimals=2, shown=25):
         lines.append(f"   📏 Average stop distance: {p(res['avg_risk'])}")
     if res["open"]:
         lines.append("   ⏳ 1 trade still open at the end (not counted)")
+    if res.get("m5_filter"):
+        lines.append(f"   🚫 Not taken (1:1 target outside the M5 box): {len(res['skipped'])}")
+    if res.get("no_filter"):
+        n0, w0, r0 = res["no_filter"]
+        lines.append(f"🔁 Same data without the M5 filter: {n0} trades, win {w0 / n0 * 100 if n0 else 0:.0f}%, "
+                     f"{r0:+.0f}R")
     lines.append("━━━━━━━━━━━━━━━━")
     lines.append(f"💵 Account ${BALANCE:,.0f}:")
     for rp, a in res["accounts"].items():

@@ -66,7 +66,7 @@ def m1_window(m5, m1, zoom=2, max_bars=MAX_M1):
     return w.tail(max_bars)
 
 
-def render(sym, m5, m1, layer="gaps"):
+def render(sym, m5, m1, layer="gaps", m5_full=None):
     """(png، فازهای M5، فازهای M1، وضعیت M5، وضعیت M1). m5/m1: Open/High/Low/Close، زمان = شروع کندل."""
     import matplotlib
     matplotlib.use("Agg")
@@ -82,8 +82,11 @@ def render(sym, m5, m1, layer="gaps"):
     if layer == "micro":
         ph1, piv1 = micro_cycles(o, h, l, c)
     else:
-        from .gap import trades as gap_trades
-        ph1, piv1 = gap_trades(o, h, l, c, sym), []
+        from .gap import m5_target_filter, trades as gap_trades
+        src = m5_full if m5_full is not None else m5
+        skipped = []
+        ph1 = gap_trades(o, h, l, c, sym, allow=m5_target_filter(src, w.index), skipped=skipped)
+        piv1 = []
     t1 = w.index
     t5 = m5.index
     step5 = (t5[-1] - t5[-2]) if len(t5) > 1 else pd.Timedelta(minutes=5)
@@ -161,6 +164,12 @@ def render(sym, m5, m1, layer="gaps"):
                     ms=3.5, zorder=6)
     # ---- M1: ستاپ گپ (جعبه‌ی گپ، ورود، حد ضرر، حد سود ۱:۱، خروج)
     else:
+        for t in skipped:                                  # گرفته نشد: حد سود بیرون از جعبه‌ی M5 (کم‌رنگ)
+            i1, i3 = t["gap"]
+            gc = GAP_SELL if t["side"] < 0 else GAP_BUY
+            ax.add_patch(patches.Rectangle((i1 - 0.5, t["gap_lo"]), i3 - i1 + 1, t["gap_hi"] - t["gap_lo"],
+                                           facecolor="none", edgecolor=gc, lw=0.8, ls=":", zorder=6))
+            ax.plot(t["entry_i"], t["entry"], "x", color=MUTED, ms=5, zorder=8)
         for t in ph1:
             i1, i3 = t["gap"]
             s_ = t["side"]
@@ -221,7 +230,7 @@ def render(sym, m5, m1, layer="gaps"):
         done = [t for t in ph1 if t.get("exit_i") is not None]
         wins = sum(t["r"] > 0 for t in done)
         now1 = (f"{len(done)} gap trades · {wins} wins · {len(done) - wins} losses · "
-                f"{sum(t['r'] for t in done):+.0f}R (1:1)")
+                f"{sum(t['r'] for t in done):+.0f}R (1:1) · {len(skipped)} skipped (target outside M5)")
         what = "M1 gap setup"
         h1 = [patches.Patch(facecolor=GAP_SELL, alpha=0.5, label="sell gap"),
               patches.Patch(facecolor=GAP_BUY, alpha=0.5, label="buy gap"),
