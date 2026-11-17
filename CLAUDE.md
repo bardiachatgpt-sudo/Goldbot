@@ -74,6 +74,12 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   server time zone (GMT+2/+3), broker symbol names, digits. Plan: gold first to settle the format; build M5/M15 from
   M1; run the gap backtest here in the cloud session (no TradingView needed); report month by month and first vs
   second 3 months; optionally keep compressed copies in `data/` (repo should then be private).
+- **Same-direction gap during an open trade (rule given by the user, 17 Nov; not coded yet):** still ONE position, no
+  second trade. If the open trade is Leg 1 and a same-direction gap (Leg 2) forms and ITS entry triggers: the open
+  trade's TP moves to setup 2's TP (entry2 ± its own 1:1 risk). Once setup 2 is in profit from entry2, the open trade's
+  SL moves to near entry2 (open: how far in profit triggers it, how near = e.g. 1 pipette?). Open trade Leg 2 → the
+  new gap is Leg 3 → ignored. Assumed (to confirm): TP only moves farther, never closer; TP1 hit before entry2 → close.
+  Today gaps that form while a trade is open are not even detected (gap.trades skips them) — show/count them too.
 - Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
 - In an M5 range: sell only in the upper half, buy only in the lower half; stop a little beyond the M5 edge.
 - Entry on candle 4 tends to be best (report by entry candle 4/5/6+).
