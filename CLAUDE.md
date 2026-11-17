@@ -8,7 +8,7 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
   price-action way. Judges ideas by eye from pictures; sends screenshots of the bot's pictures with notes.
 - Often wants to **discuss before coding**. When they say "فعلاً کاری نکن" / "کد نزن" / "بحث کنیم" / "مطالعه کنم", do not code.
 - **Never deploy without an explicit "دیپلوی" / "deploy".** Build, run the tests, commit and push to the work branch
-  `ccr-1ceb0688-gokag6`, then ask. Deploy = fast-forward `main` to the work branch
+  `ccr-e78c1662-kly1ee` (the session's branch; earlier `ccr-1ceb0688-gokag6`), then ask. Deploy = fast-forward `main` to the work branch
   (`git fetch --depth=50 origin main && git merge-base --is-ancestor origin/main HEAD && git push origin <branch>:main`);
   Render auto-deploys from `main` (3–5 min). A few Telegram 409 lines during a deploy are normal.
 - Be honest about results (small samples, no spread, look-ahead). Ideas the user rejected stay rejected.
@@ -32,7 +32,10 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   comparisons "without the M5 filter" and "with all legs", $1,000 at 1% and 2%, latest trades); then a full list of
   stopped-out trades `#num · time · SELL/BUY · L<leg> · session · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`
   (#num = picture number); on M1 the zoomed loser pictures (`bot/gap_pictures.py`), 5 at a time with "📷 Next 5"
-  (kept in memory per chat; lost on restart). On M1 a "🏆 Winning trades: list + pictures" button sends the same
+  (kept in memory per chat; lost on restart). Every trade picture has a table under the chart: each candle from 3
+  before candle 1 to the entry with exact H / L (Tehran time), the price needed for entry (orange tick on the chart)
+  and why it was not an entry (pipettes short, gap candle 1/2/3, chained gap, another trade open, skipped M5/leg).
+  Comes from `t["watch"]` filled in `gap.trades`. On M1 a "🏆 Winning trades: list + pictures" button sends the same
   list for the winners (same numbering as the report) and their pictures, 5 at a time (callbacks sxwl / sxw:n;
   losers sxl:n).
 - **🌍 All pairs** (also in the backtest pair menu) → period → gap setup on M1 for every pair, with and
@@ -47,6 +50,8 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
 - From the close of candle 3, compare each candle's high with the previous candle's high (buy: lows). Entry when
   price trades strictly beyond it by ≥ 1 pipette: sell at previous high + 1 pipette (gold 0.01, FX 0.00001,
   JPY 0.001, US30 0.1). Touching is not an entry.
+- Levels (entry, SL, TP) are rounded to 8 decimals (`gap._r`): before this, float error (1.09977 − 0.00001 =
+  1.0997599999…) made ~30% of exactly-1-pipette entries/stops miss (EURUSD #10 late entry, 17 Nov fix).
 - Stop: 1 pipette beyond candle 1. Target 1:1. One trade at a time. No spread in any backtest yet.
 - **M5 filter:** no trade if the 1:1 target lies outside the M5 structure box of that moment (500 M5 candles closed
   then) — `gap.m5_target_filter`.
@@ -77,6 +82,10 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
 - Every bar is a spike (fast straight leg), a channel (HH+HL or LH+LL) or a trading range (everything else; may be a
   triangle). A range lasts until a breakout that does not come back; a channel fully taken back by the next range was
   a range leg. If the last close breaks the last swing against a channel, the final leg gets its own provisional label.
+- Chart start (17 Nov fix, GBPUSD M1 was one expanding range): if the first real leg (ignoring a tiny first wiggle)
+  is ≥ 30% of the chart height, it is a channel/spike, not a range. A pullback taking back ≥ 60% of the channel
+  move ends it. A leg that STARTS with a sharp spike and then ranges is split: SPIKE then RANGE (`_spike_head`).
+- Price axis on every picture shows full prices (matplotlib offset off in `bot/__init__.py`).
 - `bot/structure.py` = v1 fine detection (swings on highs/lows, 1.5 avg-bar reversal), only for the hidden M1 layer.
 
 ## Files

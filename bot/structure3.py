@@ -23,6 +23,8 @@ CFG = dict(
     spike_eff=0.45,     # و صاف (حرکت خالص / مسیر)
     spike_speed=2.5,    # و تند (سرعت ≥ ۲.۵ برابر میانه‌ی تغییر هر کندل)
     spike_maxbars=25,
+    first_leg=0.30,     # نمودار با حرکت جهت‌دار ≥ ۳۰٪ ارتفاع شروع شود → کانال/اسپایک، نه رنج
+    deep=0.60,          # پولبکی که ≥ ۶۰٪ کل حرکت کانال را پس بگیرد → کانال تمام
 )
 
 NAMES = {("SPIKE", 1): "SPIKE ↑", ("SPIKE", -1): "SPIKE ↓", ("CHANNEL", 1): "BULL CHANNEL",
@@ -70,6 +72,16 @@ def _is_spike(c, a, b, hgt, mad, cfg):
     return mv >= cfg["spike_size"] * hgt and mv / path >= cfg["spike_eff"] and mv / n >= cfg["spike_speed"] * mad
 
 
+def _spike_head(c, a, b, hgt, mad, cfg):
+    """اولِ پایه‌ی a→b یک اسپایک تند است (بعدش قیمت رنج می‌زند)؟ ته اسپایک یا None."""
+    best, sgn = None, np.sign(c[b] - c[a])
+    for j in range(a + 1, min(b, a + cfg["spike_maxbars"]) + 1):
+        if np.sign(c[j] - c[a]) == sgn and _is_spike(c, a, j, hgt, mad, cfg):
+            if best is None or (c[j] - c[best]) * sgn > 0:
+                best = j
+    return best
+
+
 def segment(close, cfg=None):
     """close: بسته‌شدن‌ها. خروجی: (فازها، کف/سقف‌ها). هر فاز: {type, side, start, end[, prov]}؛
     فازها کل نمودار را بی‌فاصله پوشش می‌دهند."""
@@ -95,14 +107,22 @@ def segment(close, cfg=None):
     state, side, start, tstart = "RANGE", 0, 0, 0
     lo, hi = min(P[0][2], P[1][2]), max(P[0][2], P[1][2])
     last_h = last_l = None
-    if m >= 5:                                   # شروع نمودار وسط یک کانال؟
+    k = 1
+    f = 2 if m >= 4 and abs(P[1][2] - P[0][2]) < cfg["T"] * hgt else 1      # اولین پایه‌ی واقعی (نه تکان اول)
+    if state == "RANGE" and m >= f + 2 and abs(P[f][2] - P[f - 1][2]) >= cfg["first_leg"] * hgt:
+        # نمودار با یک حرکت بزرگ شروع می‌شود (مثلاً صعود): کانال/اسپایک است، نه رنجی از اول نمودار تا اولین سقف
+        state, side = "TREND", (1 if P[f][2] > P[f - 1][2] else -1)
+        last_h, last_l = max(P[f - 1][2], P[f][2]), min(P[f - 1][2], P[f][2])
+        if _is_spike(c, P[f - 1][0], P[f][0], hgt, mad, cfg):
+            add("SPIKE", side, 0, P[f][0])
+        k = f + 1
+    if state == "RANGE" and m >= 5:                                   # شروع نمودار وسط یک کانال؟
         hs = [p[2] for p in P[1:5] if p[1] == "H"]
         ls = [p[2] for p in P[1:5] if p[1] == "L"]
         if len(hs) >= 2 and len(ls) >= 2 and (hs[1] - hs[0]) * (ls[1] - ls[0]) > 0:
             state, side = "TREND", (1 if hs[1] > hs[0] else -1)
             last_h = [p for p in P[1:3] if p[1] == "H"][-1][2]
             last_l = [p for p in P[1:3] if p[1] == "L"][-1][2]
-    k = 1
     while k < m:
         p = P[k]
         nxt = P[k + 1] if k + 1 < m and P[k + 1][1] != "E" else None
@@ -127,6 +147,10 @@ def segment(close, cfg=None):
             side = 1 if up else -1
             if _is_spike(c, b0, p[0], hgt, mad, cfg):
                 add("SPIKE", side, b0, p[0])
+            else:
+                j = _spike_head(c, b0, p[0], hgt, mad, cfg)
+                if j is not None and p[0] - j >= 8:      # اسپایک اول پایه، بعد کانال
+                    add("SPIKE", side, b0, j)
             state, tstart = "TREND", b0
             last_h = p[2] if up else P[k - 1][2]
             last_l = P[k - 1][2] if up else p[2]
@@ -136,7 +160,17 @@ def segment(close, cfg=None):
         if p[1] == "E":
             s0 = out[-1]["end"] if out and out[-1]["type"] == "SPIKE" else tstart
             broke = p[2] < last_l if side == 1 else p[2] > last_h      # آخرین بسته‌شدن آن طرف آخرین کف/سقف کانال
+            base = min(c[s0], last_l) if side == 1 else max(c[s0], last_h)
+            top = last_h if side == 1 else last_l
+            deep = abs(top - base) > 0 and (top - p[2]) * side >= cfg["deep"] * abs(top - base)
             e = P[k - 1][0]
+            j = _spike_head(c, e, p[0], hgt, mad, cfg) if (broke or deep) and e > s0 else None
+            if j is not None and p[0] - j >= 8:          # برگشت با اسپایک و بعد رنج (موقت)
+                add("CHANNEL", side, s0, e)
+                add("SPIKE", -side, e, j)
+                add("RANGE", 0, j, p[0], prov="down" if side == 1 else "up")
+                k += 1
+                continue
             if broke and e > s0 and p[0] - e >= 2:
                 add("CHANNEL", side, s0, e)              # کانال تا آخرین سقف/کف تمام شد؛ پایه‌ی آخر جدا (موقت)
                 if _is_spike(c, e, p[0], hgt, mad, cfg):
@@ -153,6 +187,11 @@ def segment(close, cfg=None):
             ok = p[2] > last_h + mg if side == 1 else p[2] < last_l - mg
         else:
             ok = p[2] > last_l if side == 1 else p[2] < last_h
+            s0 = out[-1]["end"] if out and out[-1]["type"] == "SPIKE" else tstart
+            base = min(c[s0], last_l) if side == 1 else max(c[s0], last_h)
+            top = last_h if side == 1 else last_l
+            if ok and abs(top - base) > 0 and abs(top - p[2]) >= cfg["deep"] * abs(top - base):
+                ok = False                       # پولبک خیلی عمیق: کانال تمام شد
         if ok:
             if p[1] == "H":
                 last_h = p[2]
@@ -165,6 +204,11 @@ def segment(close, cfg=None):
         add("CHANNEL", side, s0, e)
         state, start = "RANGE", e
         lo, hi = min(P[k - 1][2], p[2]), max(P[k - 1][2], p[2])
+        j = _spike_head(c, e, p[0], hgt, mad, cfg)
+        if j is not None and p[0] - j >= 8:      # برگشت با اسپایک تند و بعد رنج: اسپایک جدا، رنج بعد از آن
+            add("SPIKE", -side, e, j)
+            start = j
+            lo, hi = float(c[j:p[0] + 1].min()), float(c[j:p[0] + 1].max())
         k += 1
     if state == "RANGE" and (not out or out[-1]["end"] < n - 1):
         add("RANGE", 0, start, n - 1)

@@ -327,6 +327,41 @@ class TestGapSetup(unittest.TestCase):
         self.assertAlmostEqual(t["entry"], 107.99)
         self.assertAlmostEqual(t["sl"], 98.99)
 
+    EUR_BUY = [(1.09930, 1.09940, 1.09928, 1.09938),   # کندل ۱ (سقف 1.09940)
+               (1.09938, 1.10000, 1.09936, 1.09995),   # کندل ۲
+               (1.09995, 1.10020, 1.09960, 1.10010),   # کندل ۳: کف 1.09960 > سقف ۱ → گپ خرید
+               (1.10010, 1.10030, 1.09977, 1.10020),   # کف 1.09977 بالاتر از 1.09959: ۱۸ پیپت کم
+               (1.10000, 1.10005, 1.09976, 1.09990),   # کف دقیقاً ۱ پیپت پایین‌تر → خرید روی 1.09976
+               (1.09990, 1.10100, 1.09985, 1.10090)]
+
+    def test_exactly_one_pipette_beyond_is_an_entry_despite_float_rounding(self):
+        from bot import gap
+        t = gap.trades(*candles(self.EUR_BUY), sym="EURUSD")[0]
+        self.assertEqual((t["side"], t["entry_i"]), (1, 4))
+        self.assertAlmostEqual(t["entry"], 1.09976, places=9)
+        self.assertAlmostEqual(t["sl"], 1.09927, places=9)
+
+    def test_picture_table_says_why_each_candle_was_not_an_entry(self):
+        from bot import gap
+        from bot.gap_pictures import trade_picture, watch_rows
+        rows = self.EUR_BUY
+        o, h, l, c = candles(rows)
+        m1 = pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c},
+                          index=pd.date_range("2026-11-16 18:51", periods=len(rows), freq="1min", tz="UTC"))
+        t = gap.trades(o, h, l, c, sym="EURUSD")[0]
+        t["entry_time"] = m1.index[t["entry_i"]]
+        text = "\n".join(r for _, r in watch_rows("EURUSD", m1, t))
+        self.assertIn("22:21  H 1.09940  L 1.09928", text)                  # کندل ۱ با سقف و کف دقیق
+        self.assertIn("gap candle 3", text)
+        self.assertIn("L 1.09977  need L <= 1.09959  no entry: L 18 pipette short", text)
+        self.assertIn("ENTRY at 1.09976", text)
+        self.assertEqual(trade_picture("EURUSD", m1, None, t, 10)[:4], b"\x89PNG")
+
+    def test_price_axis_shows_full_prices(self):
+        import matplotlib
+        import bot  # noqa: F401
+        self.assertFalse(matplotlib.rcParams["axes.formatter.useoffset"])
+
 
 def gappy_m1(n=3000, seed=11):
     rnd = np.random.default_rng(seed)
@@ -484,6 +519,21 @@ class TestGapBacktestTimeframesAndPairs(unittest.TestCase):
         tg.bot.send_media_group.assert_not_called()                                 # عکس باخت‌ها فقط برای M1
         btns = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
         self.assertEqual(btns, ["sxr:EURUSD:15:T", "sxb:EURUSD:15", "sxbp:EURUSD", "sxbp"])
+
+
+class TestRiseSharpDropLowRange(unittest.TestCase):
+    """GBPUSD M1: صعود، ریزش تند، رنج پایین — نباید کل نمودار یک رنج بازشونده دیده شود."""
+    def test_rise_spike_down_then_range(self):
+        for seed in range(8):
+            r = np.random.default_rng(seed)
+            a = np.linspace(0, 100, 250) + np.cumsum(r.normal(0, 1.2, 250)) * 0.6
+            b = np.linspace(a[-1], 10, 25) + r.normal(0, 1.2, 25)
+            d = np.clip(10 + np.cumsum(r.normal(0, 1.2, 225)) * 0.4, -5, 25)
+            ph, _ = structure3.segment(np.r_[a, b, d])
+            names = [(p["type"], p["side"]) for p in ph]
+            self.assertEqual(names[0], ("CHANNEL", 1), (seed, names))
+            self.assertIn(("SPIKE", -1), names, (seed, names))
+            self.assertEqual(names[names.index(("SPIKE", -1)) + 1], ("RANGE", 0), (seed, names))
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):

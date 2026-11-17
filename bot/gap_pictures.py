@@ -22,6 +22,51 @@ def m5_at(m5, ts):
     return m5[m5.index + step <= ts].tail(M5_WINDOW)
 
 
+WATCH_ROWS = 14         # حداکثر ردیف جدول کندل‌های قبل از ورود
+
+
+def watch_rows(sym, m1, t):
+    """جدول کندل‌های قبل از ورود: [(i, متن)]؛ سقف و کف دقیق هر کندل، سطح لازم و چرا ورود نخورد."""
+    from .config import TEHRAN
+    from .gap import pip
+    s, pp = t["side"], pip(sym)
+    f = lambda x: fmt_price(sym, x)
+    out = []
+    for i, lvl, codes in t.get("watch", []):
+        hi, lo = float(m1["High"].iloc[i]), float(m1["Low"].iloc[i])
+        when = m1.index[i].tz_convert(TEHRAN).strftime("%H:%M")
+        need = ""
+        if lvl is not None:
+            need = f"need {'H >=' if s < 0 else 'L <='} {f(lvl)}"
+        why = []
+        if "c1" in codes or "c2" in codes or "c3" in codes:
+            k = "1" if "c1" in codes else "2" if "c2" in codes else "3"
+            why.append(f"gap candle {k}" + (" - follow starts after its close" if k == "3" else ""))
+        if "chain" in codes:
+            why.append("chained gap (ignored, same gap)")
+        if "replace" in codes and not why:
+            why.append("new gap replaced the waiting one")
+        if "open" in codes or "exit" in codes:
+            why.append("another trade was open (one at a time)")
+        if "miss" in codes:
+            short = round(((lvl - hi) if s < 0 else (lo - lvl)) / pp) if lvl is not None else 0
+            prev = "prev high" if s < 0 else "prev low"
+            why.insert(0, f"no entry: {'H' if s < 0 else 'L'} {short} pipette short "
+                          f"({prev} {'+' if s < 0 else '-'} 1 pipette not reached)" if short > 0 else "no entry")
+        if "badsl" in codes:
+            why.insert(0, "level passed but entry would be beyond SL - no trade")
+        if "skip_m5" in codes:
+            why.insert(0, "entry skipped: 1:1 target outside the M5 box")
+        if "skip_leg" in codes:
+            why.insert(0, "entry skipped: leg 3+")
+        if "entry" in codes:
+            why.insert(0, f"ENTRY at {f(t['entry'])}")
+        if not why and "nogap" in codes:
+            why.append("before the gap - nothing waiting")
+        out.append((i, f"{when}  H {f(hi)}  L {f(lo)}  {need:<{8 + len(f(hi))}}  {'; '.join(why)}"))
+    return out
+
+
 def trade_picture(sym, m1, m5, t, num=None):
     """m1: همان کندل‌هایی که بک‌تست روی آن اجرا شد (اندیس‌های t نسبت به آن). t: معامله با entry_time."""
     import matplotlib
@@ -42,7 +87,15 @@ def trade_picture(sym, m1, m5, t, num=None):
     span = (hi - lo) or 1.0
     pad = span * 0.04
 
-    fig, ax = plt.subplots(figsize=(14, 7.5), dpi=100)
+    rows = watch_rows(sym, m1, t)
+    cut = max(0, len(rows) - WATCH_ROWS)
+    shown = rows[cut:]
+    if shown:
+        fig, (ax, axt) = plt.subplots(2, 1, figsize=(14, 7.5 + 0.2 * (len(shown) + 2)), dpi=100,
+                                      gridspec_kw={"height_ratios": [7.5, 0.2 * (len(shown) + 2)]})
+    else:
+        fig, ax = plt.subplots(figsize=(14, 7.5), dpi=100)
+        axt = None
     fig.patch.set_facecolor(BG)
     ax.set_facecolor(BG)
 
@@ -114,6 +167,28 @@ def trade_picture(sym, m1, m5, t, num=None):
     if t.get("exit_i") is not None:
         win = t["r"] > 0
         ax.plot(xx, t["exit"], "o", color=TP_COL if win else SL_COL, ms=11, zorder=10, mec="white", mew=1)
+
+    # ---- سطح لازم برای ورود روی هر کندل (خط کوتاه نارنجی) و ساعت کندل‌های جدول
+    for i, lvl, codes in t.get("watch", []):
+        xi = i - a
+        if 0 <= xi < n and lvl is not None:
+            ax.hlines(lvl, xi - 0.45, xi + 0.45, color="#EA580C", lw=2.2, zorder=8)
+    for i, _ in shown:
+        xi = i - a
+        if 0 <= xi < n:
+            y = (l[xi] - pad * 0.25) if s < 0 else (h[xi] + pad * 0.25)
+            ax.text(xi, y, m1.index[i].tz_convert("Asia/Tehran").strftime("%H:%M"), fontsize=6.5, color=MUTED,
+                    rotation=90, ha="center", va="top" if s < 0 else "bottom", zorder=9)
+    if axt is not None:
+        axt.axis("off")
+        axt.set_facecolor(BG)
+        lines = [f"Candles before entry (Tehran) - orange tick = price needed for entry "
+                 f"({'previous high + 1 pipette' if s < 0 else 'previous low - 1 pipette'})"]
+        if cut:
+            lines.append(f"... {cut} earlier candles not shown")
+        lines += [r for _, r in shown]
+        axt.text(0.0, 1.0, "\n".join(lines), family="DejaVu Sans Mono", fontsize=8.6, color=TEXT, va="top",
+                 ha="left", transform=axt.transAxes)
 
     # ---- محور و عنوان
     step = max(1, n // 10)
