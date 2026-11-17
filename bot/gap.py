@@ -7,7 +7,9 @@
 از بسته شدن کندل ۳ دنبال کردن شروع می‌شود: فروش وقتی قیمت حداقل ۱ پیپت بالاتر از سقف کندل قبلی برود
 (ورود = سقف کندل قبلی + ۱ پیپت)؛ خرید وقتی ۱ پیپت پایین‌تر از کف کندل قبلی برود.
 حد ضرر: ۱ پیپت آن طرف کندل ۱ (فروش: بالای سقفش)؛ حد سود ۱:۱.
-یک معامله در هر لحظه؛ گپ تازه قبل از ورود، جای گپ قبلی را می‌گیرد. باطل شدن گپ: فعلاً ندارد.
+یک معامله در هر لحظه. گپ‌های پشت‌سرهم و هم‌جهت (۱-۲-۳، ۲-۳-۴ …) یک زنجیره‌اند: کندل ۱ (و حد ضرر) همان
+اولین گپ می‌ماند و دنبال کردن بعد از آخرین کندل زنجیره شروع می‌شود. گپ جدا یا خلاف جهت، جای قبلی را می‌گیرد.
+باطل شدن گپ: فعلاً ندارد.
 داخل هر کندل، ترتیب قیمت از شکل کندل: صعودی باز ← کف ← سقف ← بسته، نزولی باز ← سقف ← کف ← بسته.
 """
 RR = 1.0
@@ -120,9 +122,15 @@ def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None):
                     else:
                         open_t = t
                     continue
-        side, zone = find_gap(o, h, l, c, i, same_color)   # ۳) گپ تازه (جای قبلی را می‌گیرد)
+        side, zone = find_gap(o, h, l, c, i, same_color)   # ۳) گپ تازه
         if side:
-            pending = {"side": side, "gap": (i - 2, i), "gap_hi": zone[0], "gap_lo": zone[1], "entry_i": None}
+            if pending is not None and pending["side"] == side and i - 2 <= pending["gap"][1]:
+                # زنجیره‌ی گپ هم‌جهت (۱-۲-۳، بعد ۲-۳-۴ …): کندل ۱ همان اولین گپ می‌ماند، جعبه کل زنجیره را می‌گیرد
+                pending["gap"] = (pending["gap"][0], i)
+                pending["gap_hi"] = max(pending["gap_hi"], zone[0])
+                pending["gap_lo"] = min(pending["gap_lo"], zone[1])
+            else:                                          # گپ جدا یا خلاف جهت: جای قبلی را می‌گیرد
+                pending = {"side": side, "gap": (i - 2, i), "gap_hi": zone[0], "gap_lo": zone[1], "entry_i": None}
     if pending is not None:
         out.append(pending)
     return out

@@ -54,15 +54,14 @@ on purpose; they are in git history before commit 678dacb if ever needed).
     entry price = previous high + 1 pipette (gold 0.01, 5-digit FX 0.00001, JPY 0.001, US30 0.1). Merely touching
     the previous high is not an entry. (Buy: previous low − 1 pipette.)
   - Stop: just beyond candle 1 (sell: above its high; buy: below its low). Target 1:1.
-  - Runs on M1, drawn on the M1 + M5 picture. No invalidation for now (user's choice). One trade at a time; a new
-    gap before entry replaces the waiting one. No spread. Stop = candle 1 + 1 pipette.
+  - Runs on M1, drawn on the M1 + M5 picture. No invalidation for now (user's choice). One trade at a time. No spread. Stop = candle 1 + 1 pipette.
   - M5 filter: if the 1:1 target lies outside the current M5 structure box (sell: below the box bottom; buy: above
     the box top), the trade is not taken (the user saw those mostly fail). The box comes from the 500 M5 candles
     closed at that moment (gap.m5_target_filter). Used on the M1 + M5 picture (skipped gaps drawn dotted) and in the
     M1/M5 backtests, which also report the same data without the filter.
-  - Open: the user saw cases where candle 1 was counted too late (an earlier gap already existed, so we entered
-    late). Suspected cause: chained gaps (1-2-3 then 2-3-4) — the newer gap replaces the waiting one. Waiting for
-    the user's screenshots before changing it. Gap backtest (🧪 Gap backtest / under each pair / `/backtest XAUUSD 5`): pair → M1, M5 or M15 → runs
+  - Chained gaps (confirmed by the user's screenshot of trade #10): same-direction gaps that overlap (1-2-3, then
+    2-3-4 …) are one chain — candle 1 (and the stop) stay at the FIRST gap; the gap box covers the chain; following
+    starts after the last candle of the chain. A separate or opposite gap replaces the waiting one. Gap backtest (🧪 Gap backtest / under each pair / `/backtest XAUUSD 5`): pair → M1, M5 or M15 → runs
     bot/gap.py on the last 3 trading days (bot/gap_backtest.py): numbered trades, wins, R, buys vs sells, $1,000 at
     1% and 2%, equity chart. No spread yet. On M1 it then sends a zoomed picture of every stopped-out trade
     (bot/gap_pictures.py) with the M5 structure as it was at entry (500 closed M5 candles), in albums of 10.
