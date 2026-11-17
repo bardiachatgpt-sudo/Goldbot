@@ -361,41 +361,6 @@ class TestGapSetup(unittest.TestCase):
         import bot  # noqa: F401
         self.assertFalse(matplotlib.rcParams["axes.formatter.useoffset"])
 
-    # فروش لگ ۱، وسط معامله گپ فروش لگ ۲؛ ورود ستاپ دوم → حد سود دورتر؛ نصف سود ستاپ دوم → حد ضرر پشت ورود دوم
-    MANAGE = [(110, 111, 108, 108.5),       # 0 کندل ۱ (سقف 111 → SL 111.01)
-              (108.5, 108.6, 101, 101.5),   # 1
-              (101.5, 105, 100, 100.5),     # 2 کندل ۳
-              (100.5, 102, 99, 99.5),       # 3
-              (99.5, 102.5, 99.4, 102.2),   # 4 ورود 102.01، ریسک 9، TP 93.01
-              (102.2, 102.3, 98, 98.2),     # 5 کندل ۱ گپ دوم (کف 98)، سقف 102.3 → SL2 = 102.31
-              (98.2, 98.3, 96, 96.1),       # 6 کندل ۲
-              (96.1, 96.5, 95.5, 95.6),     # 7 کندل ۳: سقف 96.5 < کف 98 → گپ فروش لگ ۲
-              (95.6, 96.7, 95.4, 96.6),     # 8 سقف 96.7 > 96.5 → ورود ستاپ دوم 96.51، ریسک 5.8، TP2 90.71
-              (96.6, 96.65, 93.5, 93.6),    # 9 نصف سود دوم 93.61 → SL → 96.52 (93.01 هنوز نخورده)
-              (93.6, 97, 93.55, 96.9)]      # 10 برمی‌گردد و SL جدید 96.52 می‌خورد
-
-    def test_second_setup_moves_tp_then_sl(self):
-        from bot import gap
-        t = gap.trades(*candles(self.MANAGE), sym="XAUUSD")[0]
-        self.assertEqual((t["leg"], t["entry_i"]), (1, 4))
-        self.assertAlmostEqual(t["entry"], 102.01)
-        self.assertAlmostEqual(t["tp"], 90.71)                                   # حد سود ستاپ دوم
-        self.assertAlmostEqual(t["sl"], 96.52)                                   # ۱ پیپت بالای ورود دوم
-        self.assertEqual([m["kind"] for m in t["moves"]], ["tp", "sl"])
-        self.assertEqual((t["exit_i"], t["result"]), (10, "SL+"))
-        self.assertAlmostEqual(t["r"], round((102.01 - 96.52) / 9, 2))           # سود، نه ۱−
-        old = gap.trades(*candles(self.MANAGE), sym="XAUUSD", manage=False)[0]  # قانون قدیم
-        self.assertAlmostEqual(old["tp"], 93.01)                                 # حد سود ثابت ۱:۱
-        self.assertIsNone(old["exit_i"])                                         # هنوز باز؛ ستاپ دوم دیده نشد
-        self.assertEqual(old["moves"], [])
-        from bot.gap_pictures import caption, trade_picture
-        o, h, l, c = candles(self.MANAGE)
-        m1 = pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c},
-                          index=pd.date_range("2026-11-16 10:00", periods=len(o), freq="1min", tz="UTC"))
-        t["entry_time"] = m1.index[t["entry_i"]]
-        self.assertEqual(trade_picture("XAUUSD", m1, None, t, 1)[:4], b"\x89PNG")
-        self.assertIn("setup 2 → TP 90.71 · SL → 96.52", caption("XAUUSD", t, 1))
-
 
 def gappy_m1(n=3000, seed=11):
     rnd = np.random.default_rng(seed)
@@ -412,10 +377,7 @@ class TestGapBacktest(unittest.TestCase):
         res = gap_backtest.run("XAUUSD", gappy_m1())
         self.assertGreater(res["trades"], 10)
         self.assertEqual(res["trades"], res["wins"] + res["losses"])
-        self.assertAlmostEqual(res["net_r"], sum(t["r"] for t in res["closed"]))
-        for t in res["closed"]:                                                      # بدون ستاپ دوم: دقیقاً ۱:۱
-            if not t["moves"]:
-                self.assertIn(t["r"], (1.0, -1.0))
+        self.assertAlmostEqual(res["net_r"], res["wins"] - res["losses"])          # ۱:۱
         a2 = res["accounts"][2.0]
         bal = 1000.0
         for t in res["closed"]:

@@ -90,12 +90,6 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_l
         ts = [t for t in ts if t.get("exit_i") is not None]
         return len(ts), sum(t["r"] > 0 for t in ts), sum(t["r"] for t in ts)
 
-    if compare:                                           # همان داده با قانون قدیم: حد سود ثابت ۱:۱
-        res["fixed_tp"] = summ(trades(o, h, l, c, sym, allow=m5_target_filter(m5, idx) if allow else None,
-                                      max_leg=max_leg, manage=False))
-    mv = [t for t in closed if t.get("moves")]            # معامله‌هایی که ستاپ دوم حد سود/ضررشان را جابه‌جا کرد
-    res["managed"] = (len(mv), sum(t["r"] > 0 for t in mv), sum(t["r"] for t in mv),
-                      sum(any(m["kind"] == "sl" for m in t["moves"]) for t in mv))
     if allow is not None and compare:                     # همان داده بدون فیلتر M5 (همان فیلتر لگ)
         res["no_filter"] = summ(trades(o, h, l, c, sym, max_leg=max_leg))
     if max_leg and compare:                               # همان داده با همه‌ی لگ‌ها (همان فیلتر M5)
@@ -140,8 +134,7 @@ def report_text(res, decimals=2, shown=25):
              + (f" · legs 1–{res['max_leg']} only" if res.get("max_leg") else ""),
              "━━━━━━━━━━━━━━━━",
              f"📊 Trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate <b>{wr:.0f}%</b>",
-             f"📈 Net: <b>{res['net_r']:+.1f}R</b>  (1:1 target; a same-direction setup 2 during the trade can move "
-             f"TP and SL)",
+             f"📈 Net: <b>{res['net_r']:+.0f}R</b>  (win +{RR:g}R, loss −1R)",
              f"   🔴 Sells: {res['sells'][0]} trades, {res['sells'][1]} wins, {res['sells'][2]:+.0f}R",
              f"   🟢 Buys: {res['buys'][0]} trades, {res['buys'][1]} wins, {res['buys'][2]:+.0f}R"]
     for key, name in (("leg1", "1️⃣ Leg 1 (first gap of the move)"), ("leg2", "2️⃣ Leg 2+ (a gap came before in the move)")):
@@ -165,13 +158,6 @@ def report_text(res, decimals=2, shown=25):
                      f"{sum(t.get('reason') == 'm5' for t in res['skipped'])}")
     if res.get("max_leg"):
         lines.append(f"   🚫 Not taken (leg {res['max_leg'] + 1}+): {sum(t.get('reason') == 'leg' for t in res['skipped'])}")
-    if res.get("managed") and res["managed"][0]:
-        n_, w_, r_, k_ = res["managed"]
-        lines.append(f"   🎯 Setup 2 moved TP in {n_} trades ({k_} also SL): {w_} wins, {r_:+.1f}R")
-    if res.get("fixed_tp"):
-        n0, w0, r0 = res["fixed_tp"]
-        lines.append(f"🔁 Same data, old rule (fixed 1:1, no setup 2): {n0} trades, win "
-                     f"{w0 / n0 * 100 if n0 else 0:.0f}%, {r0:+.1f}R")
     if res.get("no_filter"):
         n0, w0, r0 = res["no_filter"]
         lines.append(f"🔁 Same data without the M5 filter: {n0} trades, win {w0 / n0 * 100 if n0 else 0:.0f}%, "
@@ -222,9 +208,7 @@ def trades_text(res, kind="loss", decimals=2, limit=3900):
         rows.append(f"#{t['num']} · {tz(t['entry_time']):%a %d %b %H:%M} · {'SELL' if t['side'] < 0 else 'BUY'} · "
                     f"L{t.get('leg', '?')} · {t.get('session', '?')} · gap {tz(g1):%H:%M}–{tz(g3):%H:%M} · "
                     f"entry {p(t['entry'])} · "
-                    f"SL {p(t.get('sl0', t['sl']))} · TP {p(t.get('tp0', t['tp']))}"
-                    + "".join(f" · {m['kind'].upper()}→{p(m['price'])}" for m in t.get("moves", []))
-                    + f" · exit {tz(t['exit_time']):%H:%M} {t['r']:+g}R"
+                    f"SL {p(t['sl'])} · TP {p(t['tp'])} · exit {tz(t['exit_time']):%H:%M}"
                     + (f" · M5: {t['m5_state']}" if t.get("m5_state") else ""))
     out, cur = [], head
     for r in rows:
