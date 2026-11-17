@@ -25,7 +25,8 @@ No channel posts, no live trading.
   a caption (side, leg, session, Tehran time). When price trades beyond the level (checked on the forming candle and
   on any closed candle missed between polls) → short "✅ Entry hit" message with entry / SL / TP. Chained gaps behind
   the first one get no alert; a new separate or opposite gap replaces the waiting one. Subscribers: env
-  `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again). Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
+  `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again).
+- Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
 `config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env
 var is set on Render it overrides the default — it must then be changed there too).
