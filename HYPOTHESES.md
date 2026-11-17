@@ -193,3 +193,9 @@ In-sample 15 Jan–6 Feb (622 trades, 48.7%, −16R):
 Out-of-sample check of the ONE rule fixed in-sample ("skip if tr30 > 3"), 9 Feb–17 Jun (3,163 trades, 47.2%, −179R):
 the skipped trades were again worse (45%, −68R) but the kept ones still lose (47.8%, −111R); fading (`tr30 < −3`) was
 only 49% there. → The climax effect is real but small; no single filter found so far makes USDJPY M1 gaps profitable.
+
+### Same numeric test on EURUSD (17 Nov) — current bot rules incl. no Off session, 2 Jan–17 Jun
+3,967 trades, 45.8%, −331R (no costs). In-sample 15 Jan–6 Feb: 570 trades, 43.3%, −76R; out-of-sample 9 Feb–17 Jun:
+3,083 trades, 46.6%, −211R. `tr30 > 3` (with a big recent move) 43% / 44% (−18R / −83R) — the same climax effect as
+USDJPY, small. Fading (`tr30 < −3`) only 50% / 48%. `er30`, `bigbar`, `mv10`: every bucket under 50%. → On EURUSD M1
+no bucket of any of these filters reaches 50%; the setup is worse than on USDJPY.
