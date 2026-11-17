@@ -76,8 +76,9 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   second 3 months; optionally keep compressed copies in `data/` (repo should then be private).
 - **Same-direction gap during an open trade (rule given by the user, 17 Nov; not coded yet):** still ONE position, no
   second trade. If the open trade is Leg 1 and a same-direction gap (Leg 2) forms and ITS entry triggers: the open
-  trade's TP moves to setup 2's TP (entry2 ± its own 1:1 risk). Once setup 2 is in profit from entry2, the open trade's
-  SL moves to near entry2 (open: how far in profit triggers it, how near = e.g. 1 pipette?). Open trade Leg 2 → the
+  trade's TP moves to setup 2's TP (entry2 ± its own 1:1 risk). Only after price has gone at least HALF of setup 2's
+  profit (0.5R of setup 2, user confirmed) does the open trade's SL move to near entry2 (how near: proposed 1 pipette
+  beyond entry2, not confirmed yet). Open trade Leg 2 → the
   new gap is Leg 3 → ignored. Assumed (to confirm): TP only moves farther, never closer; TP1 hit before entry2 → close.
   Today gaps that form while a trade is open are not even detected (gap.trades skips them) — show/count them too.
 - Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
