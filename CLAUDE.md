@@ -80,6 +80,16 @@ var is set on Render it overrides the default — it must then be changed there 
   change from one day. Spread kills it on FX: EURUSD stop 2.4 pips (1 pip spread ≈ 0.4R per trade), USDJPY 4.3 pips;
   gold ≈ 0.07R per trade. Waiting for the 6-month broker CSVs.
 
+- **EURUSD broker CSV (user's MT5 export, 17 Nov):** M1, 2026-01-01 → 06-17 plus 16–17 Nov (Jul–Oct missing in the
+  file), server time = New York + 7 h (GMT+2/+3), tab-separated `<DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> <TICKVOL>
+  <VOL> <SPREAD>` (spread in points; 0 in 75% of bars → raw/ECN account, commission not in the file). Current rules
+  (M5 filter from resampled M1, legs 1–2, fixed 1:1): **4,269 trades, 46.3%, −313R before any cost**. Every month
+  negative (Jan −90, Feb −92, Mar −60, Apr −21, May −11, Jun −43); Leg 1 −218 / Leg 2 −95; every session negative
+  except Off (+7); sells −182 / buys −131; every stop-size bucket negative. Without M5 filter −258R (4,596), all legs
+  −371R. Spread at entry ≈ −519R more (0.12R/trade); avg stop 3.1 pips (median 2.5). 16–17 Nov part matches the live
+  bot (24 trades, +4R). → The one-day +6.6R was luck; the setup has no edge on EURUSD M1 as defined.
+  Scripts were in the session scratchpad (load: tz_localize(server − 7 h, America/New_York) → UTC; M5 = resample).
+
 ## Ideas for later (do NOT code until the user asks)
 - **`HYPOTHESES.md`** — parked hypotheses, kept apart at the user's request ("keep it separately until I say").
   H1: win/loss sequence on EURUSD (after a win next trade 44%, after a loss 75%) → "wait after a win?". Use only
