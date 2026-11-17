@@ -94,3 +94,19 @@ Tokyo 4/12 −4R · Tokyo+London 2/2 +2R · London 5/9 +1R · London+NY 4/12 −
 
 Summary after 3 days: the two patterns that repeated every day are **H2c (gap against the M1 trend loses)** and
 **H2a (gaps inside a tight M1 range lose)**, plus **H2b (fading a climax wins)**. Session effects did not hold.
+
+### H2 · day 4 — Tue 20 Jan 2026 (backtest #407–#438): 32 trades, 17 wins, +2R
+Tokyo 10/16 +4R · London 2/3 +1R · London+NY 4/8 0R · NY 1/5 −3R (late NY spread 0.7–0.9 pip).
+- **H2c against the M1 trend — repeated (4th day):** #5 (buy as the 05:30 fall began), #15–#16 (buys in the
+  10:50–11:30 fall), #24 (sell in the 17:50–18:40 rally), #29 (sell in the 22:20–23:30 rally): all lost. With-trend
+  gaps in the 08:00–09:45 rally (#9, #11, #12) and the 15:10–15:50 fall (#18) won.
+- **H2b climax — repeated:** fading won: #3–#4 buys after the 04:25–04:40 drop, #13–#14 sells after the 10:00–10:40
+  spike up, #27 sell after the 20:05 spike. Trading in the climax direction at the extreme lost: #2 sell at the
+  04:41 low, #25 buy at the 18:59 top, #30 buy at the 23:45 top. One counter-example: #17 buy at 13:25 after the
+  12:00–13:10 fall lost (price made one more low first).
+- **H2a tight range — repeated:** #7–#8 in the 07:00–08:00 chop; #22–#23 sells at the bottom of the 16:20–17:10
+  range (157.75–157.92) lost.
+- Tokyo good again (10/16): Tokyo best on 3 of 4 days. Late NY (after ~22:30 Tehran) weak: 0/4 this day.
+
+Summary after 4 days: **H2c** held every day with almost no exception; **H2b** (fade the climax / don't trade in its
+direction at the extreme) held every day with one exception; **H2a** held every day.
