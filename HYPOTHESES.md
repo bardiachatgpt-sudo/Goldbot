@@ -252,3 +252,9 @@ those windows, fixed 1:1:
 By window (USDJPY no M5): Tokyo 48.1% −14, London 48.4% −12, NY 46.9% −22. (USDJPY with M5, London alone 51.7% +11 —
 one bucket, likely chance.) → Same ~47–48% win rate as all day: fewer trades, so smaller totals, but the same
 −0.04R per trade. The session-open window alone does not create an edge.
+Full report with the bot's rules (M5 filter, legs 1–2, 1:1) + first-90-min windows, 15 Jan–17 Jun:
+- USDJPY: 928 trades, 47.8%, −40R (after spread −98R), avg stop 5.3 pips. Months: Jan +14, Feb −18, Mar −18, Apr −10,
+  May 0, Jun −8. Tokyo −23, London +11 (52%), NY −28. Buys −29, sells −11. Leg 1 −21, Leg 2 −19. $1,000 at 1% → $640
+  (max DD 49%); at 2% → $373 (max DD 76%). Longest losing streak 7.
+- EURUSD: 863 trades, 45.3%, −81R (after spread −119R), avg stop 3.6 pips. Months: Jan −23, Feb −43, Mar −22, Apr +3,
+  May +11, Jun −7. Tokyo −36, London −29, NY −16. $1,000 at 1% → $426 (DD 64%); at 2% → $166 (DD 88%). Streak 9.
