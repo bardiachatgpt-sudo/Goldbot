@@ -369,11 +369,10 @@ class TestGapBacktest(unittest.TestCase):
         with mock.patch.object(telegram_bot, "get_closed_candles", fake), \
                 mock.patch.object(telegram_bot.time, "sleep"):
             tg.send_gap_backtest(7, "XAUUSD")
-        self.assertEqual(calls, [("XAUUSD", 4381, "1"), ("XAUUSD", 1424, "5")])          # ۷۲ ساعت M1 + ساختار M5
+        self.assertEqual([(c[0], c[2]) for c in calls], [("XAUUSD", "1"), ("XAUUSD", "5")])   # M1 + ساختار M5
         texts = [c.args[1] for c in tg.bot.send_message.call_args_list]
         report = next(t for t in texts if "GAP BACKTEST" in t)
-        self.assertIn("last 72 trading hours", report)
-        self.assertIn("4320 M1 candles", report)                                    # دقیقاً ۷۲ ساعت
+        self.assertIn("since the last Tokyo open", report)                          # پیش‌فرض: از شروع توکیو
         losses = int(report.split("❌ ")[1].split(" ")[0])
         albums = [len(c.args[1]) for c in tg.bot.send_media_group.call_args_list]
         self.assertEqual(albums, [min(5, losses)])                                  # اول فقط ۵ عکس
@@ -484,7 +483,7 @@ class TestGapBacktestTimeframesAndPairs(unittest.TestCase):
         self.assertIn("EURUSD · M15", txt)
         tg.bot.send_media_group.assert_not_called()                                 # عکس باخت‌ها فقط برای M1
         btns = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxr:EURUSD:15:72", "sxb:EURUSD:15", "sxbp:EURUSD", "sxbp"])
+        self.assertEqual(btns, ["sxr:EURUSD:15:T", "sxb:EURUSD:15", "sxbp:EURUSD", "sxbp"])
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):
@@ -572,7 +571,7 @@ class TestPeriods(unittest.TestCase):
         tg = make_bot()
         tg.ask_period(7, "XAUUSD", "1")
         btns = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(btns, ["sxr:XAUUSD:1:T", "sxr:XAUUSD:1:L", "sxr:XAUUSD:1:N", "sxr:XAUUSD:1:72"])
+        self.assertEqual(btns, ["sxr:XAUUSD:1:T", "sxr:XAUUSD:1:L", "sxr:XAUUSD:1:N"])
         m1 = gappy_m1(3000)                                                          # 16 Nov 00:00 → 18 Nov 02:00 UTC
         since = config.last_session_start("L", m1.index[-1])
         res = gap_backtest.run("XAUUSD", m1, "1", days=None, since=since, period="since the last London open")

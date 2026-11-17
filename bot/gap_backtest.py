@@ -253,12 +253,9 @@ ALL_RISK = 2.0
 
 
 def period_fetch(code, tf, now):
-    """(تعداد کندل لازم برای این بازه، تعداد کندل آخر یا None). code: T/L/N/72."""
+    """(تعداد کندل لازم از آخرین شروع سشن code تا now، None). code: T/L/N."""
     from .config import last_session_start
     tf_min = int(tf)
-    if code == "72":
-        n = 72 * 60 // tf_min
-        return n, n
     minutes = (now - last_session_start(code, now)).total_seconds() / 60
     return int(minutes // tf_min) + 10, None
 

@@ -24,10 +24,10 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
     target, exits; skipped gaps dotted. (M1 micro cycles with the v1 detection still exist: `layer="micro"`, hidden.)
   - **🧪 Backtest the gap setup** → M1 / M5 / M15.
 - **Backtest period** (asked after the timeframe, and for 🌍): 🇯🇵 since the last Tokyo open · 🇬🇧 since the last
-  London open · 🇺🇸 since the last New York open · 🗓 last 72 trading hours (`config.PERIODS`,
+  London open · 🇺🇸 since the last New York open — nothing else (the user removed "last 72 hours") (`config.PERIODS`,
   `config.last_session_start`: local opens Tokyo 09:00, London 08:00, NY 08:00, weekdays, DST-aware, "now" = last
   candle). This replaced the old "3 days" (which wrongly counted a Sunday with a few candles as a day).
-- **🧪 Gap backtest** (`/backtest XAUUSD 1 L`; codes T/L/N/72) → pair → M1, M5 or M15 → period (`bot/gap_backtest.py`):
+- **🧪 Gap backtest** (`/backtest XAUUSD 1 L`; codes T/L/N) → pair → M1, M5 or M15 → period (`bot/gap_backtest.py`):
   equity chart; report (trades, wins, R, sells vs buys, Leg 1 vs Leg 2+, by session, avg stop, skipped counts,
   comparisons "without the M5 filter" and "with all legs", $1,000 at 1% and 2%, latest trades); then a full list of
   stopped-out trades `#num · time · SELL/BUY · L<leg> · session · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`

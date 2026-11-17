@@ -146,7 +146,7 @@ class Telegram:
 
     @staticmethod
     def period_keyboard(prefix):
-        """از آخرین شروع توکیو / لندن / نیویورک تا الان، یا ۷۲ ساعت معاملاتی آخر. callback: prefix + کد بازه."""
+        """از آخرین شروع توکیو / لندن / نیویورک تا الان. callback: prefix + کد بازه."""
         kb = types.InlineKeyboardMarkup(row_width=1)
         kb.add(*[types.InlineKeyboardButton(name, callback_data=f"{prefix}{code}") for code, (name, *_) in PERIODS.items()])
         return kb
@@ -154,12 +154,12 @@ class Telegram:
     def ask_all_pairs(self, chat_id):
         self.bot.send_message(chat_id, "🌍 All pairs · M1 gap setup · from when?", reply_markup=self.period_keyboard("sxap:"))
 
-    def send_all_pairs(self, chat_id, code="72"):
-        """ستاپ گپ روی M1 برای همه‌ی جفت‌ها، از آخرین شروع سشن (T/L/N) یا ۷۲ ساعت آخر؛ با و بدون فیلتر M5."""
+    def send_all_pairs(self, chat_id, code="T"):
+        """ستاپ گپ روی M1 برای همه‌ی جفت‌ها، از آخرین شروع سشن (T/L/N) تا الان؛ با و بدون فیلتر M5."""
         import threading
 
         import pandas as pd
-        code = code if code in PERIODS else "72"
+        code = code if code in PERIODS else "T"
         period = PERIODS[code][1]
 
         def work():
@@ -181,7 +181,7 @@ class Telegram:
                     if m1 is None:
                         rows.append((sym, None, None, "no data"))
                         continue
-                    since = None if code == "72" else last_session_start(code, m1.index[-1])
+                    since = last_session_start(code, m1.index[-1])
                     kw = dict(days=None, compare=False, last_bars=last, since=since, period=period)
                     rf = run(sym, m1, "1", m5=m5, **kw)
                     rn = run(sym, m1, "1", m5=None, **kw)
@@ -222,15 +222,15 @@ class Telegram:
         self.bot.send_message(chat_id, f"🧪 Gap backtest · {label(sym)} · {BT_TIMEFRAMES.get(tf, tf)} · from when?",
                               reply_markup=self.period_keyboard(f"sxr:{sym}:{tf}:"))
 
-    def send_gap_backtest(self, chat_id, sym, tf="1", code="72"):
-        """ستاپ گپ روی M1، M5 یا M15، از آخرین شروع سشن (T/L/N) تا الان یا ۷۲ ساعت معاملاتی آخر؛ گزارش + نمودار."""
+    def send_gap_backtest(self, chat_id, sym, tf="1", code="T"):
+        """ستاپ گپ روی M1، M5 یا M15، از آخرین شروع سشن (T/L/N) تا الان؛ گزارش + نمودار."""
         import pandas as pd
 
         from .config import last_session_start
         from .gap_backtest import BT_TIMEFRAMES, equity_chart, period_fetch, report_text, run
         from .mtf import fmt_price
         tf = tf if tf in BT_TIMEFRAMES else "1"
-        code = code if code in PERIODS else "72"
+        code = code if code in PERIODS else "T"
         tfn, period = BT_TIMEFRAMES[tf], PERIODS[code][1]
         wait = self.bot.send_message(chat_id, f"⏳ Backtesting the gap setup on {label(sym)} {tfn} · {period}…")
         try:
@@ -245,7 +245,7 @@ class Telegram:
             return
         m5 = df if tf == "5" else (get_closed_candles(sym, min(n // 5 + 560, 5000), MIN_BARS, "5", timeout=60)
                                    if tf == "1" else None)
-        since = None if code == "72" else last_session_start(code, df.index[-1])
+        since = last_session_start(code, df.index[-1])
         res = run(sym, df, tf, days=None, m5=m5, last_bars=last, since=since, period=period)   # فیلتر M5 برای M1 و M5
         dec = len(fmt_price(sym, 1.0).split(".")[1])
         text = report_text(res, dec)

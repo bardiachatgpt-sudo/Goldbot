@@ -68,12 +68,11 @@ def session_of(ts):
     return "+".join(names) or "Off"
 
 
-# بازه‌ی بک‌تست: از آخرین شروع یک سشن تا الان، یا ۷۲ ساعت معاملاتی آخر
+# بازه‌ی بک‌تست: از آخرین شروع یک سشن تا الان
 PERIODS = {
     "T": ("🇯🇵 Since the last Tokyo open", "since the last Tokyo open", "Asia/Tokyo", 9),
     "L": ("🇬🇧 Since the last London open", "since the last London open", "Europe/London", 8),
     "N": ("🇺🇸 Since the last New York open", "since the last New York open", "America/New_York", 8),
-    "72": ("🗓 Last 72 trading hours", "last 72 trading hours", None, None),
 }
 
 
