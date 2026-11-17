@@ -69,6 +69,11 @@ posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, A
   sells in the lower half / buys in the upper half of an M5 range (7), late legs (3).
 
 ## Ideas for later (do NOT code until the user asks)
+- Broker data (planned, user will send later): ~6 months of M1 CSV per pair exported from their broker
+  (MT5 Symbols → Bars → Export preferred; keep the Spread column but do not use it yet). Needed from the user: broker
+  server time zone (GMT+2/+3), broker symbol names, digits. Plan: gold first to settle the format; build M5/M15 from
+  M1; run the gap backtest here in the cloud session (no TradingView needed); report month by month and first vs
+  second 3 months; optionally keep compressed copies in `data/` (repo should then be private).
 - Spread: the user will handle it later — do NOT add it now. Minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
 - In an M5 range: sell only in the upper half, buy only in the lower half; stop a little beyond the M5 edge.
 - Entry on candle 4 tends to be best (report by entry candle 4/5/6+).
