@@ -141,3 +141,10 @@ Summary after 7 days (15–23 Jan, 243 trades, 121 wins, −1R): H2c (against th
 is the clearest; H2b (don't trade in the climax direction at the extreme; fading it tends to win) held most days;
 H2i (late in a long channel) new; H2a only when the range is choppy; session effects are not stable (London+NY
 overlap weakest overall).
+
+### H2 · week summary (15–23 Jan, my count from the pictures — approximate, not automated)
+Losses (~122): against the M1 trend ≈ 40 (biggest); choppy tight M1 range with gaps alternating ≈ 30; in the climax
+direction at the extreme (sell the low right after a sharp fall / buy the top right after a spike) ≈ 15; late in a
+long channel ≈ 5; news spikes (23 Jan) — the worst single losses, mostly counted under "against the trend".
+Wins (~121): with the M1 trend / M5 channel ≈ 25+; fading a climax (after a sharp move, in the turn direction) ≈ 17;
+from the edge of a range (sell its top, buy its bottom) ≈ 12; the rest in normal swings with room for 1:1.
