@@ -37,19 +37,24 @@ def last_days(df, days=DAYS):
     return df[df.index >= start]
 
 
-def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True):
+def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_leg=None):
     """m1: کندل‌های تایم‌فریم tf (Open/High/Low/Close، زمان = شروع کندل). خروجی: dict نتیجه.
-    days: فقط این تعداد روز معاملاتی آخر (None = همه).
+    days: فقط این تعداد روز معاملاتی آخر (None = همه). last_bars: یا فقط این تعداد کندل آخر (مثلاً ۱۴۴۰ = ۲۴ ساعت M1).
+    max_leg: فقط لگ ۱ تا max_leg (پیش‌فرض gap.MAX_LEG = ۲).
     m5: اگر باشد، فیلتر ساختار M5: حد سود بیرون از جعبه‌ی M5 همان لحظه → معامله گرفته نمی‌شود.
     compare: همان داده بدون فیلتر M5 هم حساب و در گزارش مقایسه شود."""
+    from .gap import MAX_LEG
+    max_leg = MAX_LEG if max_leg is None else max_leg
     step = pd.Timedelta(minutes=int(tf))
     if days:
         m1 = last_days(m1, days)
+    if last_bars:
+        m1 = m1.tail(last_bars)
     o, h, l, c = (m1[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
     idx = m1.index
     skipped = []
     allow = m5_target_filter(m5, idx) if m5 is not None and len(m5) >= 100 else None
-    all_t = trades(o, h, l, c, sym, allow=allow, skipped=skipped)
+    all_t = trades(o, h, l, c, sym, allow=allow, skipped=skipped, max_leg=max_leg)
     for t in all_t:
         if t.get("entry_i") is not None:
             t["entry_time"] = idx[t["entry_i"]]
@@ -75,10 +80,17 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True):
            "open": [t for t in all_t if t.get("entry_i") is not None and t.get("exit_i") is None],
            "waiting": [t for t in all_t if t.get("entry_i") is None], "accounts": {},
            "days": len(set(idx.tz_convert("UTC").date)), "candles": m1,
-           "m5_filter": allow is not None, "skipped": skipped}
-    if allow is not None and compare:                     # همان داده بدون فیلتر M5
-        base = [t for t in trades(o, h, l, c, sym) if t.get("exit_i") is not None]
-        res["no_filter"] = (len(base), sum(t["r"] > 0 for t in base), sum(t["r"] for t in base))
+           "m5_filter": allow is not None, "skipped": skipped, "max_leg": max_leg}
+
+    def summ(ts):
+        ts = [t for t in ts if t.get("exit_i") is not None]
+        return len(ts), sum(t["r"] > 0 for t in ts), sum(t["r"] for t in ts)
+
+    if allow is not None and compare:                     # همان داده بدون فیلتر M5 (همان فیلتر لگ)
+        res["no_filter"] = summ(trades(o, h, l, c, sym, max_leg=max_leg))
+    if max_leg and compare:                               # همان داده با همه‌ی لگ‌ها (همان فیلتر M5)
+        res["all_legs"] = summ(trades(o, h, l, c, sym, allow=m5_target_filter(m5, idx) if allow else None,
+                                      max_leg=0))
     for side, key in ((-1, "sells"), (1, "buys")):
         cs = [t for t in closed if t["side"] == side]
         res[key] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
@@ -108,7 +120,8 @@ def report_text(res, decimals=2, shown=25):
              f"{tz(res['start']):%d %b %H:%M} → {tz(res['end']):%d %b %H:%M} Tehran · {res['bars']} {tfn} candles "
              f"({res['days']} days)",
              "📐 Gap on 3 same-colour candles → enter 1 pipette beyond the previous candle → stop behind candle 1 → "
-             "target 1:1" + (" · only if the target is inside the M5 structure box" if res.get("m5_filter") else ""),
+             "target 1:1" + (" · only if the target is inside the M5 structure box" if res.get("m5_filter") else "")
+             + (f" · legs 1–{res['max_leg']} only" if res.get("max_leg") else ""),
              "━━━━━━━━━━━━━━━━",
              f"📊 Trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate <b>{wr:.0f}%</b>",
              f"📈 Net: <b>{res['net_r']:+.0f}R</b>  (win +{RR:g}R, loss −1R)",
@@ -127,11 +140,17 @@ def report_text(res, decimals=2, shown=25):
     if res["open"]:
         lines.append("   ⏳ 1 trade still open at the end (not counted)")
     if res.get("m5_filter"):
-        lines.append(f"   🚫 Not taken (1:1 target outside the M5 box): {len(res['skipped'])}")
+        lines.append(f"   🚫 Not taken (1:1 target outside the M5 box): "
+                     f"{sum(t.get('reason') == 'm5' for t in res['skipped'])}")
+    if res.get("max_leg"):
+        lines.append(f"   🚫 Not taken (leg {res['max_leg'] + 1}+): {sum(t.get('reason') == 'leg' for t in res['skipped'])}")
     if res.get("no_filter"):
         n0, w0, r0 = res["no_filter"]
         lines.append(f"🔁 Same data without the M5 filter: {n0} trades, win {w0 / n0 * 100 if n0 else 0:.0f}%, "
                      f"{r0:+.0f}R")
+    if res.get("all_legs"):
+        n0, w0, r0 = res["all_legs"]
+        lines.append(f"🔁 Same data with all legs: {n0} trades, win {w0 / n0 * 100 if n0 else 0:.0f}%, {r0:+.0f}R")
     lines.append("━━━━━━━━━━━━━━━━")
     lines.append(f"💵 Account ${BALANCE:,.0f}:")
     for rp, a in res["accounts"].items():
@@ -207,3 +226,45 @@ def equity_chart(res):
     fig.savefig(buf, format="png", facecolor="white")
     plt.close(fig)
     return buf.getvalue()
+
+
+ALL_BARS = 1440         # «۲۴ ساعت اخیر» = ۱۴۴۰ کندل M1 معاملاتی آخر (آخر هفته‌ها حساب نمی‌شوند)
+ALL_RISK = 2.0
+
+
+def all_pairs_text(rows, risk=ALL_RISK):
+    """rows: [(نماد، نتیجه با فیلتر M5، نتیجه بدون فیلتر M5، خطا)]. جدول خلاصه برای همه‌ی جفت‌ها، با و بدون فیلتر M5."""
+    head = (f"🌍 <b>GAP SETUP · ALL PAIRS · M1 · last 24h</b>\n"
+            f"Legs 1–2 · target 1:1 · ${BALANCE:,.0f} at {risk:g}% risk per trade · no spread")
+
+    def block(title, pick):
+        lines = [f"\n<b>{title}</b>", "<pre>Pair     Tr  Win    R    $1000 →"]
+        tot_n = tot_w = 0
+        tot_r = 0.0
+        for sym, rf, rn, err in rows:
+            r = pick(rf, rn)
+            if err or r is None:
+                lines.append(f"{sym:<7}   no data")
+                continue
+            n, w, rr = r["trades"], r["wins"], r["net_r"]
+            final = r["accounts"][risk]["final"]
+            tot_n, tot_w, tot_r = tot_n + n, tot_w + w, tot_r + rr
+            wr = f"{w / n * 100:3.0f}%" if n else "  -"
+            money = "$" + format(final, ",.0f")
+            lines.append(f"{sym:<7}{n:>4} {wr} {rr:+5.0f} {money:>7} ({(final / BALANCE - 1) * 100:+.1f}%)")
+        wr = f"{tot_w / tot_n * 100:3.0f}%" if tot_n else "  -"
+        lines.append(f"{'ALL':<7}{tot_n:>4} {wr} {tot_r:+5.0f}")
+        lines.append("</pre>")
+        return lines
+
+    out = [head]
+    out += block("📦 With the M5 filter (target inside the M5 box)", lambda rf, rn: rf)
+    out += block("🔓 Without the M5 filter", lambda rf, rn: rn)
+    best = [(sym, rf) for sym, rf, rn, err in rows if rf is not None and not err and rf["trades"]]
+    if best:
+        top = max(best, key=lambda x: x[1]["net_r"])
+        low = min(best, key=lambda x: x[1]["net_r"])
+        out.append(f"🏆 Best (with filter): {top[0]} {top[1]['net_r']:+.0f}R · 🔻 Worst: {low[0]} {low[1]['net_r']:+.0f}R")
+    out.append("<i>Each pair is its own $1,000 account. No spread, commission or slippage; inside each M1 candle the "
+               "order of prices comes from the candle shape. 24 hours is a small sample.</i>")
+    return "\n".join(out)

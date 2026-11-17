@@ -103,12 +103,16 @@ def leg_number(heads, h, l, i1, side):
     return 1 + sum(1 for k, sd in heads if sd == side and start <= k < i1)
 
 
-def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None):
+MAX_LEG = 2             # فقط لگ ۱ و ۲؛ لگ ۳ به بالا گرفته نمی‌شود
+
+
+def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None, max_leg=MAX_LEG):
     """معامله‌های ستاپ گپ روی کندل‌ها (آرایه‌ها). هر معامله:
     {side, gap: (i1, i3), gap_hi, gap_lo, entry_i, entry, sl, tp, exit_i, exit, result, r}
     و آخری ممکن است باز (exit_i=None) یا گپ در انتظار ورود (entry_i=None) باشد.
     allow(i, side, entry, tp) → False یعنی ورود گرفته نشود (مثلاً حد سود بیرون از ساختار M5)؛ آن گپ کنار گذاشته
-    می‌شود و اگر skipped یک لیست باشد، به آن اضافه می‌شود."""
+    می‌شود و اگر skipped یک لیست باشد، به آن اضافه می‌شود (با reason: "m5" یا "leg").
+    max_leg: گپ‌هایی که لگشان بیشتر از این است گرفته نمی‌شوند (None/0 = همه‌ی لگ‌ها)."""
     n = len(c)
     pp = pip(sym)
     heads = gap_heads(o, h, l, c, same_color)
@@ -132,9 +136,14 @@ def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None):
                 risk = abs(sl - entry)
                 if risk > 0 and (sl - entry) * s < 0:       # حد ضرر آن طرف درست ورود است
                     tp = entry + s * RR * risk
-                    if allow is not None and not allow(i, s, entry, tp):
+                    reason = None
+                    if max_leg and pending.get("leg", 1) > max_leg:
+                        reason = "leg"                     # لگ ۳ به بالا
+                    elif allow is not None and not allow(i, s, entry, tp):
+                        reason = "m5"                      # حد سود بیرون از جعبه‌ی M5
+                    if reason:
                         if skipped is not None:
-                            skipped.append(dict(pending, entry_i=i, entry=entry, sl=sl, tp=tp))
+                            skipped.append(dict(pending, entry_i=i, entry=entry, sl=sl, tp=tp, reason=reason))
                         pending = None
                         continue
                     t = dict(pending, entry_i=i, entry=entry, sl=sl, tp=tp, exit_i=None, exit=None,

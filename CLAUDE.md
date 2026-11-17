@@ -1,92 +1,85 @@
 # Goldbot · notes for the next session
 
-Read this first. It replaces the long conversation that built this bot.
+Read this first. It replaces the long conversation that built this bot. **Keep it up to date after every change**
+(the user asked for this so a new chat can continue without losing anything).
 
 ## The user and how to work with them
-- Writes in Persian (Farsi); answer in Persian. Trades gold (XAUUSD) mainly, on M5, in the Al Brooks price-action way.
-- Often wants to **discuss before coding**. When they say "فعلاً کد نزن" / "بحث کنیم" / "مطالعه کنم", do not code.
-- **Never deploy without an explicit "دیپلوی" / "deploy".** Build, run the tests, commit and push to the work branch, then
-  ask. Deploy = fast-forward `main` to the work branch; Render auto-deploys from `main` (takes 3–5 min).
-- When trying a new idea, keep the live version untouched and show pictures first; the user judges by eye.
-- Explain results in plain Persian with small tables; be honest when an idea did not work.
+- Writes in Persian (Farsi); answer in Persian, plainly, with small tables. Trades gold (XAUUSD) mainly, the Al Brooks
+  price-action way. Judges ideas by eye from pictures; sends screenshots of the bot's pictures with notes.
+- Often wants to **discuss before coding**. When they say "فعلاً کاری نکن" / "کد نزن" / "بحث کنیم" / "مطالعه کنم", do not code.
+- **Never deploy without an explicit "دیپلوی" / "deploy".** Build, run the tests, commit and push to the work branch
+  `ccr-1ceb0688-gokag6`, then ask. Deploy = fast-forward `main` to the work branch
+  (`git fetch --depth=50 origin main && git merge-base --is-ancestor origin/main HEAD && git push origin <branch>:main`);
+  Render auto-deploys from `main` (3–5 min). A few Telegram 409 lines during a deploy are normal.
+- Be honest about results (small samples, no spread, look-ahead). Ideas the user rejected stay rejected.
 
-## What the bot is now (structure only)
-Telegram bot that only draws market structure. No alerts, no channel posts, no trades, no backtests (all removed
-on purpose; they are in git history before commit 678dacb if ever needed).
-- 📐 Structure → pair (XAUUSD, 7 majors, US30 = Dow Jones) → timeframe (M1, M5, M15, M30, H1, H4, D1) →
-  two pictures: last 500 candles with the structure, and a zoom on the last two structures.
-- 🔬 "M1 candles + M5 structure + gap setup" (button under the timeframes, or `/structure XAUUSD mtf`):
-  white background, grey M1 candles (last ≤ 480); each M5 phase is ONE light-blue box (range flat, channel slanted
-  along its lines) with its top/bottom price written on it ("M5 range top 3995.44"); the last box runs to now.
-  On the M1 candles: the gap setup (bot/gap.py) — gap boxes, entry, stop, 1:1 target, exit. The M1 micro cycles
-  (fine v1 detection, black) are still in the code (`mtf.render(..., layer="micro")`) but the user asked to hide
-  them for now.
+## What the bot does now
+Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 24h). No alerts, no channel
+posts, no live trading. Pairs: XAUUSD, EURUSD, GBPUSD, USDJPY, USDCHF, USDCAD, AUDUSD, NZDUSD, US30 (Dow Jones).
+- **📐 Structure** → pair → timeframe (M1, M5, M15, M30, H1, H4, D1) → two pictures: last 500 candles with the
+  structure, and a zoom on the last two structures. Under the timeframes:
+  - **🔬 M1 candles + M5 structure + gap setup** (`/structure XAUUSD mtf`, `bot/mtf.py`): white background, grey M1
+    candles (last ≤ 480). Each M5 phase = ONE light-blue box (range flat, channel slanted along its lines) with its
+    top/bottom price; the last box runs to now. On the M1 candles: gap boxes, entries (L1/L2 label), stop, 1:1
+    target, exits; skipped gaps dotted. (M1 micro cycles with the v1 detection still exist: `layer="micro"`, hidden.)
+  - **🧪 Backtest the gap setup** → M1 / M5 / M15.
+- **🧪 Gap backtest** (`/backtest XAUUSD 5`) → pair → M1, M5 or M15 → last 3 trading days (`bot/gap_backtest.py`):
+  equity chart; report (trades, wins, R, sells vs buys, Leg 1 vs Leg 2+, by session, avg stop, skipped counts,
+  comparisons "without the M5 filter" and "with all legs", $1,000 at 1% and 2%, latest trades); then a full list of
+  stopped-out trades `#num · time · SELL/BUY · L<leg> · session · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`
+  (#num = picture number); on M1 the zoomed loser pictures (`bot/gap_pictures.py`), 5 at a time with "📷 Next 5"
+  (kept in memory per chat; lost on restart).
+- **🌍 All pairs · 24h** (also in the backtest pair menu): gap setup on M1, last 1440 M1 candles, every pair, with and
+  without the M5 filter; one summary table per variant: trades, win %, R, and a separate $1,000 account per pair at
+  2% risk (final $ and growth %), totals, best/worst pair.
+
+## The gap setup (bot/gap.py) — rules agreed with the user
+- Gap = exactly 3 candles. Sell: candle 1 low > candle 3 high, candle 2's body overlaps that space, and **all three
+  candles bearish** (buy: mirror, all bullish). Same-direction gaps that keep forming right behind it (2-3-4, 3-4-5 …)
+  are ignored: candle 1, the box and the stop stay those of the FIRST gap. A separate or opposite gap replaces a
+  waiting one. No invalidation (user's choice).
+- From the close of candle 3, compare each candle's high with the previous candle's high (buy: lows). Entry when
+  price trades strictly beyond it by ≥ 1 pipette: sell at previous high + 1 pipette (gold 0.01, FX 0.00001,
+  JPY 0.001, US30 0.1). Touching is not an entry.
+- Stop: 1 pipette beyond candle 1. Target 1:1. One trade at a time. No spread in any backtest yet.
+- **M5 filter:** no trade if the 1:1 target lies outside the M5 structure box of that moment (500 M5 candles closed
+  then) — `gap.m5_target_filter`.
+- **Leg filter: only Leg 1 and Leg 2** (`gap.MAX_LEG = 2`). For a sell, the move starts at the highest high since the
+  last buy gap; Leg 1 = no earlier sell gap in this move, Leg 2 = one before (chained gaps count once).
+- **Session** of each trade (`config.session_of`, local hours, DST-aware): Tokyo 9–18 Tokyo, London 8–17 London,
+  NY 8–17 New York; overlaps joined ("London+NY"); outside all = "Off".
+
+## Results so far (gold M1, no spread)
+- 6 days: 393 trades, 52%, +13R (before same-colour/M5/leg rules). With ~0.3 spread (avg stop ~$3) ≈ −20R.
+- 16–17 Nov (~30 h, same-colour + M5 filter): 39 trades, 46%, −3R; without M5 filter 47 trades, 51%, +1R; Leg 1 50% 0R,
+  Leg 2+ 38% −3R (L3+ ≈ 3 losses, 0–2 wins). Losers: stops < $2 (7 of 21), stops just beyond the M5 edge (5),
+  sells in the lower half / buys in the upper half of an M5 range (7), late legs (3).
+
+## Ideas for later (do NOT code until the user asks)
+- Fix "3 days" counting a Sunday with few candles (count only days with several hours of data).
+- Add spread to backtests; minimum stop size (~$2 gold, or ATR-based); ATR(14) at entry in the report.
+- In an M5 range: sell only in the upper half, buy only in the lower half; stop a little beyond the M5 edge.
+- Entry on candle 4 tends to be best (report by entry candle 4/5/6+).
+- The user does NOT want a sell-stop entry. Wanted later: a LIVE simulator following bid/ask ticks — after price trades
+  beyond the previous candle, follow it and enter the moment it turns (forward paper trading; check TradingView
+  bid/ask for gold; define the "turn"; Render must stay on). A "floating" entry offset (ATR / wick / step-down) was
+  discussed but parked.
+
+## Structure rules (v3, `bot/structure3.py`, from the user's own drawn charts)
+- Closes only (line chart); a swing = a pullback ≥ 10% of the chart height.
+- Every bar is a spike (fast straight leg), a channel (HH+HL or LH+LL) or a trading range (everything else; may be a
+  triangle). A range lasts until a breakout that does not come back; a channel fully taken back by the next range was
+  a range leg. If the last close breaks the last swing against a channel, the final leg gets its own provisional label.
+- `bot/structure.py` = v1 fine detection (swings on highs/lows, 1.5 avg-bar reversal), only for the hidden M1 layer.
 
 ## Files
-- `bot/structure3.py` — structure v3 (used for every timeframe picture and for the M5 layer).
-- `bot/structure.py` — structure v1, fine detection; used only for the M1 micro cycles.
-- `bot/mtf.py` — the M1 + M5 picture.
-- `bot/telegram_bot.py` — buttons/commands; polling survives Telegram 409 during deploys (that crash used to fail
-  Render deploys — keep the retry loop).
-- `bot/data.py` — TradingView websocket candles. `bot/config.py` — symbols, timeframes.
-- Tests: `python -m unittest discover -s tests`.
-
-## Structure rules (v3, from the user's own drawn charts — agreed with them)
-- Closes only (like a line chart); wicks do not make swings. A swing = a pullback of at least 10% of the chart height.
-- Every bar is in one of three states: spike (fast straight leg), channel (higher highs + higher lows, or the
-  reverse), trading range (everything else; may be a triangle). "If in doubt, it's a range."
-- A range lasts until a breakout that does not come back; a poke that comes back (even a fast V) stays in the range
-  and stretches its edges. A channel fully taken back by the following range was only a range leg.
-- Range edges at the farthest closes (flat, or sloped only for a triangle); channel = trend line through two swings
-  + parallel line. The last phase is provisional.
-- v1 (M1 layer): swings on highs/lows with a 1.5 average-bar reversal; more, smaller pieces; "range (in doubt)".
-
-## Trade setups
-- All earlier setups (pin bar, key bar, range edges, MACD, Always In…) were dropped by the user. Do not bring them
-  back. The structures above stay.
-- The user is now describing new setups one by one. First one: the **gap** (not coded yet; rules agreed so far):
-  - Sell: candle 1 low > candle 3 high, and candle 2's body overlaps that gap. **All three gap candles must be the
-    same colour** (sell: all three bearish; buy: all three bullish) — the user called this "very, very important".
-    Buy: the mirror (candle 1 high < candle 3 low, candle 2 body overlaps).
-  - Following starts as soon as the gap exists (close of candle 3): compare each candle's high with the previous
-    candle's high (buy: lows).
-  - Entry (sell): only when price trades strictly ABOVE the previous candle's high, by at least one pipette;
-    entry price = previous high + 1 pipette (gold 0.01, 5-digit FX 0.00001, JPY 0.001, US30 0.1). Merely touching
-    the previous high is not an entry. (Buy: previous low − 1 pipette.)
-  - Stop: just beyond candle 1 (sell: above its high; buy: below its low). Target 1:1.
-  - Runs on M1, drawn on the M1 + M5 picture. No invalidation for now (user's choice). One trade at a time. No spread. Stop = candle 1 + 1 pipette.
-  - M5 filter: if the 1:1 target lies outside the current M5 structure box (sell: below the box bottom; buy: above
-    the box top), the trade is not taken (the user saw those mostly fail). The box comes from the 500 M5 candles
-    closed at that moment (gap.m5_target_filter). Used on the M1 + M5 picture (skipped gaps drawn dotted) and in the
-    M1/M5 backtests, which also report the same data without the filter.
-  - Leg label (user: "we usually take the first leg"): each trade is labelled Leg 1 / Leg 2 / … — for a sell, the
-    move starts at the highest high since the last buy gap; Leg 1 = no earlier sell gap in this move, Leg 2 = one
-    before, etc. (gap.gap_heads / gap.leg_number; chained gaps count once). Shown in pictures, captions, the trade
-    list and a Leg 1 vs Leg 2+ line in the report. Label only — no filter yet.
-  - After the report, a full list of the stopped-out trades is sent (gap_backtest.losers_text), one line each:
-    `#num · time · SELL/BUY · L<leg> · session · gap hh:mm–hh:mm · entry · SL · TP · exit · M5: state`.
-    Session (config.session_of, local market hours, DST-aware): Tokyo 9–18 Tokyo, London 8–17 London, NY 8–17 NY;
-    overlaps joined ("London+NY"); outside all three = "Off". The report has a by-session block. #num = the picture
-    number. The user will send pictures + this list; use them to find each trade.
-  - Later (user will say when; do NOT code yet): (1) facts from the 16–17 Nov M1 run: Leg 1 50% 0R, Leg 2+ 38% −3R;
-    L3+ looked bad (user: "take Leg 1–2 at most"); stops < $2 lost often; stops just beyond the M5 edges got hit;
-    the "3 days" counted Sunday (fix: count only days with several hours of candles). (2) The user does NOT want a
-    sell-stop entry. Wanted later: a LIVE simulator on the bot that follows bid/ask ticks — after price trades above
-    the previous high, follow it up and sell the moment it turns down (buy: mirror). Forward paper-trading only (no
-    tick history); check whether TradingView quotes give bid/ask for gold; define "turn" (cents / ATR / micro lower
-    high); needs the Render service always on.
-  - Idea to discuss later (do NOT code until the user brings it up): the user notices the best setups, when inside
-    the structure, usually enter on candle 4 (right after the gap). Possible later: report results by entry candle
-    (4 / 5 / 6+) and an "entry on candle 4 only" comparison; maybe require the entry inside the M5 box.
-  - A gap is always exactly 3 candles. Same-direction gaps that keep forming right behind it (2-3-4, 3-4-5 … each
-    overlapping the previous one) are ignored: candle 1, the gap box and the stop stay those of the FIRST gap, and
-    following starts after its candle 3 (user's screenshots of trades #10 and #8). A separate or opposite gap
-    replaces the waiting one.
-  - First real result, gold M1, 6 days: 393 trades, 52% wins, +13R without spread; with a ~0.3 spread (avg stop
-    ~3) it would be roughly −20R. Sells won because gold fell that week. Suggested next: add spread, then try the
-    M5 direction filter, the M5 edges as targets, or a minimum gap/stop size.
+- `bot/telegram_bot.py` — buttons, commands, backtest flows, all-pairs scan; polling loop survives Telegram 409.
+- `bot/gap.py` (setup), `bot/gap_backtest.py` (backtest, reports, all-pairs table), `bot/gap_pictures.py` (loser
+  pictures), `bot/mtf.py` (M1 + M5 picture), `bot/structure3.py`, `bot/structure.py`, `bot/data.py` (TradingView
+  candles), `bot/config.py` (symbols, timeframes, sessions), `bot/main.py`.
+- Tests: `python -m unittest discover -s tests` (all in `tests/test_structure.py`).
+- Old features (alerts, pin-bar/range setups, MACD, range backtest) were removed on purpose; in git history before 678dacb.
 
 ## Environment notes
-- The cloud session cannot reach TradingView; real data is only on Render. Test with synthetic data and pictures
-  (or digitise candles from the user's screenshots).
+- The cloud session cannot reach TradingView; real data is only on Render. Test with synthetic data and pictures.
 - Repo: bardiachatgpt-sudo/Goldbot. Env on Render: `BOT_TOKEN` (required), optional `STRUCTURE_PAIRS`.

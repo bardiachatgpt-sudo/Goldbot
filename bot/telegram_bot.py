@@ -13,6 +13,7 @@ from .data import get_closed_candles
 VERSION = "structure · gold + majors + Dow Jones · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
 MENU_STRUCTURE = "📐 Structure"
 MENU_BACKTEST = "🧪 Gap backtest"
+MENU_ALL = "🌍 All pairs · 24h"
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
         "Pick a pair, then a timeframe.\n\n"
@@ -35,8 +36,9 @@ class Telegram:
     # ------------------------------------------------------------ دکمه‌ها
     def menu(self):
         """دکمه‌ی ثابت پایین چت."""
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-        kb.add(types.KeyboardButton(MENU_STRUCTURE), types.KeyboardButton(MENU_BACKTEST))
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
+        kb.add(types.KeyboardButton(MENU_STRUCTURE), types.KeyboardButton(MENU_BACKTEST),
+               types.KeyboardButton(MENU_ALL))
         return kb
 
     def structure_pairs(self):
@@ -139,7 +141,45 @@ class Telegram:
     def backtest_pairs(self):
         kb = types.InlineKeyboardMarkup(row_width=3)
         kb.add(*[types.InlineKeyboardButton(label(n), callback_data="sxbp:" + n) for n in STRUCTURE_SYMBOLS])
+        kb.row(types.InlineKeyboardButton("🌍 All pairs · M1 · last 24h (with / without M5)", callback_data="sxa"))
         return kb
+
+    def send_all_pairs(self, chat_id):
+        """ستاپ گپ روی M1، ۲۴ ساعت اخیر، برای همه‌ی جفت‌ها؛ با و بدون فیلتر M5؛ یک جدول خلاصه."""
+        import threading
+
+        def work():
+            from .gap_backtest import ALL_BARS, all_pairs_text, run
+            msg = self.bot.send_message(chat_id, f"⏳ Gap setup on all {len(STRUCTURE_SYMBOLS)} pairs · M1 · last 24h…")
+            rows = []
+            for k, sym in enumerate(STRUCTURE_SYMBOLS, 1):
+                try:
+                    self.bot.edit_message_text(f"⏳ Gap setup on all pairs · M1 · last 24h… {k}/{len(STRUCTURE_SYMBOLS)} "
+                                               f"({sym})", chat_id, msg.message_id)
+                except Exception:
+                    pass
+                try:
+                    m1 = get_closed_candles(sym, ALL_BARS + 60, MIN_BARS, "1", timeout=60)
+                    m5 = get_closed_candles(sym, 900, MIN_BARS, "5", timeout=60) if m1 is not None else None
+                    if m1 is None:
+                        rows.append((sym, None, None, "no data"))
+                        continue
+                    rf = run(sym, m1, "1", days=None, m5=m5, compare=False, last_bars=ALL_BARS)
+                    rn = run(sym, m1, "1", days=None, m5=None, compare=False, last_bars=ALL_BARS)
+                    rows.append((sym, rf, rn, None))
+                except Exception as e:
+                    print("all pairs error:", sym, e)
+                    rows.append((sym, None, None, str(e)[:50]))
+            try:
+                self.bot.delete_message(chat_id, msg.message_id)
+            except Exception:
+                pass
+            kb = types.InlineKeyboardMarkup()
+            kb.add(types.InlineKeyboardButton("🔄 Run again", callback_data="sxa"),
+                   types.InlineKeyboardButton("🧪 One pair in detail", callback_data="sxbp"))
+            self.bot.send_message(chat_id, all_pairs_text(rows), parse_mode="HTML", reply_markup=kb)
+
+        threading.Thread(target=work, daemon=True).start()
 
     def backtest_tf_keyboard(self, sym):
         from .gap_backtest import BT_TIMEFRAMES
@@ -286,6 +326,9 @@ class Telegram:
             if (m.text or "").strip() == MENU_BACKTEST:
                 self.ask_backtest(m.chat.id)
                 return
+            if (m.text or "").strip() == MENU_ALL:
+                self.send_all_pairs(m.chat.id)
+                return
             self.ask_structure(m.chat.id)
 
         @bot.callback_query_handler(func=lambda c: bool(c.data))
@@ -293,6 +336,10 @@ class Telegram:
             chat_id = c.message.chat.id
             action, _, rest = c.data.partition(":")
             sym, _, tf = rest.partition(":")
+            if action == "sxa":                                 # همه‌ی جفت‌ها · ۲۴ ساعت
+                bot.answer_callback_query(c.id, "Running all pairs…")
+                self.send_all_pairs(chat_id)
+                return
             if action == "sxl":                                 # ۵ عکس باخت بعدی
                 bot.answer_callback_query(c.id)
                 self.send_loser_batch(chat_id, int(sym) if sym.isdigit() else 0)

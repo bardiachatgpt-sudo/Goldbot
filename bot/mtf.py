@@ -85,7 +85,7 @@ def render(sym, m5, m1, layer="gaps", m5_full=None):
         from .gap import m5_target_filter, trades as gap_trades
         src = m5_full if m5_full is not None else m5
         skipped = []
-        ph1 = gap_trades(o, h, l, c, sym, allow=m5_target_filter(src, w.index), skipped=skipped)
+        ph1 = gap_trades(o, h, l, c, sym, allow=m5_target_filter(src, w.index), skipped=skipped)   # لگ ۱–۲
         piv1 = []
     t1 = w.index
     t5 = m5.index
@@ -233,7 +233,9 @@ def render(sym, m5, m1, layer="gaps", m5_full=None):
         done = [t for t in ph1 if t.get("exit_i") is not None]
         wins = sum(t["r"] > 0 for t in done)
         now1 = (f"{len(done)} gap trades · {wins} wins · {len(done) - wins} losses · "
-                f"{sum(t['r'] for t in done):+.0f}R (1:1) · {len(skipped)} skipped (target outside M5)")
+                f"{sum(t['r'] for t in done):+.0f}R (1:1) · skipped: "
+                f"{sum(t.get('reason') == 'm5' for t in skipped)} target outside M5, "
+                f"{sum(t.get('reason') == 'leg' for t in skipped)} leg 3+")
         what = "M1 gap setup"
         h1 = [patches.Patch(facecolor=GAP_SELL, alpha=0.5, label="sell gap"),
               patches.Patch(facecolor=GAP_BUY, alpha=0.5, label="buy gap"),

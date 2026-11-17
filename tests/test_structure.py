@@ -136,7 +136,8 @@ class TestStructureBot(unittest.TestCase):
         self.assertEqual([b.callback_data for row in kb.keyboard for b in row],
                          ["sxp:XAUUSD", "sxp:EURUSD", "sxp:GBPUSD", "sxp:USDJPY", "sxp:USDCHF",
                           "sxp:USDCAD", "sxp:AUDUSD", "sxp:NZDUSD", "sxp:US30"])
-        self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row], ["📐 Structure", "🧪 Gap backtest"])
+        self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row],
+                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs · 24h"])
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
@@ -430,7 +431,7 @@ class TestGapBacktestTimeframesAndPairs(unittest.TestCase):
         tg = make_bot()
         tg.ask_backtest(7)
         pairs = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
-        self.assertEqual(pairs, [f"sxbp:{s}" for s in config.STRUCTURE_SYMBOLS])
+        self.assertEqual(pairs, [f"sxbp:{s}" for s in config.STRUCTURE_SYMBOLS] + ["sxa"])
         tg.ask_backtest(7, "EURUSD")
         tfs = [b.callback_data for row in tg.bot.send_message.call_args.kwargs["reply_markup"].keyboard for b in row]
         self.assertEqual(tfs, ["sxb:EURUSD:1", "sxb:EURUSD:5", "sxb:EURUSD:15"])
@@ -468,6 +469,62 @@ class TestLastLegAgainstTheChannel(unittest.TestCase):
         c = np.array(up + fall) + rng.normal(0, 0.05, len(up) + len(fall))
         ph, _ = structure3.segment(c)
         self.assertEqual(ph[-1]["side"], -1)                            # پایه‌ی آخر نزولی است، نه «کانال صعودی»
+
+
+class TestLegFilterAndAllPairs(unittest.TestCase):
+    def test_leg_3_is_not_taken(self):
+        from bot import gap
+        skipped = []
+        with mock.patch.object(gap, "leg_number", lambda *a: 3):
+            ts = gap.trades(*candles(TestGapSetup.SELL), sym="XAUUSD", skipped=skipped)
+        self.assertEqual([t for t in ts if t.get("entry_i") is not None], [])
+        self.assertEqual([t["reason"] for t in skipped], ["leg"])
+        with mock.patch.object(gap, "leg_number", lambda *a: 3):
+            ts = gap.trades(*candles(TestGapSetup.SELL), sym="XAUUSD", max_leg=0)          # همه‌ی لگ‌ها
+        self.assertEqual(ts[0]["entry_i"], 4)
+
+    def test_report_shows_leg_filter_and_comparison(self):
+        from bot import gap_backtest
+        m1 = gappy_m1(6000)
+        m5 = m1.resample("5min", label="left", closed="left").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
+        res = gap_backtest.run("XAUUSD", m1, "1", m5=m5)
+        self.assertTrue(all(t.get("leg", 1) <= 2 for t in res["closed"]))
+        txt = gap_backtest.report_text(res)
+        self.assertIn("legs 1–2 only", txt)
+        self.assertIn("Not taken (leg 3+)", txt)
+        self.assertIn("Same data with all legs", txt)
+
+    def test_all_pairs_24h_table(self):
+        tg = make_bot()
+        m1 = gappy_m1(3000)
+        m5 = m1.resample("5min", label="left", closed="left").agg(
+            {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
+
+        def fake(sym, n, m, interval=None, timeout=20):
+            if sym == "US30":
+                return None                                                          # یک جفت بدون داده
+            return m1 if interval == "1" else m5
+
+        class Now:                                                                   # thread همزمان برای تست
+            def __init__(self, target, daemon=None):
+                self.t = target
+
+            def start(self):
+                self.t()
+
+        import threading
+        with mock.patch.object(telegram_bot, "get_closed_candles", fake), mock.patch.object(threading, "Thread", Now):
+            tg.send_all_pairs(7)
+        txt = tg.bot.send_message.call_args.args[1]
+        self.assertIn("ALL PAIRS", txt)
+        self.assertIn("With the M5 filter", txt)
+        self.assertIn("Without the M5 filter", txt)
+        for sym in config.STRUCTURE_SYMBOLS:
+            self.assertIn(sym, txt)
+        self.assertIn("US30      no data", txt)
+        self.assertIn("$1000", txt)
+        self.assertLess(len(txt), 4096)
 
 
 class TestSessions(unittest.TestCase):
