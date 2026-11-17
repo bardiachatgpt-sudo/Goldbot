@@ -57,6 +57,8 @@ def watch_rows(sym, m1, t):
             why.insert(0, "level passed but entry would be beyond SL - no trade")
         if "skip_m5" in codes:
             why.insert(0, "entry skipped: 1:1 target outside the M5 box")
+        if "skip_off" in codes:
+            why.insert(0, "entry skipped: Off session (outside Tokyo/London/NY)")
         if "skip_leg" in codes:
             why.insert(0, "entry skipped: leg 3+")
         if "entry" in codes:

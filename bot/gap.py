@@ -115,16 +115,17 @@ def _r(x):
 WATCH_BEFORE = 3        # چند کندل قبل از کندل ۱ هم در جدول عکس
 
 
-def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None, max_leg=MAX_LEG):
+def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None, max_leg=MAX_LEG, session_ok=None):
     """معامله‌های ستاپ گپ روی کندل‌ها (آرایه‌ها). هر معامله:
     {side, gap: (i1, i3), gap_hi, gap_lo, entry_i, entry, sl, tp, exit_i, exit, result, r}
     و آخری ممکن است باز (exit_i=None) یا گپ در انتظار ورود (entry_i=None) باشد.
     allow(i, side, entry, tp) → False یعنی ورود گرفته نشود (مثلاً حد سود بیرون از ساختار M5)؛ آن گپ کنار گذاشته
     می‌شود و اگر skipped یک لیست باشد، به آن اضافه می‌شود (با reason: "m5" یا "leg").
     max_leg: گپ‌هایی که لگشان بیشتر از این است گرفته نمی‌شوند (None/0 = همه‌ی لگ‌ها).
+    session_ok(i) → False یعنی کندل ورود بیرون از سشن‌هاست (Off) و معامله گرفته نمی‌شود (reason "off").
     هر معامله watch هم دارد: وضعیت هر کندل از کمی قبل از کندل ۱ تا ورود [(i, سطح لازم یا None, [کدها])]
     کدها: open/exit (معامله‌ی دیگری باز بود)، nogap (گپی در انتظار نبود)، c1/c2/c3، chain، replace،
-    miss (به سطح نرسید)، entry، badsl (ورود آن طرف حد ضرر می‌افتاد)، skip_m5، skip_leg."""
+    miss (به سطح نرسید)، entry، badsl (ورود آن طرف حد ضرر می‌افتاد)، skip_m5، skip_leg، skip_off."""
     n = len(c)
     pp = pip(sym)
     heads = gap_heads(o, h, l, c, same_color)
@@ -160,6 +161,8 @@ def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None, 
                     reason = None
                     if max_leg and pending.get("leg", 1) > max_leg:
                         reason = "leg"                     # لگ ۳ به بالا
+                    elif session_ok is not None and not session_ok(i):
+                        reason = "off"                     # بیرون از سشن‌ها: اسپرد بالا، کاربر معامله نمی‌کند
                     elif allow is not None and not allow(i, s, entry, tp):
                         reason = "m5"                      # حد سود بیرون از جعبه‌ی M5
                     if reason:
@@ -200,6 +203,12 @@ def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None, 
             a = max(0, t["gap"][0] - WATCH_BEFORE)
             t["watch"] = [(k, lvls[k], list(notes[k])) for k in range(a, t["entry_i"] + 1)]
     return out
+
+
+def in_session(times):
+    """session_ok(i): کندل i داخل توکیو، لندن یا نیویورک است (نه Off)."""
+    from .config import session_of
+    return lambda i: session_of(times[i]) != "Off"
 
 
 def m5_target_filter(m5, times, window=500):

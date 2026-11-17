@@ -477,6 +477,14 @@ class TestGapBacktest(unittest.TestCase):
         self.assertTrue(all(c.startswith(f"#{t['num']} ") for c, t in zip(caps, wins)))      # شماره‌ی عکس = شماره‌ی فهرست
         self.assertIn("Tehran", listing)
 
+    def test_no_trades_in_the_off_session(self):
+        from bot import gap_backtest
+        res = gap_backtest.run("XAUUSD", gappy_m1(3000), "1", days=None)
+        self.assertTrue(res["closed"])
+        self.assertNotIn("Off", {t["session"] for t in res["closed"]})
+        self.assertTrue(any(t.get("reason") == "off" for t in res["skipped"]))     # ۲۲ تا ۲۴ UTC بیرون از سشن‌ها
+        self.assertIn("Not taken (Off session", gap_backtest.report_text(res))
+
     def test_trade_picture(self):
         from bot import gap_backtest
         from bot.gap_pictures import caption, trade_picture

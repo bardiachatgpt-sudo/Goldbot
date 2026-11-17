@@ -8,7 +8,7 @@ import io
 import pandas as pd
 
 from .config import TEHRAN, label, session_of
-from .gap import RR, m5_target_filter, trades
+from .gap import RR, in_session, m5_target_filter, trades
 
 BALANCE = 1000.0
 RISKS = (1.0, 2.0)
@@ -57,7 +57,8 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_l
     idx = m1.index
     skipped = []
     allow = m5_target_filter(m5, idx) if m5 is not None and len(m5) >= 100 else None
-    all_t = trades(o, h, l, c, sym, allow=allow, skipped=skipped, max_leg=max_leg)
+    sess = in_session(idx)                                # سشن Off معامله نمی‌شود (خواست کاربر، ۱۷ نوامبر)
+    all_t = trades(o, h, l, c, sym, allow=allow, skipped=skipped, max_leg=max_leg, session_ok=sess)
     for t in all_t:
         if t.get("entry_i") is not None:
             t["entry_time"] = idx[t["entry_i"]]
@@ -91,10 +92,10 @@ def run(sym, m1, tf="1", days=DAYS, m5=None, compare=True, last_bars=None, max_l
         return len(ts), sum(t["r"] > 0 for t in ts), sum(t["r"] for t in ts)
 
     if allow is not None and compare:                     # همان داده بدون فیلتر M5 (همان فیلتر لگ)
-        res["no_filter"] = summ(trades(o, h, l, c, sym, max_leg=max_leg))
+        res["no_filter"] = summ(trades(o, h, l, c, sym, max_leg=max_leg, session_ok=sess))
     if max_leg and compare:                               # همان داده با همه‌ی لگ‌ها (همان فیلتر M5)
         res["all_legs"] = summ(trades(o, h, l, c, sym, allow=m5_target_filter(m5, idx) if allow else None,
-                                      max_leg=0))
+                                      max_leg=0, session_ok=sess))
     for side, key in ((-1, "sells"), (1, "buys")):
         cs = [t for t in closed if t["side"] == side]
         res[key] = (len(cs), sum(t["r"] > 0 for t in cs), sum(t["r"] for t in cs))
@@ -130,7 +131,7 @@ def report_text(res, decimals=2, shown=25):
              f"{tz(res['start']):%d %b %H:%M} → {tz(res['end']):%d %b %H:%M} Tehran · {res['bars']} {tfn} candles "
              + (f"· {res['period']}" if res.get("period") else f"({res['days']} days)"),
              "📐 Gap on 3 same-colour candles → enter 1 pipette beyond the previous candle → stop behind candle 1 → "
-             "target 1:1" + (" · only if the target is inside the M5 structure box" if res.get("m5_filter") else "")
+             "target 1:1 · no trades in the Off session" + (" · only if the target is inside the M5 structure box" if res.get("m5_filter") else "")
              + (f" · legs 1–{res['max_leg']} only" if res.get("max_leg") else ""),
              "━━━━━━━━━━━━━━━━",
              f"📊 Trades: <b>{res['trades']}</b> · ✅ {res['wins']} · ❌ {res['losses']} · win rate <b>{wr:.0f}%</b>",
@@ -156,6 +157,8 @@ def report_text(res, decimals=2, shown=25):
     if res.get("m5_filter"):
         lines.append(f"   🚫 Not taken (1:1 target outside the M5 box): "
                      f"{sum(t.get('reason') == 'm5' for t in res['skipped'])}")
+    lines.append(f"   🚫 Not taken (Off session, outside Tokyo/London/NY): "
+                 f"{sum(t.get('reason') == 'off' for t in res['skipped'])}")
     if res.get("max_leg"):
         lines.append(f"   🚫 Not taken (leg {res['max_leg'] + 1}+): {sum(t.get('reason') == 'leg' for t in res['skipped'])}")
     if res.get("no_filter"):

@@ -82,10 +82,11 @@ def render(sym, m5, m1, layer="gaps", m5_full=None):
     if layer == "micro":
         ph1, piv1 = micro_cycles(o, h, l, c)
     else:
-        from .gap import m5_target_filter, trades as gap_trades
+        from .gap import in_session, m5_target_filter, trades as gap_trades
         src = m5_full if m5_full is not None else m5
         skipped = []
-        ph1 = gap_trades(o, h, l, c, sym, allow=m5_target_filter(src, w.index), skipped=skipped)   # لگ ۱–۲
+        ph1 = gap_trades(o, h, l, c, sym, allow=m5_target_filter(src, w.index), skipped=skipped,
+                         session_ok=in_session(w.index))   # لگ ۱–۲
         piv1 = []
     t1 = w.index
     t5 = m5.index
@@ -235,7 +236,8 @@ def render(sym, m5, m1, layer="gaps", m5_full=None):
         now1 = (f"{len(done)} gap trades · {wins} wins · {len(done) - wins} losses · "
                 f"{sum(t['r'] for t in done):+.0f}R (1:1) · skipped: "
                 f"{sum(t.get('reason') == 'm5' for t in skipped)} target outside M5, "
-                f"{sum(t.get('reason') == 'leg' for t in skipped)} leg 3+")
+                f"{sum(t.get('reason') == 'leg' for t in skipped)} leg 3+, "
+                f"{sum(t.get('reason') == 'off' for t in skipped)} Off session")
         what = "M1 gap setup"
         h1 = [patches.Patch(facecolor=GAP_SELL, alpha=0.5, label="sell gap"),
               patches.Patch(facecolor=GAP_BUY, alpha=0.5, label="buy gap"),
