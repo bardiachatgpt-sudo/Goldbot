@@ -3,7 +3,8 @@
 هر ~۱۵ ثانیه کندل‌های M1 طلا از TradingView (همراه کندل در حال تشکیل) گرفته می‌شود.
 - با بسته شدن کندل ۳ هر گپ (همان قاعده‌ی gap.find_gap: سه کندل هم‌رنگ، کف ۱ > سقف ۳ برای فروش) یک عکس فرستاده
   می‌شود: جعبه‌ی گپ، سطح ورود فعلی (سقف/کف کندل قبلی ± ۱ پیپت)، حد ضرر پشت کندل ۱ و حد سود ۱:۱.
-  همه‌ی گپ‌ها (همه‌ی لگ‌ها، بدون فیلتر M5، همه‌ی ساعت‌هایی که بازار باز است) — خواست کاربر، ۱۷ نوامبر.
+  همه‌ی گپ‌ها (همه‌ی لگ‌ها، بدون فیلتر M5) — خواست کاربر، ۱۷ نوامبر — ولی نه در سشن Off (بیرون توکیو/لندن/
+  نیویورک): گپی که آنجا تشکیل شود یا ورودش آنجا بخورد پیامی ندارد.
   گپ‌های زنجیره‌ای پشت گپ اول (۲-۳-۴ …) هشدار جدا ندارند؛ گپ جدا یا خلاف جهت جای قبلی را می‌گیرد.
 - وقتی قیمت (حتی وسط کندل در حال تشکیل) ۱ پیپت از سقف کندل قبلی بالاتر برود (خرید: پایین‌تر از کف)، پیام کوتاه
   «ورود خورد» با ورود، حد ضرر و حد سود ۱:۱. بعد از آن، آن گپ تمام است.
@@ -58,7 +59,8 @@ class GapAlerter:
             self.pending = p = {"side": side, "t1": t[i - 2], "t3": t[i], "chain": t[i], "gap_hi": zone[0],
                                 "gap_lo": zone[1], "sl": sl, "leg": leg_number(heads, h, l, i - 2, side),
                                 "session": session_of(t[i])}
-            events.append(("gap", dict(p, level=self._level(i, h, l), window=closed.tail(PICTURE_BARS))))
+            if p["session"] != "Off":                      # سشن Off: هشدار نمی‌دهد (کاربر آنجا معامله نمی‌کند)
+                events.append(("gap", dict(p, level=self._level(i, h, l), window=closed.tail(PICTURE_BARS))))
         self.last_closed = t[-1]
         ev = self._entry_live(live, h, l)                  # کندل در حال تشکیل
         if ev:
@@ -74,6 +76,8 @@ class GapAlerter:
         risk = abs(p["sl"] - level)
         self.pending = None
         if risk <= 0 or (p["sl"] - level) * s > 0:         # ورود آن طرف حد ضرر: معامله نیست
+            return None
+        if p["session"] == "Off" or session_of(when) == "Off":   # گپ یا ورود در سشن Off: پیام نمی‌دهد
             return None
         return ("entry", dict(p, entry=level, tp=_r(level + s * risk), risk=risk, when=when))
 

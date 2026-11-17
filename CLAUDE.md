@@ -20,7 +20,8 @@ Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest �
 No channel posts, no live trading.
 - **🔔 Gold gap alerts** (17 Nov, `bot/gap_alerts.py`, button or `/alerts [on|off]`): a thread polls TradingView every
   15 s (XAUUSD M1, 300 bars incl. the forming candle) only while at least one chat is subscribed. Every gold M1 gap
-  (same `find_gap` rule, ALL legs, NO M5 filter, all hours the market is open — user's choice) → a picture when candle 3
+  (same `find_gap` rule, ALL legs, NO M5 filter — user's choice; NOT in the Off session: a gap formed there, or an
+  entry hit there, sends nothing) → a picture when candle 3
   closes (last 45 candles, gap box, entry level = previous high + 1 pipette / low − 1, SL behind candle 1, 1:1 TP) with
   a caption (side, leg, session, Tehran time). When price trades beyond the level (checked on the forming candle and
   on any closed candle missed between polls) → short "✅ Entry hit" message with entry / SL / TP. Chained gaps behind

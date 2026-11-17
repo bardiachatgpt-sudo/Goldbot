@@ -574,6 +574,17 @@ class TestGapAlerts(unittest.TestCase):
         self.assertIn("Entry hit", a.entry_text(e))
         self.assertEqual(a.poll(self.frame(rows[:40] + [(4002.2, 4003, 3990, 3991)])), [])   # گپ تمام شده
 
+    def test_no_alerts_in_the_off_session(self):
+        from bot.gap_alerts import GapAlerter
+        rows = self.FLAT + self.SELL
+        o, h, l, c = zip(*rows)
+        df = pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c},       # 22:00 UTC دوشنبه = بیرون هر سه سشن
+                          index=pd.date_range("2026-11-16 21:30", periods=len(rows), freq="1min", tz="UTC"))
+        a = GapAlerter("XAUUSD")
+        a.poll(df.iloc[:36])
+        self.assertEqual(a.poll(df.iloc[:39]), [])
+        self.assertEqual(a.poll(df.iloc[:40]), [])
+
     def test_button_turns_alerts_on_and_sends_to_subscribers(self):
         from bot.gap_alerts import GapAlerter
         tg = make_bot()
