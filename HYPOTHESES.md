@@ -173,3 +173,23 @@ from the edge of a range (sell its top, buy its bottom) ≈ 12; the rest in norm
 
 Two weeks together (15–30 Jan): 427 trades, 210 wins, −7R. Stable patterns: **H2c** (every day), **H2a** when choppy,
 **H2b** mostly, news spikes. Unstable: sessions, stop size, entry candle.
+
+### H2 · week 3 — 2–6 Feb 2026 (backtest #728–#925): 198 trades, 96 wins, −6R
+Mon +8 (24/40), Tue −6 (20/46), Wed +3 (14/25), Thu 0 (19/38), Fri −11 (19/49). Sessions: Tokyo 29/70 −12R,
+London 23/38 +8R, London+NY 17/37 −3R, NY 21/40 +2R. Three weeks: 625 trades, −13R.
+
+### H2 · first NUMERIC test of the patterns (17 Nov) — important correction
+Features measured at entry from candles closed BEFORE the entry candle (no look-ahead): `tr30` = move of the last 30
+M1 closes in the trade's direction / ATR(14) (+ = the trade goes the same way as the recent move, − = against it);
+`er30` = efficiency ratio of the last 30 closes (chop ≈ 0); `mv10` = last 10-bar move in the trade direction / ATR;
+`bigbar` = biggest range of the last 15 bars / 60-bar median range (news proxy).
+In-sample 15 Jan–6 Feb (622 trades, 48.7%, −16R):
+- `tr30 > 3` (trade in the direction of a big recent move — the "climax" case): 130 trades, 41.5%, **−22R**.
+  `tr30 < −3` (trade against a big recent move — fading it): 110 trades, 59%, **+20R**.
+- So the **eye-review "H2c: against the M1 trend loses" is NOT confirmed by numbers** — looking at the whole picture
+  shows the trend AFTER the entry too (hindsight). Measured only with past candles, trading against the recent move
+  did better, and with it worse — i.e. it is the climax rule H2b, not H2c.
+- `er30` (chop) and `bigbar` (news proxy) showed no clean, monotonic effect.
+Out-of-sample check of the ONE rule fixed in-sample ("skip if tr30 > 3"), 9 Feb–17 Jun (3,163 trades, 47.2%, −179R):
+the skipped trades were again worse (45%, −68R) but the kept ones still lose (47.8%, −111R); fading (`tr30 < −3`) was
+only 49% there. → The climax effect is real but small; no single filter found so far makes USDJPY M1 gaps profitable.

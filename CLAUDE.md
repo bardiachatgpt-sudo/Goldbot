@@ -108,7 +108,11 @@ var is set on Render it overrides the default — it must then be changed there 
   sessions unstable, London+NY overlap weakest). The user does not want the pictures sent (I look at them myself) and
   wants short answers. Week 2 (26–30 Jan) done: 184 trades, −6R; sessions
   flipped (Tokyo worst, London+NY best) → sessions not usable; H2c held every day; choppy range very bad (Fri Tokyo
-  1/12). Two weeks: 427 trades, 210 wins, −7R. Next: week of 2 Feb when asked. Per day: summary, table of trades
+  1/12). Two weeks: 427 trades, 210 wins, −7R. Week 3 (2–6 Feb): 198 trades,
+  −6R. Then a numeric test (see HYPOTHESES.md "first NUMERIC test"): eye-reviewed "against the M1 trend" was hindsight;
+  measured with past candles only, "trade in the direction of a big recent move (tr30 > 3 ATR)" is worse, but out of
+  sample (9 Feb–17 Jun) skipping it still leaves −111R. Lesson: judge candidate rules with past-only numbers and an
+  out-of-sample period, not by eye. Per day: summary, table of trades
   (day number / backtest number), two overview pictures (Tokyo; London+NY), reasons for losses and wins.
 - Broker data (planned, user will send later): ~6 months of M1 CSV per pair exported from their broker
   (MT5 Symbols → Bars → Export preferred; keep the Spread column but do not use it yet). Needed from the user: broker
