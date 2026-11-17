@@ -76,25 +76,32 @@ class Telegram:
                                        "and a message when its entry is hit. Tap again to turn off." if on else
                               "🔕 Gold gap alerts are OFF.")
 
-    def alert_tick(self, alerter, df):
-        """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست."""
+    def alert_tick(self, alerter, df, m5_source=None):
+        """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست. عکس گپ همراه ساختار M5 همان لحظه."""
         for kind, ev in alerter.poll(df):
+            png = None
+            if kind == "gap":
+                try:
+                    png = alerter.picture(ev, m5_source() if m5_source else None)
+                except Exception as e:
+                    print("alert picture error:", e)
+                    png = alerter.picture(ev)
             for chat in list(self.alert_chats):
                 try:
                     if kind == "gap":
-                        self.bot.send_photo(chat, alerter.picture(ev), caption=alerter.gap_caption(ev))
+                        self.bot.send_photo(chat, png, caption=alerter.gap_caption(ev))
                     else:
                         self.bot.send_message(chat, alerter.entry_text(ev))
                 except Exception as e:
                     print("alert send error:", chat, e)
 
     def alert_loop(self):
-        from .gap_alerts import GapAlerter, live_candles
+        from .gap_alerts import GapAlerter, live_candles, m5_candles
         alerter = GapAlerter()
         while True:
             try:
                 if self.alert_chats:
-                    self.alert_tick(alerter, live_candles())
+                    self.alert_tick(alerter, live_candles(), m5_candles)
                 else:
                     alerter.last_closed = None         # کسی گوش نمی‌دهد: وقتی روشن شد از همان لحظه شروع کن
             except Exception as e:

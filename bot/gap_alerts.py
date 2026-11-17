@@ -12,12 +12,13 @@
 import io
 
 import numpy as np
+import pandas as pd
 
 from .config import TEHRAN, session_of
 from .gap import _r, find_gap, gap_heads, leg_number, pip
 
 ALERT_SYMBOL = "XAUUSD"
-PICTURE_BARS = 45
+PICTURE_BARS = 60
 
 
 class GapAlerter:
@@ -101,10 +102,11 @@ class GapAlerter:
     # ------------------------------------------------------------ پیام‌ها
     def gap_caption(self, g):
         s = g["side"]
+        m5 = f" · M5: {g['m5_state']}" if g.get("m5_state") and g["m5_state"] != "-" else ""
         lvl, sl = g["level"], g["sl"]
         tp = _r(lvl + s * abs(sl - lvl))
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
-        return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}\n"
+        return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}{m5}\n"
                 f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}\n"
                 f"Entry if price trades {'above' if s < 0 else 'below'} {self._fmt(lvl)} "
                 f"({'previous high + 1 pipette' if s < 0 else 'previous low − 1 pipette'}; moves with each candle)\n"
@@ -117,7 +119,9 @@ class GapAlerter:
                 f"({when} Tehran candle) · SL {self._fmt(e['sl'])} · TP 1:1 {self._fmt(e['tp'])} "
                 f"(stop ${e['risk']:.2f}) · Leg {e['leg']}")
 
-    def picture(self, g):
+    def picture(self, g, m5=None):
+        """m5: کندل‌های M5 بسته‌شده (اختیاری) → جعبه‌های ساختار M5 زیر کندل‌های M1؛ نامش در g['m5_state']."""
+        from .gap_pictures import draw_m5, m5_at
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.patches as patches
@@ -129,20 +133,23 @@ class GapAlerter:
         tp = lvl + s * abs(sl - lvl)
         lo, hi = min(l.min(), sl, tp), max(h.max(), sl, tp)
         pad = (hi - lo) * 0.05 or 1.0
-        fig, ax = plt.subplots(figsize=(11, 6.5), dpi=100)
+        fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
         fig.patch.set_facecolor("white")
+        span = hi - lo or 1.0
+        g["m5_state"] = draw_m5(ax, self.sym, m5_at(m5, w.index[-1] + pd.Timedelta(minutes=1)) if m5 is not None
+                                else None, w.index, lo, hi, span, pad, labels_left=True)
         for i in range(n):
             up = c[i] >= o[i]
             col = "#16A34A" if up else "#DC2626"
-            ax.vlines(i, l[i], h[i], color=col, lw=1)
+            ax.vlines(i, l[i], h[i], color=col, lw=1, zorder=5)
             ax.add_patch(patches.Rectangle((i - 0.33, min(o[i], c[i])), 0.66, max(abs(c[i] - o[i]), 1e-6),
-                                           facecolor=col, edgecolor=col))
+                                           facecolor=col, edgecolor=col, zorder=5))
         g1 = w.index.get_indexer([g["t1"]])[0]
         g3 = w.index.get_indexer([g["t3"]])[0]
         gc = "#F97316" if s < 0 else "#14B8A6"
         if g1 >= 0 and g3 >= 0:
             ax.add_patch(patches.Rectangle((g1 - 0.5, g["gap_lo"]), g3 - g1 + 1, g["gap_hi"] - g["gap_lo"],
-                                           facecolor=gc, alpha=0.4, edgecolor=gc, zorder=3))
+                                           facecolor=gc, alpha=0.45, edgecolor=gc, zorder=6))
             ax.text(g1, h[g1] + pad * 0.3 if s < 0 else l[g1] - pad * 0.3, "1", ha="center",
                     va="bottom" if s < 0 else "top", fontweight="bold", color=gc)
             ax.text(g3, l[g3] - pad * 0.3 if s < 0 else h[g3] + pad * 0.3, "3", ha="center",
@@ -155,7 +162,7 @@ class GapAlerter:
         ax.set_xticks(range(0, n, step))
         ax.set_xticklabels([d.strftime("%H:%M") for d in w.index.tz_convert(TEHRAN)[::step]], fontsize=9)
         ax.set_xlim(-1, n + 12)
-        ax.set_ylim(lo - pad, hi + pad)
+        ax.set_ylim(lo - pad, hi + pad * 3)
         ax.grid(color="#EEF0F4")
         ax.set_title(f"{self.sym} M1 · {'SELL' if s < 0 else 'BUY'} gap · Leg {g['leg']} · "
                      f"{g['t3'].tz_convert(TEHRAN):%a %d %b %H:%M} Tehran", loc="left", fontweight="bold")
@@ -164,6 +171,15 @@ class GapAlerter:
         fig.savefig(buf, format="png", facecolor="white")
         plt.close(fig)
         return buf.getvalue()
+
+
+def m5_candles(name=ALERT_SYMBOL):
+    """۵۰۰+ کندل M5 بسته‌شده برای ساختار M5 در عکس هشدار (None اگر نشد)."""
+    from .data import get_closed_candles
+    try:
+        return get_closed_candles(name, 600, 100, interval="5", timeout=15)
+    except Exception:
+        return None
 
 
 def live_candles(name=ALERT_SYMBOL, n_bars=300, timeout=15):

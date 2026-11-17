@@ -69,6 +69,46 @@ def watch_rows(sym, m1, t):
     return out
 
 
+def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False):
+    """جعبه‌های ساختار M5 (از کندل‌های M5 بسته‌شده‌ی h5w) زیر کندل‌های M1 با زمان‌های times. خروجی: نام فاز آخر."""
+    if h5w is None or len(h5w) < 100:
+        return "-"
+    c5 = h5w["Close"].values.astype(float)
+    h5, l5 = h5w["High"].values.astype(float), h5w["Low"].values.astype(float)
+    ph5, piv5 = segment(c5)
+    t5 = h5w.index
+    step5 = pd.Timedelta(minutes=5)
+
+    def pos5(ts):
+        k = max(int(t5.searchsorted(ts, side="right")) - 1, 0)
+        return k + (ts - t5[k]) / step5
+
+    p5 = np.array([pos5(ts) for ts in times])
+    last5 = len(ph5) - 1
+    for k, ph in enumerate(ph5):
+        pa, pb = ph["start"], ph["end"]
+        b_pos = p5[-1] + 1 if k == last5 else pb
+        on = (p5 >= pa) & (p5 <= b_pos)
+        if not on.any():
+            continue
+        xs = np.where(on)[0]
+        upper, lower = _edges(ph, c5, h5, l5, piv5, p5[xs])
+        upper = np.clip(upper, lo - span, hi + span)
+        lower = np.clip(lower, lo - span, hi + span)
+        ax.fill_between(xs, lower, upper, color=M5_FILL, alpha=0.9, lw=0, zorder=1)
+        ax.plot(xs, upper, color=M5_LINE, lw=2.2, zorder=2)
+        ax.plot(xs, lower, color=M5_LINE, lw=2.2, zorder=2)
+        if len(xs) >= 8:
+            ax.text(xs[0] + 0.5, hi + pad * 0.6, f"M5 · {NAMES[(ph['type'], ph['side'])]}", color=M5_TEXT,
+                    fontsize=10.5, fontweight="bold", va="bottom", zorder=9)
+            for y, edge in ((upper[-1], "top"), (lower[-1], "bottom")):
+                if lo - pad <= y <= hi + pad:
+                    ax.text(xs[0] + 0.5 if labels_left else xs[-1], y, f" M5 {edge} {fmt_price(sym, y)}",
+                            color=M5_TEXT, fontsize=8.5, va="bottom" if labels_left else "center", zorder=9,
+                            bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor=M5_EDGE, lw=0.6))
+    return NAMES[(ph5[-1]["type"], ph5[-1]["side"])]
+
+
 def trade_picture(sym, m1, m5, t, num=None):
     """m1: همان کندل‌هایی که بک‌تست روی آن اجرا شد (اندیس‌های t نسبت به آن). t: معامله با entry_time."""
     import matplotlib
@@ -102,43 +142,7 @@ def trade_picture(sym, m1, m5, t, num=None):
     ax.set_facecolor(BG)
 
     # ---- M5 در لحظه‌ی ورود
-    now5 = "-"
-    h5w = m5_at(m5, t["entry_time"]) if m5 is not None else None
-    if h5w is not None and len(h5w) >= 100:
-        c5 = h5w["Close"].values.astype(float)
-        h5, l5 = h5w["High"].values.astype(float), h5w["Low"].values.astype(float)
-        ph5, piv5 = segment(c5)
-        t5 = h5w.index
-        step5 = pd.Timedelta(minutes=5)
-
-        def pos5(ts):
-            k = max(int(t5.searchsorted(ts, side="right")) - 1, 0)
-            return k + (ts - t5[k]) / step5
-
-        p5 = np.array([pos5(ts) for ts in w.index])
-        last5 = len(ph5) - 1
-        now5 = NAMES[(ph5[-1]["type"], ph5[-1]["side"])]
-        for k, ph in enumerate(ph5):
-            pa, pb = ph["start"], ph["end"]
-            b_pos = p5[-1] + 1 if k == last5 else pb
-            on = (p5 >= pa) & (p5 <= b_pos)
-            if not on.any():
-                continue
-            xs = np.where(on)[0]
-            upper, lower = _edges(ph, c5, h5, l5, piv5, p5[xs])
-            upper = np.clip(upper, lo - span, hi + span)
-            lower = np.clip(lower, lo - span, hi + span)
-            ax.fill_between(xs, lower, upper, color=M5_FILL, alpha=0.9, lw=0, zorder=1)
-            ax.plot(xs, upper, color=M5_LINE, lw=2.2, zorder=2)
-            ax.plot(xs, lower, color=M5_LINE, lw=2.2, zorder=2)
-            if len(xs) >= 8:
-                ax.text(xs[0] + 0.5, hi + pad * 0.6, f"M5 · {NAMES[(ph['type'], ph['side'])]}", color=M5_TEXT,
-                        fontsize=10.5, fontweight="bold", va="bottom", zorder=9)
-                for y, edge in ((upper[-1], "top"), (lower[-1], "bottom")):
-                    if lo - pad <= y <= hi + pad:
-                        ax.text(xs[-1], y, f" M5 {edge} {fmt_price(sym, y)}", color=M5_TEXT, fontsize=8.5,
-                                va="center", zorder=9,
-                                bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor=M5_EDGE, lw=0.6))
+    now5 = draw_m5(ax, sym, m5_at(m5, t["entry_time"]) if m5 is not None else None, w.index, lo, hi, span, pad)
 
     # ---- کندل‌های M1
     for i in range(n):
