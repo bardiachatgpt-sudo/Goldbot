@@ -14,7 +14,8 @@
 #property indicator_chart_window
 #property indicator_plots 0
 
-input int    InpBars        = 1000;            // How many candles back to scan
+input int    InpLastGaps    = 5;               // How many of the latest gaps to show (0 = all in the scanned candles)
+input int    InpBars        = 3000;            // How many candles back to scan
 input color  InpBearColor   = clrMistyRose;    // Bearish gap colour
 input color  InpBullColor   = clrHoneydew;     // Bullish gap colour
 input color  InpBearBorder  = clrTomato;       // Bearish gap border
@@ -98,16 +99,15 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
                 const long &tick_volume[], const long &volume[], const int &spread[])
 {
    if(rates_total < 4) return(rates_total);
-   // only closed candles: the last bar (rates_total-1) is still forming
+   // redraw only when a candle has closed (or on the first run); the forming candle (rates_total-1) is ignored
+   if(prev_calculated == rates_total) return(rates_total);
    int last = rates_total - 2;
    int from = MathMax(2, last - InpBars);
-   if(prev_calculated > 0) from = MathMax(2, prev_calculated - 3 - InpExtend);   // boxes still growing to the right
-   if(prev_calculated == 0) ObjectsDeleteAll(0, PFX);
    int sec = PeriodSeconds(_Period);
-   // chain state: the last gap's candle 3 index per side (recomputed from a bit before 'from')
-   int lastSide[2] = {-100, -100};                  // [0] bearish, [1] bullish
-   int scanFrom = MathMax(2, from - 3);
-   for(int i = scanFrom; i <= last; i++)
+   // every gap in the scanned candles, oldest first
+   int gi[]; int gs[]; double gh[]; double gl[]; int n = 0;
+   int lastSide[2] = {-100, -100};                  // [0] bearish, [1] bullish: candle 3 of the last gap
+   for(int i = from; i <= last; i++)
    {
       double hi, lo;
       int side = Gap(open, high, low, close, i, hi, lo);
@@ -116,17 +116,26 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
       bool chained = (i - 2 <= lastSide[k]);
       lastSide[k] = i;
       if(chained && !InpShowChained) continue;
-      if(i < from) continue;
+      ArrayResize(gi, n + 1); ArrayResize(gs, n + 1); ArrayResize(gh, n + 1); ArrayResize(gl, n + 1);
+      gi[n] = i; gs[n] = side; gh[n] = hi; gl[n] = lo; n++;
+   }
+   // draw only the latest N gaps (counted back from the live market)
+   ObjectsDeleteAll(0, PFX);
+   int first = (InpLastGaps > 0) ? MathMax(0, n - InpLastGaps) : 0;
+   for(int g = first; g < n; g++)
+   {
+      int i = gi[g];
       int endIdx = MathMin(i + InpExtend, rates_total - 1);
       datetime t2 = time[endIdx] + (endIdx == i ? sec : 0);
-      Draw(side, time[i-2], t2, hi, lo);
-      if(prev_calculated > 0 && i == last && time[i] != lastAlert)
-      {
-         lastAlert = time[i];
-         string msg = StringFormat("%s %s: %s gap", _Symbol, EnumToString(_Period), side < 0 ? "Bearish" : "Bullish");
-         if(InpAlert) Alert(msg);
-         if(InpPush) SendNotification(msg);
-      }
+      Draw(gs[g], time[i-2], t2, gh[g], gl[g]);
+   }
+   // alert when the candle that just closed completed a gap
+   if(prev_calculated > 0 && n > 0 && gi[n-1] == last && time[last] != lastAlert)
+   {
+      lastAlert = time[last];
+      string msg = StringFormat("%s %s: %s gap", _Symbol, EnumToString(_Period), gs[n-1] < 0 ? "Bearish" : "Bullish");
+      if(InpAlert) Alert(msg);
+      if(InpPush) SendNotification(msg);
    }
    return(rates_total);
 }
