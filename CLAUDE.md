@@ -190,6 +190,14 @@ var is set on Render it overrides the default — it must then be changed there 
 - `bot/gap.py` (setup), `bot/gap_backtest.py` (backtest, reports, all-pairs table), `bot/gap_pictures.py` (loser
   pictures), `bot/mtf.py` (M1 + M5 picture), `bot/structure3.py`, `bot/structure.py`, `bot/data.py` (TradingView
   candles), `bot/config.py` (symbols, timeframes, sessions), `bot/main.py`.
+- `mt5/GoldbotGapEA.mq5` — MT5 Expert Advisor for the user's own Strategy Tester review (18 Nov): the M1 gap setup
+  exactly as the bot (same find_gap, chains, entry 1 pipette beyond the previous candle, SL beyond candle 1, one
+  trade at a time); entry fires when the chart price (Bid) reaches the level — sell at Bid, buy at Ask (user accepts
+  the spread); TP = risk × InpRR; lot from InpRiskPct of balance. Switchable filters: trend (MACD 48,104,36 main line
+  on M5 at candle-3 close: < 0 sells only, > 0 buys only), M5 structure (port of structure3.segment + mtf._edges:
+  TP inside the M5 box of 500 closed M5 bars), max leg, hours (all / sessions / first 90 min; server = NY + 7 h).
+  Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
+  in the cloud) — fix compile errors from the user's MetaEditor messages.
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
 - `data/` — the user's broker CSVs (gzip), list in `data/README.md`. Keep every file the user sends there; do not
   analyse until asked. The repo should be private (user confirmed, 17 Nov).
