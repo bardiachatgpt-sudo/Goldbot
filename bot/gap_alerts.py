@@ -22,6 +22,7 @@ UP_FACE, DOWN_FACE, EDGE = "white", "black", "black"   # صعودی سفید، �
 
 
 class GapAlerter:
+    MIN_BARS = 30
     def __init__(self, sym=ALERT_SYMBOL):
         self.sym = sym
         self.last_closed = None        # زمان آخرین کندل بسته‌شده‌ای که بررسی شد
@@ -33,7 +34,7 @@ class GapAlerter:
     def poll(self, df):
         """df: کندل‌های M1 (Open/High/Low/Close، زمان = شروع کندل)، ردیف آخر = کندل در حال تشکیل (نادیده).
         خروجی: فهرست گپ‌های تازه [("gap", dict)] به ترتیب."""
-        if df is None or len(df) < 30:
+        if df is None or len(df) < self.MIN_BARS:
             return []
         closed = df.iloc[:-1]
         o, h, l, c = (closed[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
@@ -157,3 +158,65 @@ def live_candles(name=ALERT_SYMBOL, n_bars=300, timeout=15):
             return df
     return None
 
+
+
+# ------------------------------------------------------------------ گپ‌های ۵ دقیقه (عکس جدا)
+M5_BG = "#FBF8F1"                   # سفید شیری (خواست کاربر)
+
+
+class M5GapAlerter(GapAlerter):
+    """هر گپ ۵ دقیقه‌ی طلا (صعودی یا نزولی، همان قاعده‌ی find_gap): یک عکس از کندل‌های ۵ دقیقه روی زمینه‌ی سفید
+    شیری، بدون ساختار و بدون نوشته‌ی تایم‌فریم؛ متن فقط «Bearish gap» / «Bullish gap» (خواست کاربر، ۱۸ نوامبر).
+    کندل‌های ۵ دقیقه از همان کندل‌های ۱ دقیقه ساخته می‌شوند (m5_frame)."""
+    MIN_BARS = 5
+
+    def gap_caption(self, g):
+        return "🔴 Bearish gap" if g["side"] < 0 else "🟢 Bullish gap"
+
+    def picture(self, g, m5=None):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.patches as patches
+        import matplotlib.pyplot as plt
+        w = g["window"]
+        o, h, l, c = (w[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
+        n, s = len(w), g["side"]
+        lo, hi = l.min(), h.max()
+        pad = (hi - lo) * 0.05 or 1.0
+        fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
+        fig.patch.set_facecolor(M5_BG)
+        ax.set_facecolor(M5_BG)
+        for i in range(n):
+            up = c[i] >= o[i]
+            ax.vlines(i, l[i], h[i], color=EDGE, lw=1, zorder=5)
+            ax.add_patch(patches.Rectangle((i - 0.33, min(o[i], c[i])), 0.66, max(abs(c[i] - o[i]), 1e-6),
+                                           facecolor=UP_FACE if up else DOWN_FACE, edgecolor=EDGE, lw=0.9,
+                                           zorder=5))
+        g1 = w.index.get_indexer([g["t1"]])[0]
+        g3 = w.index.get_indexer([g["t3"]])[0]
+        gc = "#F97316" if s < 0 else "#14B8A6"
+        if g1 >= 0 and g3 >= 0:
+            ax.add_patch(patches.Rectangle((g1 - 0.5, g["gap_lo"]), g3 - g1 + 1, g["gap_hi"] - g["gap_lo"],
+                                           facecolor=gc, alpha=0.45, edgecolor=gc, zorder=6))
+        step = max(1, n // 9)
+        ax.set_xticks(range(0, n, step))
+        ax.set_xticklabels([d.strftime("%H:%M") for d in w.index.tz_convert(TEHRAN)[::step]], fontsize=9)
+        ax.set_xlim(-1, n + 2)
+        ax.set_ylim(lo - pad, hi + pad)
+        ax.grid(color="#ECE6D8")
+        for sp in ax.spines.values():
+            sp.set_color("#D9D2C2")
+        ax.set_title(f"{self.sym} · {'Bearish' if s < 0 else 'Bullish'} gap", loc="left", fontweight="bold")
+        plt.tight_layout()
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", facecolor=M5_BG)
+        plt.close(fig)
+        return buf.getvalue()
+
+
+def m5_frame(m1):
+    """کندل‌های ۵ دقیقه از کندل‌های ۱ دقیقه؛ ردیف آخر = کندل ۵ دقیقه‌ی در حال تشکیل (برای poll)."""
+    if m1 is None or len(m1) == 0:
+        return None
+    return m1.resample("5min", label="left", closed="left").agg(
+        {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()

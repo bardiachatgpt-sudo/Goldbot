@@ -47,6 +47,11 @@ No channel posts, no live trading.
   replaces the setup; price beyond SL 5-min before the 1-min gap cancels it; Off session: no alert. The user manages
   the trade (after 1:1 on the 1-min trade they trail the SL behind each new 1-min setup; target = the 5-min setup's
   1:1; one position, no new ones). Runs in the same 15 s alert loop; the gap alerts are unchanged. Not backtested.
+- **5-min gap pictures** (18 Nov, `gap_alerts.M5GapAlerter`, sent to the 🔥 Runner subscribers in the same loop): every
+  gold 5-min gap, up or down (same `find_gap` rule, 5-min candles built from the 1-min feed by `m5_frame`, chained
+  gaps not repeated, no Off session) → a separate picture of the last 60 5-min candles on a milky-white background
+  #FBF8F1, white/black candles, gap box, NO structure, NO timeframe text; caption only "🔴 Bearish gap" /
+  "🟢 Bullish gap" (user: "don't say 5-min, I know what it is").
 - Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
 `config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env

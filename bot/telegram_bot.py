@@ -104,6 +104,21 @@ class Telegram:
                 except Exception as e:
                     print("runner send error:", chat, e)
 
+    def m5gap_tick(self, alerter, df):
+        """گپ‌های ۵ دقیقه: عکس جدا (کندل‌های ۵ دقیقه، زمینه‌ی سفید شیری) به همان کسانی که رانر را روشن کرده‌اند."""
+        from .gap_alerts import m5_frame
+        for _, ev in alerter.poll(m5_frame(df)):
+            try:
+                png = alerter.picture(ev)
+            except Exception as e:
+                print("5-min gap picture error:", e)
+                continue
+            for chat in list(self.runner_chats):
+                try:
+                    self.bot.send_photo(chat, png, caption=alerter.gap_caption(ev))
+                except Exception as e:
+                    print("5-min gap send error:", chat, e)
+
     def alert_tick(self, alerter, df, m5_source=None):
         """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست. عکس گپ همراه ساختار M5 همان لحظه."""
         for kind, ev in alerter.poll(df):
@@ -125,9 +140,9 @@ class Telegram:
                     print("alert send error:", chat, e)
 
     def alert_loop(self):
-        from .gap_alerts import GapAlerter, live_candles, m5_candles
+        from .gap_alerts import GapAlerter, M5GapAlerter, live_candles, m5_candles
         from .runner import RunnerWatcher
-        alerter, runner = GapAlerter(), RunnerWatcher()
+        alerter, runner, m5gaps = GapAlerter(), RunnerWatcher(), M5GapAlerter()
         while True:
             try:
                 df = live_candles() if (self.alert_chats or self.runner_chats) else None
@@ -137,8 +152,10 @@ class Telegram:
                     alerter.last_closed = None         # کسی گوش نمی‌دهد: وقتی روشن شد از همان لحظه شروع کن
                 if self.runner_chats:
                     self.runner_tick(runner, df)
+                    self.m5gap_tick(m5gaps, df)
                 else:
                     runner.last_m1 = None
+                    m5gaps.last_closed = None
             except Exception as e:
                 print("alert loop error:", e)
             time.sleep(ALERT_POLL)

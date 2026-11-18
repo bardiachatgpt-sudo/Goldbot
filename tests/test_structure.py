@@ -690,6 +690,18 @@ class TestRunner(unittest.TestCase):
         self.assertEqual(tg.bot.send_photo.call_count, 1)
         self.assertIn("Possible runner", tg.bot.send_photo.call_args.kwargs["caption"])
 
+    def test_5min_gap_picture_for_runner_subscribers(self):
+        from bot.gap_alerts import M5GapAlerter
+        tg = make_bot()
+        tg.runner_chats = {9}
+        rows = self.rows(self.PULL + self.GAP1 + [(3994.6, 3995, 3994, 3994.5)] * 6)
+        a = M5GapAlerter()
+        tg.m5gap_tick(a, self.frame(rows[:31]))
+        for k in range(32, len(rows) + 1):
+            tg.m5gap_tick(a, self.frame(rows[:k] + [rows[-1]]))
+        self.assertEqual(tg.bot.send_photo.call_count, 1)                   # گپ فروش ۵ دقیقه (10:30–10:40)
+        self.assertEqual(tg.bot.send_photo.call_args.kwargs["caption"], "🔴 Bearish gap")
+
     def test_5min_entry_first_cancels(self):
         # کندل ۵ دقیقه‌ی سوم سقف 4002 دارد → ورود ۵ دقیقه = 4002.01؛ قبل از گپ ۱ دقیقه قیمت به آن رسید
         up = [(3996.5, 4002.2, 3996.4, 4001.8), (4001.8, 4001.9, 3999.0, 3999.1)]
