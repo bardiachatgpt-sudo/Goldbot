@@ -16,7 +16,8 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
   (17 Nov: "I don't want a backtest now, just keep these until I tell you").
 
 ## What the bot does now
-Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts).
+Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts ·
+🔥 Runner alerts).
 No channel posts, no live trading.
 - **🔔 Gold gap alerts** (17 Nov, `bot/gap_alerts.py`, button or `/alerts [on|off]`): a thread polls TradingView every
   15 s (XAUUSD M1, 300 bars) only while at least one chat is subscribed. Every gold M1 gap (same `find_gap` rule, ALL
@@ -33,6 +34,17 @@ No channel posts, no live trading.
   The user is fine tapping the button again after every deploy (18 Nov: "forget it, as if I never asked"). A version
   that keeps subscribers in Neon Postgres was written (3f0cb08, plus a SETUP.md guide in 9abd452) and then reverted —
   do not bring it back unless asked.
+- **🔥 Runner alerts** (18 Nov, `bot/runner.py`, separate button / `/runner [on|off]`, own subscribers
+  `runner_subs.json` + env `RUNNER_CHAT_IDS`, lost on redeploy like the gap alerts). User's "runner" idea (claimed
+  fractal for any pair of timeframes; coded for gold 5-min + 1-min): a 5-min gap (same `find_gap` rule; 5-min candles
+  built from the closed 1-min candles, only fully finished 5-min buckets) → after its candle 3 has CLOSED, the FIRST
+  1-min gap in the same direction (all three 1-min candles after that close) → ONE picture labelled
+  «احتمالاً ستاپ قوی» (Persian caption: side, both candle-3 close times, SL 1-min = beyond 1-min candle 1, SL 5-min =
+  beyond 5-min candle 1). Picture: 1-min candles from 20 min before 5-min candle 1, dashed vertical line on 5-min
+  candle 1, dashed 5-min gap box, 1-min gap box, both SL lines. One alert per 5-min gap; a new 5-min gap (any side)
+  replaces the setup; price beyond SL 5-min before the 1-min gap cancels it; Off session: no alert. The user manages
+  the trade (after 1:1 on the 1-min trade they trail the SL behind each new 1-min setup; target = the 5-min setup's
+  1:1; one position, no new ones). Runs in the same 15 s alert loop; the gap alerts are unchanged. Not backtested.
 - Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
 `config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env

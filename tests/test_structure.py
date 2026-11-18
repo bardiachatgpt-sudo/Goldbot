@@ -136,7 +136,8 @@ class TestStructureBot(unittest.TestCase):
         self.assertEqual([b.callback_data for row in kb.keyboard for b in row],
                          ["sxp:XAUUSD", "sxp:USDJPY", "sxp:EURUSD"])
         self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row],
-                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs", "🔔 Gold gap alerts"])
+                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs", "🔔 Gold gap alerts",
+                          "🔥 Runner alerts"])
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
@@ -619,6 +620,75 @@ class TestGapAlerts(unittest.TestCase):
         with mock.patch.object(telegram_bot, "ALERT_FILE", os.devnull):
             tg.toggle_alerts(7)
         self.assertNotIn(7, tg.alert_chats)
+
+
+class TestRunner(unittest.TestCase):
+    """رانر: گپ ۵ دقیقه، بعد اولین گپ هم‌جهت ۱ دقیقه بعد از بسته شدن کندل سوم ۵ دقیقه → یک هشدار."""
+    @staticmethod
+    def m5_as_m1(o, h, l, c):                           # یک کندل ۵ دقیقه‌ی نزولی به‌صورت ۵ کندل ۱ دقیقه
+        m = (o + c) / 2
+        return [(o, h, m, m), (m, m, l, l + 0.1), (l + 0.1, c, l + 0.1, c), (c, c, c, c), (c, c, c, c)]
+
+    def rows(self, after):
+        flat = [(4000, 4000.4, 3999.6, 4000.2) if k % 2 else (4000.2, 4000.4, 3999.6, 4000) for k in range(30)]
+        m5 = (self.m5_as_m1(4010, 4011, 4006, 4006.5) + self.m5_as_m1(4006.5, 4006.6, 3998, 3998.5)
+              + self.m5_as_m1(3998.5, 4002, 3996, 3996.5))      # گپ فروش ۵ دقیقه: کف 4006 > سقف 4002
+        return flat + m5 + after
+
+    PULL = [(3996.5, 3998, 3996.4, 3997.8), (3997.8, 3999, 3997.7, 3998.9)]
+    GAP1 = [(3998.9, 3999.5, 3998.0, 3998.1), (3998.1, 3998.2, 3995, 3995.2), (3995.2, 3997.0, 3994.5, 3994.6)]
+
+    def frame(self, rows):
+        o, h, l, c = zip(*rows)
+        return pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c},
+                            index=pd.date_range("2026-11-16 10:00", periods=len(rows), freq="1min", tz="UTC"))
+
+    def run_all(self, rows):
+        from bot.runner import RunnerWatcher
+        w = RunnerWatcher()
+        out = w.poll(self.frame(rows[:31]))
+        for k in range(32, len(rows) + 1):
+            out += w.poll(self.frame(rows[:k] + [rows[-1]]))
+        return w, out
+
+    def test_one_alert_after_the_5min_gap(self):
+        later = [(3994.6, 3996, 3994.5, 3995.9)] + self.GAP1        # یک گپ فروش ۱ دقیقه‌ی دیگر بعدش
+        w, ev = self.run_all(self.rows(self.PULL + self.GAP1 + later))
+        self.assertEqual(len(ev), 1)                                # فقط اولین گپ ۱ دقیقه
+        e = ev[0][1]
+        self.assertEqual(e["side"], -1)
+        self.assertEqual(e["t1"], pd.Timestamp("2026-11-16 10:30", tz="UTC"))
+        self.assertEqual(e["m1_t3"], pd.Timestamp("2026-11-16 10:49", tz="UTC"))
+        self.assertAlmostEqual(e["sl1"], 3999.51)
+        self.assertAlmostEqual(e["sl5"], 4011.01)
+        cap = w.caption(e)
+        self.assertIn("احتمالاً ستاپ قوی", cap)
+        self.assertIn("4011.01", cap)
+        self.assertEqual(w.picture(e)[:4], b"\x89PNG")
+
+    def test_m1_gaps_inside_the_5min_gap_do_not_count(self):
+        w, ev = self.run_all(self.rows(self.PULL))                   # گپ ۱ دقیقه فقط داخل کندل‌های ۵ دقیقه
+        self.assertEqual(ev, [])
+
+    def test_5min_stop_broken_first_cancels(self):
+        spike = [(3996.5, 4012, 3996.4, 3997.8)]                     # از حد ضرر ۵ دقیقه رد شد
+        w, ev = self.run_all(self.rows(spike + self.PULL + self.GAP1))
+        self.assertEqual(ev, [])
+
+    def test_button_and_sending(self):
+        from bot.runner import RunnerWatcher
+        tg = make_bot()
+        tg.runner_chats = set()
+        with mock.patch.object(telegram_bot, "RUNNER_FILE", os.devnull):
+            tg.toggle_runner(9)
+        self.assertIn(9, tg.runner_chats)
+        rows = self.rows(self.PULL + self.GAP1)
+        w = RunnerWatcher()
+        tg.runner_tick(w, self.frame(rows[:31]))
+        for k in range(32, len(rows) + 1):
+            tg.runner_tick(w, self.frame(rows[:k] + [rows[-1]]))
+        self.assertEqual(tg.bot.send_photo.call_count, 1)
+        self.assertIn("احتمالاً ستاپ قوی", tg.bot.send_photo.call_args.kwargs["caption"])
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):

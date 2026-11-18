@@ -13,11 +13,13 @@ from telebot import types
 from .config import MIN_BARS, PERIODS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
-VERSION = "gold M1 gap alerts · structure · gold, USDJPY, EURUSD · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
+VERSION = "gold runner alerts · gold M1 gap alerts · structure · gold, USDJPY, EURUSD · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
 MENU_STRUCTURE = "📐 Structure"
 MENU_BACKTEST = "🧪 Gap backtest"
 MENU_ALL = "🌍 All pairs"
 MENU_ALERTS = "🔔 Gold gap alerts"
+MENU_RUNNER = "🔥 Runner alerts"
+RUNNER_FILE = "runner_subs.json"        # چت‌هایی که هشدار رانر را روشن کرده‌اند (با دیپلوی تازه پاک می‌شود)
 ALERT_FILE = "alert_subs.json"          # چت‌هایی که هشدار گپ طلا را روشن کرده‌اند (با دیپلوی تازه پاک می‌شود)
 ALERT_POLL = 15                         # ثانیه بین هر بار گرفتن کندل‌ها
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
@@ -27,6 +29,7 @@ HELP = ("📐 This bot only draws market structure (spike / channel / trading ra
         "top and bottom price, and the M1 gap setup on it (gap, entry, stop, 1:1 target, result).\n\n"
         "🧪 Gap backtest: pick a pair and M1, M5 or M15; the gap setup runs on all available candles.\n\n"
         "🔔 Gold gap alerts: a picture of every gold M1 gap as it forms, with the M5 structure.\n\n"
+        "🔥 Runner alerts: a gold 5-min gap, then the first 1-min gap the same way → picture (possible strong setup).\n\n"
         "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
             f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
 
@@ -38,6 +41,7 @@ class Telegram:
         self.losers = {}                # چت → آخرین بک‌تست M1: نماد، کندل‌ها، M5، باخت‌ها، بردها، رقم اعشار
         self.bot = telebot.TeleBot(token, parse_mode=None) if token else None
         self.alert_chats = self._load_alert_chats()
+        self.runner_chats = self._load_alert_chats(RUNNER_FILE, "RUNNER_CHAT_IDS")
         if self.bot:
             self._register_handlers()
 
@@ -47,24 +51,24 @@ class Telegram:
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
         kb.add(types.KeyboardButton(MENU_STRUCTURE), types.KeyboardButton(MENU_BACKTEST),
                types.KeyboardButton(MENU_ALL))
-        kb.row(types.KeyboardButton(MENU_ALERTS))
+        kb.row(types.KeyboardButton(MENU_ALERTS), types.KeyboardButton(MENU_RUNNER))
         return kb
 
     # ------------------------------------------------------------ هشدار گپ طلا
     @staticmethod
-    def _load_alert_chats():
-        chats = {int(x) for x in os.environ.get("ALERT_CHAT_IDS", "").replace(" ", "").split(",") if x}
+    def _load_alert_chats(path=None, env="ALERT_CHAT_IDS"):
+        chats = {int(x) for x in os.environ.get(env, "").replace(" ", "").split(",") if x}
         try:
-            with open(ALERT_FILE) as f:
+            with open(path or ALERT_FILE) as f:
                 chats |= {int(x) for x in json.load(f)}
         except Exception:
             pass
         return chats
 
-    def _save_alert_chats(self):
+    def _save_alert_chats(self, path=None, chats=None):
         try:
-            with open(ALERT_FILE, "w") as f:
-                json.dump(sorted(self.alert_chats), f)
+            with open(path or ALERT_FILE, "w") as f:
+                json.dump(sorted(self.alert_chats if chats is None else chats), f)
         except Exception as e:
             print("alert file error:", e)
 
@@ -75,6 +79,30 @@ class Telegram:
         self.bot.send_message(chat_id, "🔔 Gold M1 gap alerts are ON: a picture with the M5 structure each time a gap "
                                        "forms (candle 3 closed; not in the Off session). Tap again to turn off." if on else
                               "🔕 Gold gap alerts are OFF.")
+
+    def toggle_runner(self, chat_id, on=None):
+        on = (chat_id not in self.runner_chats) if on is None else on
+        (self.runner_chats.add if on else self.runner_chats.discard)(chat_id)
+        self._save_alert_chats(RUNNER_FILE, self.runner_chats)
+        self.bot.send_message(chat_id, "🔥 هشدار رانر روشن شد: هر وقت بعد از گپ ۵ دقیقه‌ی طلا، اولین گپ ۱ دقیقه‌ی "
+                                       "هم‌جهت بیاید، عکسش با برچسب «احتمالاً ستاپ قوی» می‌آید. برای خاموش کردن "
+                                       "دوباره بزنید." if on else "🔕 هشدار رانر خاموش شد.")
+
+    def runner_tick(self, watcher, df):
+        for _, ev in watcher.poll(df):
+            try:
+                png = watcher.picture(ev)
+            except Exception as e:
+                print("runner picture error:", e)
+                png = None
+            for chat in list(self.runner_chats):
+                try:
+                    if png:
+                        self.bot.send_photo(chat, png, caption=watcher.caption(ev))
+                    else:
+                        self.bot.send_message(chat, watcher.caption(ev))
+                except Exception as e:
+                    print("runner send error:", chat, e)
 
     def alert_tick(self, alerter, df, m5_source=None):
         """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست. عکس گپ همراه ساختار M5 همان لحظه."""
@@ -98,13 +126,19 @@ class Telegram:
 
     def alert_loop(self):
         from .gap_alerts import GapAlerter, live_candles, m5_candles
-        alerter = GapAlerter()
+        from .runner import RunnerWatcher
+        alerter, runner = GapAlerter(), RunnerWatcher()
         while True:
             try:
+                df = live_candles() if (self.alert_chats or self.runner_chats) else None
                 if self.alert_chats:
-                    self.alert_tick(alerter, live_candles(), m5_candles)
+                    self.alert_tick(alerter, df, m5_candles)
                 else:
                     alerter.last_closed = None         # کسی گوش نمی‌دهد: وقتی روشن شد از همان لحظه شروع کن
+                if self.runner_chats:
+                    self.runner_tick(runner, df)
+                else:
+                    runner.last_m1 = None
             except Exception as e:
                 print("alert loop error:", e)
             time.sleep(ALERT_POLL)
@@ -447,8 +481,16 @@ class Telegram:
             parts = m.text.split()
             self.toggle_alerts(m.chat.id, None if len(parts) < 2 else parts[1].lower() == "on")
 
+        @bot.message_handler(commands=["runner"])
+        def on_runner(m):                                        # /runner · /runner on · /runner off
+            parts = m.text.split()
+            self.toggle_runner(m.chat.id, None if len(parts) < 2 else parts[1].lower() == "on")
+
         @bot.message_handler(func=lambda m: True)
         def on_text(m):                                          # دکمه‌های پایین چت یا هر پیام دیگر
+            if (m.text or "").strip() == MENU_RUNNER:
+                self.toggle_runner(m.chat.id)
+                return
             if (m.text or "").strip() == MENU_ALERTS:
                 self.toggle_alerts(m.chat.id)
                 return
@@ -517,7 +559,8 @@ class Telegram:
             self.bot.set_my_commands([types.BotCommand("start", "Menu"),
                                       types.BotCommand("structure", "📐 Market structure"),
                                       types.BotCommand("backtest", "🧪 Gap setup backtest (M1 / M5 / M15)"),
-                                      types.BotCommand("alerts", "🔔 Gold M1 gap alerts on/off")])
+                                      types.BotCommand("alerts", "🔔 Gold M1 gap alerts on/off"),
+                                      types.BotCommand("runner", "🔥 Gold runner alerts (5-min gap → 1-min gap) on/off")])
         except Exception as e:
             print("set_my_commands error:", e)
         threading.Thread(target=self.alert_loop, daemon=True).start()     # هشدار زنده‌ی گپ طلا
