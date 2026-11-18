@@ -30,6 +30,9 @@ No channel posts, no live trading.
   (`GapAlerter.trend`, user 18 Nov). **Never mention MACD/EMA in anything users see** (user's request). Look:
   bullish candles white, bearish black, light-blue background #E8F2FD, M5 box #D2E4F8. Subscribers: env
   `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again).
+  The user is fine tapping the button again after every deploy (18 Nov: "forget it, as if I never asked"). A version
+  that keeps subscribers in Neon Postgres was written (3f0cb08, plus a SETUP.md guide in 9abd452) and then reverted —
+  do not bring it back unless asked.
 - Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
 `config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env
