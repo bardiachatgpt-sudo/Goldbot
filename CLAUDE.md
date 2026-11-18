@@ -31,8 +31,7 @@ No channel posts, no live trading.
   bullish candles white, bearish black, light-blue background #E8F2FD, M5 box #D2E4F8. Subscribers (`bot/subs.py`, 18 Nov — "tap once, stays on for
   everyone"): Postgres table `goldbot_alert_subs (chat_id)` when `DATABASE_URL` is set (Neon; survives deploys; a fresh
   connection per change because Neon closes idle ones), else `alert_subs.json` (lost on redeploy); plus env
-  `ALERT_CHAT_IDS`. `psycopg[binary]` is back in requirements.txt. Coded in 3f0cb08 — NOT deployed yet (user asked
-  to keep it saved first, 18 Nov).
+  `ALERT_CHAT_IDS`. `psycopg[binary]` is back in requirements.txt.
 - Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
 `config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env
@@ -171,7 +170,6 @@ var is set on Render it overrides the default — it must then be changed there 
 - `bot/gap.py` (setup), `bot/gap_backtest.py` (backtest, reports, all-pairs table), `bot/gap_pictures.py` (loser
   pictures), `bot/mtf.py` (M1 + M5 picture), `bot/structure3.py`, `bot/structure.py`, `bot/data.py` (TradingView
   candles), `bot/config.py` (symbols, timeframes, sessions), `bot/main.py`.
-- `SETUP.md` — the user's own Persian guide to the Render env vars, Neon, and what to look for in the logs.
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
 - `data/` — the user's broker CSVs (gzip), list in `data/README.md`. Keep every file the user sends there; do not
   analyse until asked. The repo should be private (user confirmed, 17 Nov).
