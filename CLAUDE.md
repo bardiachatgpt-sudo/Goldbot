@@ -211,6 +211,14 @@ var is set on Render it overrides the default — it must then be changed there 
   (same find_gap rule), closed candles only, redrawn when a candle closes; inputs: how many of the latest gaps to
   show (default 5, 0 = all), bars to scan (3000), bear/bull fill + border colours, fill on/off,
   extend right N candles, show chained gaps, labels, popup alert / push on a new gap.
+- `mt5/StructureIndicator.mq5` ("Market Structure Indicator", 18 Nov): draws the structure of a CHOSEN timeframe
+  (default M5; any chart timeframe) with the bot's algorithm (structure core copied from GoldbotGapEA: segment +
+  structure3.lines port; range = two flat/triangle edges, channel = trend + parallel, spike/fallback = flat top/bottom of
+  closes; last phase runs to now). Every line is a normal MT5 trend line the user can move, recolour or delete; an
+  edited line gets tooltip "edited…" + a terminal global variable, a deleted one a global variable → never redrawn.
+  Lines stay when the chart timeframe changes (only REASON_REMOVE deletes everything); visibility per timeframe
+  (Show on M1 … D1); colours per type, width, style, labels; "Redraw <TF> structure" button clears edits. Updates
+  once per new candle of the structure timeframe.
 - `mt5/GoldbotGapEA-guide-fa.pdf` — Persian user guide of the expert (made from HTML with Chromium + Vazirmatn font).
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
 - `data/` — the user's broker CSVs (gzip), list in `data/README.md`. Keep every file the user sends there; do not
