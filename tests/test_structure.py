@@ -702,10 +702,25 @@ class TestRunner(unittest.TestCase):
         self.assertEqual(tg.bot.send_photo.call_count, 1)                   # گپ فروش ۵ دقیقه (10:30–10:40)
         self.assertEqual(tg.bot.send_photo.call_args.kwargs["caption"], "🔴 Bearish gap")
 
-    def test_5min_entry_first_cancels(self):
-        # کندل ۵ دقیقه‌ی سوم سقف 4002 دارد → ورود ۵ دقیقه = 4002.01؛ قبل از گپ ۱ دقیقه قیمت به آن رسید
-        up = [(3996.5, 4002.2, 3996.4, 4001.8), (4001.8, 4001.9, 3999.0, 3999.1)]
-        w, ev = self.run_all(self.rows(up + self.PULL + self.GAP1))
+    UP = [(3996.5, 4002.2, 3996.4, 4001.8), (4001.8, 4001.9, 3999.0, 3999.1)]   # ورود ۵ دقیقه = 4002.01 خورد
+
+    def test_after_5min_entry_alert_while_trade_is_not_moving(self):
+        back = [(3999.1, 4001.6, 3999.0, 4001.5)]
+        gap = [(4001.5, 4002.0, 4000.8, 4000.9), (4000.9, 4001.0, 3999.6, 3999.7), (3999.7, 4000.5, 3999.5, 3999.6)]
+        w, ev = self.run_all(self.rows(self.UP + back + gap))
+        self.assertEqual(len(ev), 1)                                # ریسک 9؛ بسته شدن 3999.6 → فقط 0.27R سود
+        e = ev[0][1]
+        self.assertAlmostEqual(e["entry"], 4002.01)
+
+    def test_after_5min_entry_no_alert_if_trade_already_in_profit(self):
+        far = [(3999.1, 3999.2, 3995.0, 3995.1)]                    # 4002.01 − 3995 ≈ 0.77R سود
+        gap = [(3995.1, 3995.6, 3994.8, 3994.9), (3994.9, 3995.0, 3993.0, 3993.1), (3993.1, 3994.5, 3992.9, 3993.0)]
+        w, ev = self.run_all(self.rows(self.UP + far + gap))
+        self.assertEqual(ev, [])
+
+    def test_5min_tp_ends_the_setup(self):
+        tp = [(3999.1, 3999.2, 3992.9, 3993.0), (3993.0, 3999.0, 3992.9, 3998.9)]   # سود ۱:۱ = 3993.0 خورد
+        w, ev = self.run_all(self.rows(self.UP + tp + self.PULL + self.GAP1))
         self.assertEqual(ev, [])
 
 

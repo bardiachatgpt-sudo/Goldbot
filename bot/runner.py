@@ -6,8 +6,10 @@
 - کندل‌های ۵ دقیقه از همان کندل‌های ۱ دقیقه‌ی بسته‌شده ساخته می‌شوند (فقط بازه‌های ۵ دقیقه‌ای که کامل گذشته‌اند).
 - برای هر گپ ۵ دقیقه فقط یک هشدار (اولین گپ ۱ دقیقه). گپ ۵ دقیقه‌ی تازه (هر جهت) ستاپ قبلی را تمام می‌کند؛
   اگر قیمت قبل از گپ ۱ دقیقه از حد ضرر ۵ دقیقه رد شود هم تمام است. سشن Off: هشدار نمی‌دهد.
-- مهم (کاربر، ۱۸ نوامبر): رانر فقط تا وقتی معتبر است که ورود ستاپ ۵ دقیقه فعال نشده؛ اگر قیمت قبل از گپ ۱ دقیقه
-  از سقف کندل ۵ دقیقه‌ی قبلی + ۱ پیپت رد شد (خرید: کف − ۱ پیپت)، ستاپ تمام است و هشداری نمی‌آید.
+- قبل از ورود ۵ دقیقه: اولین گپ هم‌جهت ۱ دقیقه = هشدار. بعد از ورود ۵ دقیقه (سقف کندل ۵ دقیقه‌ی قبلی + ۱ پیپت؛
+  خرید: کف − ۱ پیپت) هم هشدار می‌آید، به شرطی که معامله‌ی ۵ دقیقه در لحظه‌ی بسته شدن کندل سوم گپ ۱ دقیقه در ضرر یا
+  زیر ۰.۳R سود باشد (کاربر، ۱۸ نوامبر: «ضرره یا هنوز حرکتی نکرده»). ستاپ با رسیدن به حد ضرر یا سود ۱:۱ معامله‌ی
+  ۵ دقیقه تمام می‌شود.
 - متن پیام انگلیسی و کوتاه است و هیچ حرفی از ۵ دقیقه نمی‌زند؛ عکس فقط دو خط عمودی (شروع و پایان کندل اولِ ۵ دقیقه)
   روی کندل‌های ۱ دقیقه دارد، بدون نوشته، به‌اضافه‌ی جعبه‌ی گپ ۱ دقیقه (خواست کاربر).
 """
@@ -22,6 +24,7 @@ from .gap_alerts import BG, DOWN_FACE, EDGE, UP_FACE
 
 M5 = pd.Timedelta(minutes=5)
 M1 = pd.Timedelta(minutes=1)
+MAX_PROGRESS = 0.3      # بعد از ورود ۵ دقیقه: فقط اگر معامله‌ی ۵ دقیقه کمتر از ۰.۳R سود دارد (یا در ضرر است)
 
 
 def to_m5(m1):
@@ -65,6 +68,7 @@ class RunnerWatcher:
                 if side:                                   # گپ ۵ دقیقه‌ی تازه: جای قبلی را می‌گیرد
                     self.setup = {"side": side, "t1": t5[k - 2], "t3": t5[k], "ready": t5[k] + M5,
                                   "gap_hi": zone[0], "gap_lo": zone[1], "sent": False,
+                                  "entry": None, "tp5": None, "entry_t": None,
                                   "sl5": _r(h5[k - 2] + self.pp if side < 0 else l5[k - 2] - self.pp)}
                 self.last_m5 = t5[k]
             st = self.setup
@@ -73,15 +77,21 @@ class RunnerWatcher:
             if (h[i] >= st["sl5"]) if st["side"] < 0 else (l[i] <= st["sl5"]):
                 self.setup = None                          # از حد ضرر ۵ دقیقه رد شد: ستاپ تمام
                 continue
-            lvl5 = self._entry5(st, t1[i], h5, l5, t5)
-            if lvl5 is not None and ((h[i] >= lvl5) if st["side"] < 0 else (l[i] <= lvl5)):
-                self.setup = None                          # ورود ۵ دقیقه فعال شد: دیگر رانر نیست
+            if st["entry"] is None:                        # ورود ۵ دقیقه هنوز نخورده
+                lvl5 = self._entry5(st, t1[i], h5, l5, t5)
+                if lvl5 is not None and ((h[i] >= lvl5) if st["side"] < 0 else (l[i] <= lvl5)):
+                    risk = abs(st["sl5"] - lvl5)                # معامله‌ی ۵ دقیقه باز شد؛ ستاپ ادامه دارد
+                    st.update(entry=lvl5, tp5=_r(lvl5 - risk if st["side"] < 0 else lvl5 + risk), entry_t=t1[i])
+            elif (l[i] <= st["tp5"]) if st["side"] < 0 else (h[i] >= st["tp5"]):
+                self.setup = None                          # معامله‌ی ۵ دقیقه به سود ۱:۱ رسید: تمام
                 continue
             if t1[i - 2] < st["ready"]:                    # گپ ۱ دقیقه باید کامل بعد از کندل سوم ۵ دقیقه باشد
                 continue
             side, zone = find_gap(o, h, l, c, i)
             if side != st["side"]:
                 continue
+            if st["entry"] is not None and self._progress(st, c[i]) >= MAX_PROGRESS:
+                continue                                   # معامله‌ی ۵ دقیقه دیگر خوب به سود رفته: رانر نیست
             st["sent"] = True
             if session_of(t1[i]) == "Off":
                 continue
@@ -91,6 +101,12 @@ class RunnerWatcher:
             events.append(("runner", ev))
         self.last_m1 = t1[-1]
         return events
+
+    @staticmethod
+    def _progress(st, price):
+        """چقدر از راه ورود ۵ دقیقه تا سود ۱:۱ رفته (R)؛ منفی = در ضرر."""
+        risk = abs(st["sl5"] - st["entry"]) or 1e-9
+        return (st["entry"] - price) / risk if st["side"] < 0 else (price - st["entry"]) / risk
 
     def _entry5(self, st, ts, h5, l5, t5):
         """سطح ورود ستاپ ۵ دقیقه برای کندل ۱ دقیقه‌ی ts: سقف کندل ۵ دقیقه‌ی قبلِ بازه‌ی همین کندل + ۱ پیپت

@@ -41,9 +41,12 @@ No channel posts, no live trading.
   1-min gap in the same direction (all three 1-min candles after that close) → ONE picture. Caption short English,
   NOTHING about the 5-min ("🔥 Possible runner · 🔴 SELL · XAUUSD M1 · 14:20 Tehran"). Picture: 1-min candles, two
   dashed vertical lines with NO text at the start and end of 5-min candle 1 (like the user's own drawing), and the
-  1-min gap box; no 5-min box, no SL lines (user, 18 Nov). **Only valid while the 5-min entry has NOT triggered** (user: the 1-min trade must open
-  before the 5-min entry): if a 1-min candle trades beyond the previous 5-min candle's high + 1 pipette (buy: low −
-  1) before the 1-min gap, the setup is over (`RunnerWatcher._entry5`). Window: 1-min candles from 20 min before 5-min candle 1. One alert per 5-min gap; a new 5-min gap (any side)
+  1-min gap box; no 5-min box, no SL lines (user, 18 Nov). **Before AND after the 5-min entry** (user 18 Nov, later:
+  "the 5-min trade is open but in loss / hasn't moved / tiny profit → first 1-min gap = possible runner"): 5-min entry
+  = previous 5-min candle's high + 1 pipette (buy: low − 1) (`RunnerWatcher._entry5`); once it triggers the setup
+  keeps going with TP5 = 1:1; after the entry an alert only if the 5-min trade's progress at the 1-min candle-3 close
+  is < `MAX_PROGRESS` = 0.3R (or in loss); the setup ends at SL5 or TP5. (The user replied "۳" to my three questions —
+  read as: alert before and after, 0.3R, wait until SL5/TP5; confirm if they object.) Window: 1-min candles from 20 min before 5-min candle 1. One alert per 5-min gap; a new 5-min gap (any side)
   replaces the setup; price beyond SL 5-min before the 1-min gap cancels it; Off session: no alert. The user manages
   the trade (after 1:1 on the 1-min trade they trail the SL behind each new 1-min setup; target = the 5-min setup's
   1:1; one position, no new ones). Runs in the same 15 s alert loop; the gap alerts are unchanged. Not backtested.
