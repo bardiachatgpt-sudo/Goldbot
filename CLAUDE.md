@@ -207,7 +207,7 @@ var is set on Render it overrides the default — it must then be changed there 
   `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
   Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
   in the cloud) — fix compile errors from the user's MetaEditor messages.
-- `mt5/GoldbotGapDetector.mq5` — simple MT5 indicator (18 Nov): draws the gaps of whatever timeframe the chart shows
+- `mt5/GapDetectorIndicator.mq5` ("Gap Detector Indicator", renamed at the user's request) — simple MT5 indicator, any symbol, (18 Nov): draws the gaps of whatever timeframe the chart shows
   (same find_gap rule), closed candles only, redrawn when a candle closes; inputs: how many of the latest gaps to
   show (default 5, 0 = all), bars to scan (3000), bear/bull fill + border colours, fill on/off,
   extend right N candles, show chained gaps, labels, popup alert / push on a new gap.

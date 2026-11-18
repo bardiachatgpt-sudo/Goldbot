@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
-//| GoldbotGapDetector.mq5                                           |
+//| GapDetectorIndicator.mq5 — Gap Detector Indicator               |
 //| Draws the gaps of the chart's own timeframe (any timeframe).     |
-//| Same rule as the Goldbot bot and the GoldbotGapEA expert:        |
+//| Same rule as the GoldbotGapEA expert:        |
 //|  Bearish gap: 3 bearish candles, candle 1 low > candle 3 high,   |
 //|  and the body of candle 2 crosses that space.                    |
 //|  Bullish gap: 3 bullish candles, candle 1 high < candle 3 low,   |
@@ -9,7 +9,8 @@
 //| Chained gaps right behind the first one (2-3-4, 3-4-5 ...) can   |
 //| be hidden or shown.                                              |
 //+------------------------------------------------------------------+
-#property copyright "Goldbot"
+#property copyright "Gap Detector Indicator"
+#property description "Gap Detector Indicator: draws the gaps of the chart's timeframe on any symbol."
 #property version   "1.00"
 #property indicator_chart_window
 #property indicator_plots 0
@@ -34,6 +35,7 @@ datetime lastAlert = 0;
 int OnInit()
 {
    PFX = "GGD_" + IntegerToString(ChartID()) + "_" + EnumToString(_Period) + "_";
+   IndicatorSetString(INDICATOR_SHORTNAME, "Gap Detector Indicator");
    return(INIT_SUCCEEDED);
 }
 
