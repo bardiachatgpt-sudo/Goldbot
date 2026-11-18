@@ -11,7 +11,8 @@
   زیر ۰.۳R سود باشد (کاربر، ۱۸ نوامبر: «ضرره یا هنوز حرکتی نکرده»). ستاپ با رسیدن به حد ضرر یا سود ۱:۱ معامله‌ی
   ۵ دقیقه تمام می‌شود.
 - «Possible TP» در پیام = سود ۱:۱ معامله‌ی ۵ دقیقه (ورود ۵ دقیقه ± فاصله تا حد ضرر ۵ دقیقه)؛ اگر ورود ۵ دقیقه هنوز
-  نخورده، از سطح ورود ۵ دقیقه‌ی همان لحظه حساب می‌شود (کاربر، ۱۸ نوامبر).
+  نخورده، از سطح ورود ۵ دقیقه‌ی همان لحظه حساب می‌شود (کاربر، ۱۸ نوامبر). در عکس هم یک خط افقی سبز نقطه‌چین با
+  نوشته‌ی «Possible TP قیمت» کشیده می‌شود.
 - متن پیام انگلیسی و کوتاه است و هیچ حرفی از ۵ دقیقه نمی‌زند؛ عکس فقط دو خط عمودی (شروع و پایان کندل اولِ ۵ دقیقه)
   روی کندل‌های ۱ دقیقه دارد، بدون نوشته، به‌اضافه‌ی جعبه‌ی گپ ۱ دقیقه (خواست کاربر).
 """
@@ -142,6 +143,9 @@ class RunnerWatcher:
         o, h, l, c = (w[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
         n, s = len(w), e["side"]
         lo, hi = l.min(), h.max()
+        tp = e.get("tp")
+        if tp is not None:                                 # خط TP احتمالی باید در عکس دیده شود
+            lo, hi = min(lo, tp), max(hi, tp)
         pad = (hi - lo) * 0.05 or 1.0
         x = lambda ts: w.index.searchsorted(ts) - 0.5
         fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
@@ -159,6 +163,11 @@ class RunnerWatcher:
         a1, b1 = x(e["m1_t1"]), x(e["m1_t3"]) + 1
         ax.add_patch(patches.Rectangle((a1, e["m1_lo"]), b1 - a1, e["m1_hi"] - e["m1_lo"], facecolor=g1,
                                        alpha=0.5, edgecolor=g1, zorder=6))
+        if tp is not None:                                 # خط TP احتمالی (۱:۱ ستاپ ۵ دقیقه) با قیمتش
+            ax.axhline(tp, color="#15803D", lw=1.6, ls=(0, (8, 4)), zorder=4)
+            ax.text(n + 1.5, tp, f"Possible TP {self._fmt(tp)}", color="#15803D", fontsize=10, fontweight="bold",
+                    ha="right", va="bottom" if s < 0 else "top", zorder=7,
+                    bbox=dict(facecolor=BG, edgecolor="none", pad=1.5))
         step = max(1, n // 10)
         ax.set_xticks(range(0, n, step))
         ax.set_xticklabels([d.strftime("%H:%M") for d in w.index.tz_convert(TEHRAN)[::step]], fontsize=9)
