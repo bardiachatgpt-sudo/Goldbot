@@ -662,8 +662,8 @@ class TestRunner(unittest.TestCase):
         self.assertAlmostEqual(e["sl1"], 3999.51)
         self.assertAlmostEqual(e["sl5"], 4011.01)
         cap = w.caption(e)
-        self.assertIn("Possible strong setup", cap)
-        self.assertIn("4011.01", cap)
+        self.assertIn("Possible runner", cap)
+        self.assertNotIn("5-min", cap)
         self.assertEqual(w.picture(e)[:4], b"\x89PNG")
 
     def test_m1_gaps_inside_the_5min_gap_do_not_count(self):
@@ -688,7 +688,7 @@ class TestRunner(unittest.TestCase):
         for k in range(32, len(rows) + 1):
             tg.runner_tick(w, self.frame(rows[:k] + [rows[-1]]))
         self.assertEqual(tg.bot.send_photo.call_count, 1)
-        self.assertIn("Possible strong setup", tg.bot.send_photo.call_args.kwargs["caption"])
+        self.assertIn("Possible runner", tg.bot.send_photo.call_args.kwargs["caption"])
 
     def test_5min_entry_first_cancels(self):
         # کندل ۵ دقیقه‌ی سوم سقف 4002 دارد → ورود ۵ دقیقه = 4002.01؛ قبل از گپ ۱ دقیقه قیمت به آن رسید

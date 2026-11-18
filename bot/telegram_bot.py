@@ -85,8 +85,8 @@ class Telegram:
         (self.runner_chats.add if on else self.runner_chats.discard)(chat_id)
         self._save_alert_chats(RUNNER_FILE, self.runner_chats)
         self.bot.send_message(chat_id, "🔥 Runner alerts are ON: after a gold 5-min gap, the first 1-min gap the same "
-                                       "way (before the 5-min entry triggers) sends a picture labelled 'Possible strong "
-                                       "setup'. Tap again to turn off." if on else "🔕 Runner alerts are OFF.")
+                                       "way (before the 5-min entry triggers) sends a picture labelled 'Possible "
+                                       "runner'. Tap again to turn off." if on else "🔕 Runner alerts are OFF.")
 
     def runner_tick(self, watcher, df):
         for _, ev in watcher.poll(df):
