@@ -26,12 +26,20 @@
 
 #include <Trade\Trade.mqh>
 
+enum ENUM_SL { SL_CANDLE1 = 0,    // Beyond candle 1 (the setup)
+               SL_CANDLE2 = 1,    // Beyond candle 2
+               SL_GAP_EDGE = 2,   // Beyond the gap edge (candle 1 low / high)
+               SL_FRACTION = 3,   // Fraction of the candle-1 stop (SL value = 0.5 -> half)
+               SL_FIXED = 4 };    // Fixed price distance from entry (SL value = e.g. 3.0 dollars)
+
 enum ENUM_HOURS { HOURS_ALL = 0,          // All hours
                   HOURS_SESSIONS = 1,     // Tokyo / London / New York (no Off)
                   HOURS_FIRST90 = 2 };    // First 90 minutes of each session
 
 input double     InpRiskPct      = 2.0;              // Risk per trade (% of balance)
 input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
+input ENUM_SL    InpSLMode       = SL_CANDLE1;       // Where the stop-loss goes
+input double     InpSLValue      = 0.5;              // SL value (fraction or price distance, see SL mode)
 input bool       InpUseTrend     = true;             // Trend filter (MACD 48,104,36 on M5)
 input bool       InpShowMACD     = true;             // Show the M5 MACD(48,104,36) under the chart
 input bool       InpUseStructure = false;            // M5 structure filter (TP inside the M5 box)
@@ -72,7 +80,7 @@ datetime lastBar = 0;
 bool     pend = false;
 int      pSide;                  // -1 sell, +1 buy
 datetime pT1, pT3, pChain;
-double   pC1High, pC1Low, pGapHi, pGapLo;
+double   pC1High, pC1Low, pC2High, pC2Low, pGapHi, pGapLo;
 int      pLeg;
 bool     pTrendOk;
 
@@ -814,7 +822,7 @@ void OnNewBar()
    if(side == 0) return;
    if(pend && pSide == side && t[i-2] <= pChain) { pChain = t[i]; return; }   // chained gap: same gap
    pend = true; pSide = side; pT1 = t[i-2]; pT3 = t[i]; pChain = t[i];
-   pC1High = h[i-2]; pC1Low = l[i-2]; pGapHi = zhi; pGapLo = zlo;
+   pC1High = h[i-2]; pC1Low = l[i-2]; pC2High = h[i-1]; pC2Low = l[i-1]; pGapHi = zhi; pGapLo = zlo;
    pLeg = LegNumber(o, h, l, c, n, side);
    int tr = InpUseTrend ? TrendAt(t[i] + 60) : side;
    pTrendOk = !InpUseTrend || tr == side;
@@ -835,8 +843,13 @@ void OnTick()
    bool hit = pSide < 0 ? (bid >= level) : (bid <= level);    // the chart price (Bid) reaches the level
    if(!hit) return;
 
-   double sl = R8(pSide < 0 ? pC1High + pp : pC1Low - pp);
    double entry = pSide < 0 ? bid : ask;                       // sell at Bid, buy at Ask
+   double sl1 = R8(pSide < 0 ? pC1High + pp : pC1Low - pp);    // the setup's stop (beyond candle 1)
+   double sl = sl1;
+   if(InpSLMode == SL_CANDLE2)  sl = R8(pSide < 0 ? pC2High + pp : pC2Low - pp);
+   if(InpSLMode == SL_GAP_EDGE) sl = R8(pSide < 0 ? pGapHi + pp : pGapLo - pp);
+   if(InpSLMode == SL_FRACTION) sl = R8(entry - pSide * InpSLValue * MathAbs(sl1 - entry));
+   if(InpSLMode == SL_FIXED)    sl = R8(entry - pSide * InpSLValue);
    double risk = MathAbs(sl - entry);
    if(risk <= 0 || (sl - entry) * pSide > 0) return;           // entry beyond the stop: wait (like the bot)
    double tp = R8(entry + pSide * InpRR * risk);

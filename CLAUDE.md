@@ -199,7 +199,9 @@ var is set on Render it overrides the default — it must then be changed there 
   of each weekly open vs Sunday 17:00 NY, metals 18:00 → server = NY + k, or UTC + g if that fits better; printed in
   the Experts log; `InpServerMinusNY` = 99 auto, else manual). Every colour is an input (gap boxes, entry/SL/TP
   lines, result text, arrows, M5 structure edges per type); the M5 box used by the structure filter is drawn.
-  `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
+  `InpSLMode` (backtest what-if, user 18 Nov: stop elsewhere, risk stays %, lot and 1:RR TP follow the new stop):
+  beyond candle 1 (setup) / beyond candle 2 / beyond the gap edge / fraction of the candle-1 stop / fixed price
+  distance (`InpSLValue`). `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
   Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
   in the cloud) — fix compile errors from the user's MetaEditor messages.
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
