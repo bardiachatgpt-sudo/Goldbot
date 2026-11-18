@@ -10,6 +10,8 @@
   خرید: کف − ۱ پیپت) هم هشدار می‌آید، به شرطی که معامله‌ی ۵ دقیقه در لحظه‌ی بسته شدن کندل سوم گپ ۱ دقیقه در ضرر یا
   زیر ۰.۳R سود باشد (کاربر، ۱۸ نوامبر: «ضرره یا هنوز حرکتی نکرده»). ستاپ با رسیدن به حد ضرر یا سود ۱:۱ معامله‌ی
   ۵ دقیقه تمام می‌شود.
+- «Possible TP» در پیام = سود ۱:۱ معامله‌ی ۵ دقیقه (ورود ۵ دقیقه ± فاصله تا حد ضرر ۵ دقیقه)؛ اگر ورود ۵ دقیقه هنوز
+  نخورده، از سطح ورود ۵ دقیقه‌ی همان لحظه حساب می‌شود (کاربر، ۱۸ نوامبر).
 - متن پیام انگلیسی و کوتاه است و هیچ حرفی از ۵ دقیقه نمی‌زند؛ عکس فقط دو خط عمودی (شروع و پایان کندل اولِ ۵ دقیقه)
   روی کندل‌های ۱ دقیقه دارد، بدون نوشته، به‌اضافه‌ی جعبه‌ی گپ ۱ دقیقه (خواست کاربر).
 """
@@ -77,8 +79,9 @@ class RunnerWatcher:
             if (h[i] >= st["sl5"]) if st["side"] < 0 else (l[i] <= st["sl5"]):
                 self.setup = None                          # از حد ضرر ۵ دقیقه رد شد: ستاپ تمام
                 continue
+            lvl5_now = None
             if st["entry"] is None:                        # ورود ۵ دقیقه هنوز نخورده
-                lvl5 = self._entry5(st, t1[i], h5, l5, t5)
+                lvl5 = lvl5_now = self._entry5(st, t1[i], h5, l5, t5)
                 if lvl5 is not None and ((h[i] >= lvl5) if st["side"] < 0 else (l[i] <= lvl5)):
                     risk = abs(st["sl5"] - lvl5)                # معامله‌ی ۵ دقیقه باز شد؛ ستاپ ادامه دارد
                     st.update(entry=lvl5, tp5=_r(lvl5 - risk if st["side"] < 0 else lvl5 + risk), entry_t=t1[i])
@@ -95,7 +98,11 @@ class RunnerWatcher:
             st["sent"] = True
             if session_of(t1[i]) == "Off":
                 continue
-            ev = dict(st, m1_t1=t1[i - 2], m1_t3=t1[i], m1_hi=zone[0], m1_lo=zone[1],
+            tp = st["tp5"]
+            if tp is None:                                 # ورود ۵ دقیقه هنوز نخورده: ۱:۱ از سطح ورود فعلی
+                e5 = lvl5_now if lvl5_now is not None else _r(h5[-1] + self.pp if side < 0 else l5[-1] - self.pp)
+                tp = _r(e5 - abs(st["sl5"] - e5) if side < 0 else e5 + abs(st["sl5"] - e5))
+            ev = dict(st, tp=tp, m1_t1=t1[i - 2], m1_t3=t1[i], m1_hi=zone[0], m1_lo=zone[1],
                       sl1=_r(h[i - 2] + self.pp if side < 0 else l[i - 2] - self.pp), session=session_of(t1[i]),
                       window=m1[(t1 >= st["t1"] - 20 * M1) & (t1 <= t1[i])].tail(120))
             events.append(("runner", ev))
@@ -124,7 +131,7 @@ class RunnerWatcher:
         s = e["side"]
         tz = lambda x: x.tz_convert(TEHRAN).strftime("%H:%M")
         return (f"🔥 Possible runner · {'🔴 SELL' if s < 0 else '🟢 BUY'} · {self.sym} M1 · "
-                f"{tz(e['m1_t3'] + M1)} Tehran")
+                f"{tz(e['m1_t3'] + M1)} Tehran\n🎯 Possible TP: {self._fmt(e['tp'])}")
 
     def picture(self, e):
         import matplotlib

@@ -669,6 +669,8 @@ class TestRunner(unittest.TestCase):
         cap = w.caption(e)
         self.assertIn("Possible runner", cap)
         self.assertNotIn("5-min", cap)
+        self.assertAlmostEqual(e["tp"], 3993.01)                   # ورود ۵ دقیقه 4002.01، حد ضرر 4011.01 → ۱:۱
+        self.assertIn("Possible TP: 3993.01", cap)
         self.assertEqual(w.picture(e)[:4], b"\x89PNG")
 
     def test_m1_gaps_inside_the_5min_gap_do_not_count(self):
@@ -716,6 +718,7 @@ class TestRunner(unittest.TestCase):
         self.assertEqual(len(ev), 1)                                # ریسک 9؛ بسته شدن 3999.6 → فقط 0.27R سود
         e = ev[0][1]
         self.assertAlmostEqual(e["entry"], 4002.01)
+        self.assertAlmostEqual(e["tp"], 3993.01)
 
     def test_after_5min_entry_no_alert_if_trade_already_in_profit(self):
         far = [(3999.1, 3999.2, 3995.0, 3995.1)]                    # 4002.01 − 3995 ≈ 0.77R سود

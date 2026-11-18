@@ -41,7 +41,9 @@ No channel posts, no live trading.
   fractal for any pair of timeframes; coded for gold 5-min + 1-min): a 5-min gap (same `find_gap` rule; 5-min candles
   built from the closed 1-min candles, only fully finished 5-min buckets) → after its candle 3 has CLOSED, the FIRST
   1-min gap in the same direction (all three 1-min candles after that close) → ONE picture. Caption short English,
-  NOTHING about the 5-min ("🔥 Possible runner · 🔴 SELL · XAUUSD M1 · 14:20 Tehran"). Picture: 1-min candles, two
+  NOTHING about the 5-min ("🔥 Possible runner · 🔴 SELL · XAUUSD M1 · 14:20 Tehran" + second line
+  "🎯 Possible TP: <price>" = the 5-min trade's 1:1; if the 5-min entry has not triggered yet, from the 5-min entry
+  level of that moment — user 18 Nov). Picture: 1-min candles, two
   dashed vertical lines with NO text at the start and end of 5-min candle 1 (like the user's own drawing), and the
   1-min gap box; no 5-min box, no SL lines (user, 18 Nov). **Before AND after the 5-min entry** (user 18 Nov, later:
   "the 5-min trade is open but in loss / hasn't moved / tiny profit → first 1-min gap = possible runner"): 5-min entry
