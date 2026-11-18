@@ -172,4 +172,8 @@ var is set on Render it overrides the default — it must then be changed there 
 
 ## Environment notes
 - The cloud session cannot reach TradingView; real data is only on Render. Test with synthetic data and pictures.
-- Repo: bardiachatgpt-sudo/Goldbot. Env on Render: `BOT_TOKEN` (required), optional `STRUCTURE_PAIRS`.
+- Repo: bardiachatgpt-sudo/Goldbot. Env on Render: `BOT_TOKEN` (required), optional `STRUCTURE_PAIRS`, `ALERT_CHAT_IDS`.
+- **Old user list in Postgres (Neon):** the bot before 678dacb (16 Nov) stored every chat that pressed /start in
+  Postgres via `DATABASE_URL` (`bot/storage.py`): tables `goldbot_users (chat_id)` and `goldbot_follows (chat_id,
+  pair)`. The current bot no longer reads or writes it, so those tables only hold users up to 16 Nov. To count:
+  Neon console → SQL Editor → `SELECT count(*) FROM goldbot_users;`. Render/GitHub cannot tell Telegram users.
