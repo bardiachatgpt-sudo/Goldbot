@@ -662,7 +662,7 @@ class TestRunner(unittest.TestCase):
         self.assertAlmostEqual(e["sl1"], 3999.51)
         self.assertAlmostEqual(e["sl5"], 4011.01)
         cap = w.caption(e)
-        self.assertIn("احتمالاً ستاپ قوی", cap)
+        self.assertIn("Possible strong setup", cap)
         self.assertIn("4011.01", cap)
         self.assertEqual(w.picture(e)[:4], b"\x89PNG")
 
@@ -688,7 +688,13 @@ class TestRunner(unittest.TestCase):
         for k in range(32, len(rows) + 1):
             tg.runner_tick(w, self.frame(rows[:k] + [rows[-1]]))
         self.assertEqual(tg.bot.send_photo.call_count, 1)
-        self.assertIn("احتمالاً ستاپ قوی", tg.bot.send_photo.call_args.kwargs["caption"])
+        self.assertIn("Possible strong setup", tg.bot.send_photo.call_args.kwargs["caption"])
+
+    def test_5min_entry_first_cancels(self):
+        # کندل ۵ دقیقه‌ی سوم سقف 4002 دارد → ورود ۵ دقیقه = 4002.01؛ قبل از گپ ۱ دقیقه قیمت به آن رسید
+        up = [(3996.5, 4002.2, 3996.4, 4001.8), (4001.8, 4001.9, 3999.0, 3999.1)]
+        w, ev = self.run_all(self.rows(up + self.PULL + self.GAP1))
+        self.assertEqual(ev, [])
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):

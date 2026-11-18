@@ -38,9 +38,11 @@ No channel posts, no live trading.
   `runner_subs.json` + env `RUNNER_CHAT_IDS`, lost on redeploy like the gap alerts). User's "runner" idea (claimed
   fractal for any pair of timeframes; coded for gold 5-min + 1-min): a 5-min gap (same `find_gap` rule; 5-min candles
   built from the closed 1-min candles, only fully finished 5-min buckets) → after its candle 3 has CLOSED, the FIRST
-  1-min gap in the same direction (all three 1-min candles after that close) → ONE picture labelled
-  «احتمالاً ستاپ قوی» (Persian caption: side, both candle-3 close times, SL 1-min = beyond 1-min candle 1, SL 5-min =
-  beyond 5-min candle 1). Picture: 1-min candles from 20 min before 5-min candle 1, dashed vertical line on 5-min
+  1-min gap in the same direction (all three 1-min candles after that close) → ONE picture, ENGLISH caption
+  "🔥 Possible strong setup (runner)" (side, both candle-3 close times, SL 1-min = beyond 1-min candle 1, SL 5-min =
+  beyond 5-min candle 1). **Only valid while the 5-min entry has NOT triggered** (user: the 1-min trade must open
+  before the 5-min entry): if a 1-min candle trades beyond the previous 5-min candle's high + 1 pipette (buy: low −
+  1) before the 1-min gap, the setup is over (`RunnerWatcher._entry5`). Picture: 1-min candles from 20 min before 5-min candle 1, dashed vertical line on 5-min
   candle 1, dashed 5-min gap box, 1-min gap box, both SL lines. One alert per 5-min gap; a new 5-min gap (any side)
   replaces the setup; price beyond SL 5-min before the 1-min gap cancels it; Off session: no alert. The user manages
   the trade (after 1:1 on the 1-min trade they trail the SL behind each new 1-min setup; target = the 5-min setup's

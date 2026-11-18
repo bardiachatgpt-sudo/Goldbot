@@ -84,9 +84,9 @@ class Telegram:
         on = (chat_id not in self.runner_chats) if on is None else on
         (self.runner_chats.add if on else self.runner_chats.discard)(chat_id)
         self._save_alert_chats(RUNNER_FILE, self.runner_chats)
-        self.bot.send_message(chat_id, "🔥 هشدار رانر روشن شد: هر وقت بعد از گپ ۵ دقیقه‌ی طلا، اولین گپ ۱ دقیقه‌ی "
-                                       "هم‌جهت بیاید، عکسش با برچسب «احتمالاً ستاپ قوی» می‌آید. برای خاموش کردن "
-                                       "دوباره بزنید." if on else "🔕 هشدار رانر خاموش شد.")
+        self.bot.send_message(chat_id, "🔥 Runner alerts are ON: after a gold 5-min gap, the first 1-min gap the same "
+                                       "way (before the 5-min entry triggers) sends a picture labelled 'Possible strong "
+                                       "setup'. Tap again to turn off." if on else "🔕 Runner alerts are OFF.")
 
     def runner_tick(self, watcher, df):
         for _, ev in watcher.poll(df):

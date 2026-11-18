@@ -6,6 +6,9 @@
 - کندل‌های ۵ دقیقه از همان کندل‌های ۱ دقیقه‌ی بسته‌شده ساخته می‌شوند (فقط بازه‌های ۵ دقیقه‌ای که کامل گذشته‌اند).
 - برای هر گپ ۵ دقیقه فقط یک هشدار (اولین گپ ۱ دقیقه). گپ ۵ دقیقه‌ی تازه (هر جهت) ستاپ قبلی را تمام می‌کند؛
   اگر قیمت قبل از گپ ۱ دقیقه از حد ضرر ۵ دقیقه رد شود هم تمام است. سشن Off: هشدار نمی‌دهد.
+- مهم (کاربر، ۱۸ نوامبر): رانر فقط تا وقتی معتبر است که ورود ستاپ ۵ دقیقه فعال نشده؛ اگر قیمت قبل از گپ ۱ دقیقه
+  از سقف کندل ۵ دقیقه‌ی قبلی + ۱ پیپت رد شد (خرید: کف − ۱ پیپت)، ستاپ تمام است و هشداری نمی‌آید.
+- متن پیام انگلیسی است (خواست کاربر).
 """
 import io
 
@@ -69,6 +72,10 @@ class RunnerWatcher:
             if (h[i] >= st["sl5"]) if st["side"] < 0 else (l[i] <= st["sl5"]):
                 self.setup = None                          # از حد ضرر ۵ دقیقه رد شد: ستاپ تمام
                 continue
+            lvl5 = self._entry5(st, t1[i], h5, l5, t5)
+            if lvl5 is not None and ((h[i] >= lvl5) if st["side"] < 0 else (l[i] <= lvl5)):
+                self.setup = None                          # ورود ۵ دقیقه فعال شد: دیگر رانر نیست
+                continue
             if t1[i - 2] < st["ready"]:                    # گپ ۱ دقیقه باید کامل بعد از کندل سوم ۵ دقیقه باشد
                 continue
             side, zone = find_gap(o, h, l, c, i)
@@ -84,16 +91,26 @@ class RunnerWatcher:
         self.last_m1 = t1[-1]
         return events
 
+    def _entry5(self, st, ts, h5, l5, t5):
+        """سطح ورود ستاپ ۵ دقیقه برای کندل ۱ دقیقه‌ی ts: سقف کندل ۵ دقیقه‌ی قبلِ بازه‌ی همین کندل + ۱ پیپت
+        (خرید: کف − ۱ پیپت). None اگر آن کندل ۵ دقیقه در داده نباشد."""
+        prev = ts.floor("5min") - M5
+        if prev < st["t3"]:
+            return None
+        k = t5.get_indexer([prev])[0]
+        if k < 0:
+            return None
+        return _r(h5[k] + self.pp if st["side"] < 0 else l5[k] - self.pp)
+
     # ------------------------------------------------------------ پیام و عکس
     def caption(self, e):
         s = e["side"]
         tz = lambda x: x.tz_convert(TEHRAN).strftime("%H:%M")
-        side = "فروش 🔴" if s < 0 else "خرید 🟢"
-        return (f"🔥 احتمالاً ستاپ قوی (رانر) · {side} · طلا\n"
-                f"گپ ۵ دقیقه: کندل سوم بسته شد ساعت {tz(e['t3'] + M5)} تهران\n"
-                f"گپ ۱ دقیقه: کندل سوم بسته شد ساعت {tz(e['m1_t3'] + M1)} تهران\n"
-                f"حد ضرر ۱ دقیقه: {self._fmt(e['sl1'])}\n"
-                f"حد ضرر ۵ دقیقه: {self._fmt(e['sl5'])}")
+        return (f"🔥 Possible strong setup (runner) · {'🔴 SELL' if s < 0 else '🟢 BUY'} · {self.sym}\n"
+                f"5-min gap: candle 3 closed {tz(e['t3'] + M5)} Tehran\n"
+                f"1-min gap: candle 3 closed {tz(e['m1_t3'] + M1)} Tehran · 5-min entry not triggered yet\n"
+                f"SL 1-min: {self._fmt(e['sl1'])}\n"
+                f"SL 5-min: {self._fmt(e['sl5'])}")
 
     def picture(self, e):
         import matplotlib
