@@ -40,6 +40,7 @@ input double     InpRiskPct      = 2.0;              // Risk per trade (% of bal
 input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
 input ENUM_SL    InpSLMode       = SL_CANDLE1;       // Where the stop-loss goes
 input double     InpSLValue      = 0.5;              // SL value (fraction or price distance, see SL mode)
+input string     InpSLEdits      = "";               // Hand-moved stops: "2026.01.15 10:32=4012.50; 2026.02.03 16:05=3998.20"
 input bool       InpUseTrend     = true;             // Trend filter (MACD 48,104,36 on M5)
 input bool       InpShowMACD     = true;             // Show the M5 MACD(48,104,36) under the chart
 input bool       InpUseStructure = false;            // M5 structure filter (TP inside the M5 box)
@@ -90,6 +91,8 @@ datetime lastEntryTime = 0;
 double   lastEntry = 0, lastSL = 0, lastTP = 0;
 int      lastSide = 0;
 int      tradeNo = 0;
+string   lastKey = "";
+bool     lastEdited = false;
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -750,6 +753,28 @@ bool StructureOk(datetime t, int side, double tp)
 }
 
 //+------------------------------------------------------------------+
+//| Hand-moved stops for single trades (key = time of gap candle 1)   |
+//+------------------------------------------------------------------+
+bool EditedSL(datetime t1, double &price)
+{
+   if(StringLen(InpSLEdits) == 0) return false;
+   string items[];
+   int n = StringSplit(InpSLEdits, ';', items);
+   for(int i = 0; i < n; i++)
+   {
+      string it = items[i]; StringTrimLeft(it); StringTrimRight(it);
+      int eq = StringFind(it, "=");
+      if(eq < 0) continue;
+      string key = StringSubstr(it, 0, eq); StringTrimRight(key);
+      string val = StringSubstr(it, eq + 1); StringTrimLeft(val);
+      if(StringToTime(key) == t1) { price = StringToDouble(val); return price > 0; }
+   }
+   return false;
+}
+
+string Key(datetime t1) { return TimeToString(t1, TIME_DATE | TIME_MINUTES); }
+
+//+------------------------------------------------------------------+
 //| Drawing                                                          |
 //+------------------------------------------------------------------+
 void DrawBox(string name, datetime t1, datetime t2, double p1, double p2, color col)
@@ -799,7 +824,8 @@ void CheckClosedTrade()
       DrawLine(n + "_sl", lastEntryTime, exitTime, lastSL, InpColSL, STYLE_DASH);
       DrawLine(n + "_tp", lastEntryTime, exitTime, lastTP, InpColTP, STYLE_DASH);
       DrawLine(n + "_en", lastEntryTime, exitTime, lastEntry, InpColEntry, STYLE_DOT);
-      DrawText(n + "_res", exitTime, exitPrice, StringFormat(" #%d %+.2fR %s", tradeNo, r, profit >= 0 ? "WIN" : "LOSS"),
+      DrawText(n + "_res", exitTime, exitPrice, StringFormat(" #%d %+.2fR %s · %s%s", tradeNo, r, profit >= 0 ? "WIN" : "LOSS",
+                                                             lastKey, lastEdited ? " (SL edited)" : ""),
                profit >= 0 ? InpColWin : InpColLoss);
    }
    lastTicket = 0;
@@ -850,6 +876,9 @@ void OnTick()
    if(InpSLMode == SL_GAP_EDGE) sl = R8(pSide < 0 ? pGapHi + pp : pGapLo - pp);
    if(InpSLMode == SL_FRACTION) sl = R8(entry - pSide * InpSLValue * MathAbs(sl1 - entry));
    if(InpSLMode == SL_FIXED)    sl = R8(entry - pSide * InpSLValue);
+   double edited;
+   bool isEdited = EditedSL(pT1, edited);
+   if(isEdited) sl = R8(edited);                                // this trade's stop moved by hand
    double risk = MathAbs(sl - entry);
    if(risk <= 0 || (sl - entry) * pSide > 0) return;           // entry beyond the stop: wait (like the bot)
    double tp = R8(entry + pSide * InpRR * risk);
@@ -879,14 +908,15 @@ void OnTick()
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
    sl = NormalizeDouble(sl, digits); tp = NormalizeDouble(tp, digits);
 
-   bool ok = pSide < 0 ? trade.Sell(lots, _Symbol, 0, sl, tp, StringFormat("gap L%d", pLeg))
-                       : trade.Buy(lots, _Symbol, 0, sl, tp, StringFormat("gap L%d", pLeg));
+   string cmt = "gap " + Key(pT1) + (isEdited ? " SL edited" : "");
+   bool ok = pSide < 0 ? trade.Sell(lots, _Symbol, 0, sl, tp, cmt) : trade.Buy(lots, _Symbol, 0, sl, tp, cmt);
    pend = false;
    if(!ok) { Print("order failed: ", trade.ResultRetcode(), " ", trade.ResultComment()); return; }
    tradeNo++;
    lastTicket = trade.ResultOrder();
    if(PositionSelectByTicket(lastTicket)) lastEntry = PositionGetDouble(POSITION_PRICE_OPEN); else lastEntry = entry;
    lastEntryTime = TimeCurrent(); lastSL = sl; lastTP = tp; lastSide = pSide;
+   lastKey = Key(pT1); lastEdited = isEdited;
    if(InpDraw)
    {
       string nm = "GBT" + IntegerToString(tradeNo) + "_in";

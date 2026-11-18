@@ -201,7 +201,10 @@ var is set on Render it overrides the default — it must then be changed there 
   lines, result text, arrows, M5 structure edges per type); the M5 box used by the structure filter is drawn.
   `InpSLMode` (backtest what-if, user 18 Nov: stop elsewhere, risk stays %, lot and 1:RR TP follow the new stop):
   beyond candle 1 (setup) / beyond candle 2 / beyond the gap edge / fraction of the candle-1 stop / fixed price
-  distance (`InpSLValue`). `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
+  distance (`InpSLValue`). `InpSLEdits` = hand-moved stops for single trades in the backtest (user 18 Nov): "2026.01.15 10:32=4012.50; …",
+  key = time of gap candle 1 (shown in each trade's result text and order comment); only those trades get the new
+  stop, lot re-sized to keep risk %, TP = 1:RR from the new stop; later trades may change because of one-at-a-time.
+  `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
   Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
   in the cloud) — fix compile errors from the user's MetaEditor messages.
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
