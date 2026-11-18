@@ -33,6 +33,7 @@ enum ENUM_HOURS { HOURS_ALL = 0,          // All hours
 input double     InpRiskPct      = 2.0;              // Risk per trade (% of balance)
 input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
 input bool       InpUseTrend     = true;             // Trend filter (MACD 48,104,36 on M5)
+input bool       InpShowMACD     = true;             // Show the M5 MACD(48,104,36) under the chart
 input bool       InpUseStructure = false;            // M5 structure filter (TP inside the M5 box)
 input int        InpMaxLeg       = 0;                // Max leg (0 = all legs)
 input ENUM_HOURS InpHours        = HOURS_SESSIONS;   // Trading hours
@@ -93,10 +94,12 @@ int OnInit()
    DetectServerTime();
    trade.SetExpertMagicNumber(InpMagic);
    trade.SetDeviationInPoints(InpDeviation);
-   if(InpUseTrend)
+   if(InpUseTrend || InpShowMACD)
    {
       macdHandle = iMACD(_Symbol, PERIOD_M5, 48, 104, 36, PRICE_CLOSE);
       if(macdHandle == INVALID_HANDLE) { Print("iMACD failed"); return(INIT_FAILED); }
+      if(InpShowMACD)                        // the same M5 MACD the filter uses, in a window under the M1 chart
+         ChartIndicatorAdd(0, (int)ChartGetInteger(0, CHART_WINDOWS_TOTAL), macdHandle);
    }
    return(INIT_SUCCEEDED);
 }
@@ -299,7 +302,7 @@ bool HoursOk(datetime server)
 //+------------------------------------------------------------------+
 int TrendAt(datetime t)              // +1 up, -1 down, 0 unknown
 {
-   if(macdHandle == INVALID_HANDLE) return 0;
+   if(macdHandle == INVALID_HANDLE || !InpUseTrend) return 0;
    double b[];
    if(CopyBuffer(macdHandle, 0, t - 300, 1, b) != 1) return 0;
    if(b[0] > 0) return 1;
