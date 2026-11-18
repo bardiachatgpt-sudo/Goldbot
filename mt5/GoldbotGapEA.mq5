@@ -36,14 +36,33 @@ input bool       InpUseTrend     = true;             // Trend filter (MACD 48,10
 input bool       InpUseStructure = false;            // M5 structure filter (TP inside the M5 box)
 input int        InpMaxLeg       = 0;                // Max leg (0 = all legs)
 input ENUM_HOURS InpHours        = HOURS_SESSIONS;   // Trading hours
-input int        InpServerMinusNY = 7;               // Server time minus New York time (hours)
+input int        InpServerMinusNY = 99;              // Server time minus New York time (hours; 99 = auto-detect)
 input double     InpPipette      = 0.0;              // Pipette (0 = auto: gold 0.01, else Point)
 input bool       InpDraw         = true;             // Draw gaps and trades on the chart
 input int        InpLegLookback  = 1500;             // M1 candles used to count legs
 input long       InpMagic        = 20261118;         // Magic number
 input int        InpDeviation    = 30;               // Max slippage (points)
+input group      "Colours"
+input color      InpColSellGap   = clrMistyRose;     // Sell gap box
+input color      InpColBuyGap    = clrHoneydew;      // Buy gap box
+input color      InpColEntry     = clrBlack;         // Entry line
+input color      InpColSL        = clrRed;           // Stop-loss line
+input color      InpColTP        = clrGreen;         // Take-profit line
+input color      InpColWin       = clrGreen;         // Result text: win
+input color      InpColLoss      = clrRed;           // Result text: loss
+input color      InpColSellArrow = clrRed;           // Sell arrow
+input color      InpColBuyArrow  = clrBlue;          // Buy arrow
+input color      InpColRange     = clrSteelBlue;     // M5 structure: range edges
+input color      InpColBullCh    = clrSeaGreen;      // M5 structure: bull channel edges
+input color      InpColBearCh    = clrCrimson;       // M5 structure: bear channel edges
+input color      InpColSpike     = clrDarkOrange;    // M5 structure: spike edges
+input bool       InpDrawStructure = true;            // Draw the M5 box used by the structure filter
 
 CTrade trade;
+// server-time model: server = New York + gNY (gUTC = false) or server = UTC + gUTCoff (gUTC = true)
+int    gNY = 7;
+bool   gUTC = false;
+int    gUTCoff = 0;
 int    macdHandle = INVALID_HANDLE;
 double pp;                       // pipette
 datetime lastBar = 0;
@@ -71,6 +90,7 @@ int OnInit()
    pp = InpPipette;
    if(pp <= 0)
       pp = (StringFind(_Symbol, "XAU") >= 0 || StringFind(_Symbol, "GOLD") >= 0) ? 0.01 : _Point;
+   DetectServerTime();
    trade.SetExpertMagicNumber(InpMagic);
    trade.SetDeviationInPoints(InpDeviation);
    if(InpUseTrend)
@@ -154,7 +174,7 @@ int LegNumber(const double &o[], const double &h[], const double &l[], const dou
 }
 
 //+------------------------------------------------------------------+
-//| Sessions (server time = New York time + InpServerMinusNY hours)   |
+//| Sessions (broker time zone found by DetectServerTime)              |
 //+------------------------------------------------------------------+
 int NthSunday(int year, int month, int nth)      // day of month of the nth Sunday (nth = -1: last)
 {
@@ -169,9 +189,66 @@ int NthSunday(int year, int month, int nth)      // day of month of the nth Sund
    return last;
 }
 
+bool USDst(datetime ny)               // US daylight saving time at this New York local time
+{
+   MqlDateTime d; TimeToStruct(ny, d);
+   if(d.mon < 3 || d.mon > 11) return false;
+   if(d.mon > 3 && d.mon < 11) return true;
+   if(d.mon == 3) { int s = NthSunday(d.year, 3, 2); return (d.day > s) || (d.day == s && d.hour >= 2); }
+   int s = NthSunday(d.year, 11, 1); return (d.day < s) || (d.day == s && d.hour < 2);
+}
+
+datetime ToNY(datetime server)
+{
+   if(!gUTC) return server - gNY * 3600;
+   datetime utc = server - gUTCoff * 3600;
+   datetime ny = utc - 5 * 3600;                 // EST first, then correct for DST
+   return USDst(ny + 3600) ? utc - 4 * 3600 : ny;
+}
+
+//+------------------------------------------------------------------+
+//| Broker time zone: from the weekly market open in the history.     |
+//| The week opens Sunday 17:00 New York (metals 18:00). If the       |
+//| server hour of every weekly open - that NY hour is the same       |
+//| number, server = NY + that number (most MT5 brokers: 7). If       |
+//| instead server - UTC is constant, server = UTC + that number.     |
+//+------------------------------------------------------------------+
+void DetectServerTime()
+{
+   if(InpServerMinusNY != 99) { gNY = InpServerMinusNY; gUTC = false;
+                                PrintFormat("server time: New York + %d h (manual)", gNY); return; }
+   datetime t[];
+   int n = CopyTime(_Symbol, PERIOD_M1, 0, 200000, t);
+   if(n < 1000) n = CopyTime(_Symbol, PERIOD_M5, 0, 50000, t);
+   bool metal = StringFind(_Symbol, "XAU") >= 0 || StringFind(_Symbol, "XAG") >= 0 || StringFind(_Symbol, "GOLD") >= 0;
+   int openNY = metal ? 18 : 17;
+   int cntNY[24], cntUTC[24], samples = 0;
+   ArrayInitialize(cntNY, 0); ArrayInitialize(cntUTC, 0);
+   for(int i = 1; i < n; i++)
+   {
+      if(t[i] - t[i-1] < 36 * 3600) continue;    // first candle after a weekend
+      MqlDateTime d; TimeToStruct(t[i], d);
+      int k = ((d.hour - openNY) % 24 + 24) % 24;
+      cntNY[k]++;
+      // the same open as UTC: NY 17/18 + 4 (summer) or + 5 (winter); summer judged from the date
+      datetime approxNY = t[i] - k * 3600;
+      int utcOpen = openNY + (USDst(approxNY) ? 4 : 5);
+      cntUTC[((d.hour - utcOpen) % 24 + 24) % 24]++;
+      samples++;
+   }
+   if(samples < 4) { gNY = 7; gUTC = false; Print("server time: not enough weekends in the history, using New York + 7 h"); return; }
+   int bNY = ArrayMaximum(cntNY), bUTC = ArrayMaximum(cntUTC);
+   if(cntUTC[bUTC] > cntNY[bNY])
+   { gUTC = true; gUTCoff = bUTC > 12 ? bUTC - 24 : bUTC;
+     PrintFormat("server time: UTC %+d h (auto, %d weekends)", gUTCoff, samples); }
+   else
+   { gNY = bNY; gUTC = false; PrintFormat("server time: New York + %d h (auto, %d weekends)", gNY, samples); }
+}
+
 datetime ToUTC(datetime server)
 {
-   datetime ny = server - InpServerMinusNY * 3600;
+   if(gUTC) return server - gUTCoff * 3600;
+   datetime ny = server - gNY * 3600;
    MqlDateTime d; TimeToStruct(ny, d);
    bool dst;
    if(d.mon < 3 || d.mon > 11) dst = false;
@@ -207,7 +284,7 @@ bool HoursOk(datetime server)
    int m[3];
    m[0] = SessionMinutes(utc + 9 * 3600, 9, 18);                               // Tokyo
    m[1] = SessionMinutes(utc + (UKSummer(utc) ? 3600 : 0), 8, 17);             // London
-   m[2] = SessionMinutes(server - InpServerMinusNY * 3600, 8, 17);             // New York
+   m[2] = SessionMinutes(ToNY(server), 8, 17);                                   // New York
    for(int k = 0; k < 3; k++)
    {
       if(m[k] < 0) continue;
@@ -636,6 +713,28 @@ bool StructureOk(datetime t, int side, double tp)
    double pos = (got - 1) + (double)(t - t5[got-1]) / 300.0;
    double top, bot;
    if(!PhaseBox(c5, got, pos, top, bot)) return true;
+   if(InpDraw && InpDrawStructure)
+   {
+      Phase p = ph[nph-1];
+      double top0, bot0;
+      PhaseBox(c5, got, p.start, top0, bot0);
+      color col = p.type == PH_RANGE ? InpColRange : (p.type == PH_SPIKE ? InpColSpike
+                  : (p.side > 0 ? InpColBullCh : InpColBearCh));
+      string nm = "GBS" + TimeToString(t, TIME_DATE | TIME_MINUTES);
+      string kind = p.type == PH_RANGE ? "M5 range" : (p.type == PH_SPIKE ? "M5 spike"
+                    : (p.side > 0 ? "M5 bull channel" : "M5 bear channel"));
+      ObjectCreate(0, nm + "_t", OBJ_TREND, 0, t5[p.start], top0, t, top);
+      ObjectCreate(0, nm + "_b", OBJ_TREND, 0, t5[p.start], bot0, t, bot);
+      for(int q = 0; q < 2; q++)
+      {
+         string o = nm + (q == 0 ? "_t" : "_b");
+         ObjectSetInteger(0, o, OBJPROP_COLOR, col);
+         ObjectSetInteger(0, o, OBJPROP_WIDTH, 2);
+         ObjectSetInteger(0, o, OBJPROP_RAY_RIGHT, false);
+         ObjectSetInteger(0, o, OBJPROP_BACK, true);
+      }
+      DrawText(nm + "_k", t5[p.start], top0, kind, col);
+   }
    return side < 0 ? (tp >= bot) : (tp <= top);
 }
 
@@ -686,11 +785,11 @@ void CheckClosedTrade()
    {
       double r = MathAbs(lastEntry - lastSL) > 0 ? (exitPrice - lastEntry) * lastSide / MathAbs(lastEntry - lastSL) : 0;
       string n = "GBT" + IntegerToString(tradeNo);
-      DrawLine(n + "_sl", lastEntryTime, exitTime, lastSL, clrRed, STYLE_DASH);
-      DrawLine(n + "_tp", lastEntryTime, exitTime, lastTP, clrGreen, STYLE_DASH);
-      DrawLine(n + "_en", lastEntryTime, exitTime, lastEntry, clrBlack, STYLE_DOT);
+      DrawLine(n + "_sl", lastEntryTime, exitTime, lastSL, InpColSL, STYLE_DASH);
+      DrawLine(n + "_tp", lastEntryTime, exitTime, lastTP, InpColTP, STYLE_DASH);
+      DrawLine(n + "_en", lastEntryTime, exitTime, lastEntry, InpColEntry, STYLE_DOT);
       DrawText(n + "_res", exitTime, exitPrice, StringFormat(" #%d %+.2fR %s", tradeNo, r, profit >= 0 ? "WIN" : "LOSS"),
-               profit >= 0 ? clrGreen : clrRed);
+               profit >= 0 ? InpColWin : InpColLoss);
    }
    lastTicket = 0;
 }
@@ -717,7 +816,7 @@ void OnNewBar()
    int tr = InpUseTrend ? TrendAt(t[i] + 60) : side;
    pTrendOk = !InpUseTrend || tr == side;
    DrawBox("GBG" + TimeToString(pT1, TIME_DATE | TIME_MINUTES), pT1, pT3 + 60, pGapHi, pGapLo,
-           side < 0 ? clrMistyRose : clrHoneydew);
+           side < 0 ? InpColSellGap : InpColBuyGap);
 }
 
 void OnTick()
@@ -776,6 +875,7 @@ void OnTick()
    {
       string nm = "GBT" + IntegerToString(tradeNo) + "_in";
       ObjectCreate(0, nm, pSide < 0 ? OBJ_ARROW_SELL : OBJ_ARROW_BUY, 0, lastEntryTime, lastEntry);
+      ObjectSetInteger(0, nm, OBJPROP_COLOR, pSide < 0 ? InpColSellArrow : InpColBuyArrow);
    }
 }
 //+------------------------------------------------------------------+

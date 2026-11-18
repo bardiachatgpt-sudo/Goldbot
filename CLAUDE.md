@@ -195,7 +195,10 @@ var is set on Render it overrides the default — it must then be changed there 
   trade at a time); entry fires when the chart price (Bid) reaches the level — sell at Bid, buy at Ask (user accepts
   the spread); TP = risk × InpRR; lot from InpRiskPct of balance. Switchable filters: trend (MACD 48,104,36 main line
   on M5 at candle-3 close: < 0 sells only, > 0 buys only), M5 structure (port of structure3.segment + mtf._edges:
-  TP inside the M5 box of 500 closed M5 bars), max leg, hours (all / sessions / first 90 min; server = NY + 7 h).
+  TP inside the M5 box of 500 closed M5 bars), max leg, hours (all / sessions / first 90 min). Broker time zone auto-detected (`DetectServerTime`: server hour
+  of each weekly open vs Sunday 17:00 NY, metals 18:00 → server = NY + k, or UTC + g if that fits better; printed in
+  the Experts log; `InpServerMinusNY` = 99 auto, else manual). Every colour is an input (gap boxes, entry/SL/TP
+  lines, result text, arrows, M5 structure edges per type); the M5 box used by the structure filter is drawn.
   Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
   in the cloud) — fix compile errors from the user's MetaEditor messages.
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
