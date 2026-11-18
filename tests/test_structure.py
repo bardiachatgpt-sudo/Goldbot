@@ -584,6 +584,11 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(a.trend(g, down), 1)                                        # فروش در روند نزولی
         self.assertEqual(a.trend(g, up), -1)
         self.assertIsNone(a.trend(g, None))
+        # کندل ۵ دقیقه‌ی در حال تشکیل هم حساب می‌شود (عدد هیستوگرام همین لحظه): پرش بزرگ قیمت علامت را عوض می‌کند
+        g2 = dict(g, t3=g["t3"] + pd.Timedelta(minutes=2), close3=5000.0)
+        flat = pd.DataFrame({"Close": [4000.0] * 299 + [3999.0]}, index=idx)
+        self.assertEqual(a.trend(dict(g2, close3=None), flat), 1)
+        self.assertEqual(a.trend(g2, flat), -1)
         g["trend"] = 1
         self.assertIn("With the trend", a.gap_caption(g))
         g["trend"] = -1

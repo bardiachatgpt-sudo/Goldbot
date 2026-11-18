@@ -55,7 +55,7 @@ class GapAlerter:
                 continue
             self.last = p = {"side": side, "t1": t[i - 2], "t3": t[i], "chain": t[i], "gap_hi": zone[0],
                              "gap_lo": zone[1], "leg": leg_number(heads, h, l, i - 2, side),
-                             "session": session_of(t[i])}
+                             "session": session_of(t[i]), "close3": c[i]}
             if p["session"] != "Off":                      # سشن Off: هشدار نمی‌دهد
                 events.append(("gap", dict(p, window=closed.tail(PICTURE_BARS))))
         self.last_closed = t[-1]
@@ -65,18 +65,24 @@ class GapAlerter:
     @staticmethod
     def trend(g, m5):
         """+1 هم‌جهت با روند، −1 خلاف روند، None اگر داده‌ی M5 نباشد.
-        روند = علامت EMA(48) − EMA(104) بسته‌شدن‌های M5 (همان میله‌های MACD(48,104,36) در متاتریدر) روی کندل‌های
-        M5 که تا بسته شدن کندل ۳ گپ بسته شده‌اند. منفی = نزولی، مثبت = صعودی (خواست کاربر، ۱۸ نوامبر)."""
+        روند = علامت عدد هیستوگرام MACD(48,104,36) متاتریدر روی M5 «در همین لحظه» = EMA(48) − EMA(104) بسته‌شدن‌ها
+        (در متاتریدر میله‌ها همین‌اند؛ خط سیگنال هیچ نقشی ندارد). کندل‌های M5 بسته‌شده تا بسته شدن کندل ۳ گپ،
+        به‌اضافه‌ی کندل M5 در حال تشکیل با قیمت فعلی = بسته‌شدن کندل ۳ (همان میله‌ی آخری که متاتریدر نشان می‌دهد).
+        منفی = نزولی، مثبت = صعودی (خواست کاربر، ۱۸ نوامبر)."""
         if m5 is None or len(m5) < 120:
             return None
         end = g["t3"] + pd.Timedelta(minutes=1)
         c5 = m5["Close"][m5.index + pd.Timedelta(minutes=5) <= end].astype(float)
         if len(c5) < 120:
             return None
-        main = c5.ewm(span=48, adjust=False).mean().iloc[-1] - c5.ewm(span=104, adjust=False).mean().iloc[-1]
-        if main == 0:
+        if g.get("close3") is not None:
+            now = g["t3"].floor("5min")
+            if c5.index[-1] < now:                          # کندل ۵ دقیقه‌ی جاری هنوز بسته نشده
+                c5 = pd.concat([c5, pd.Series([float(g["close3"])], index=[now])])
+        hist = c5.ewm(span=48, adjust=False).mean().iloc[-1] - c5.ewm(span=104, adjust=False).mean().iloc[-1]
+        if hist == 0:
             return None
-        return 1 if (main < 0) == (g["side"] < 0) else -1
+        return 1 if (hist < 0) == (g["side"] < 0) else -1
 
     # ------------------------------------------------------------ پیام
     def gap_caption(self, g):

@@ -27,7 +27,9 @@ No channel posts, no live trading.
   (user: "entry is not part of the setup, I only want the gap"). Chained gaps behind the first one get no alert.
   Every alert still goes out, labelled **"📈 With the trend" / "↩️ Against the trend"** (caption + picture title).
   Trend = sign of MT5-style MACD(48,104,36) main line on M5 (= EMA48 − EMA104 of M5 closes, the grey bars in MT5)
-  on the M5 candles closed when candle 3 closes: negative → sells are with the trend, positive → buys
+  = the value of the MT5 histogram bar AT THAT MOMENT: M5 candles closed by then PLUS the forming M5 candle with
+  close = candle-3 close (fix 18 Nov; before, the forming M5 candle was left out = one bar late). Only the sign of the
+  histogram counts, never the signal line. Negative → sells are with the trend, positive → buys
   (`GapAlerter.trend`, user 18 Nov). **Never mention MACD/EMA in anything users see** (user's request). Look:
   bullish candles white, bearish black, light-blue background #E8F2FD, M5 box #D2E4F8. Subscribers: env
   `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again).
