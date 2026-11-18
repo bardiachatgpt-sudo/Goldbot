@@ -28,10 +28,8 @@ No channel posts, no live trading.
   Trend = sign of MT5-style MACD(48,104,36) main line on M5 (= EMA48 − EMA104 of M5 closes, the grey bars in MT5)
   on the M5 candles closed when candle 3 closes: negative → sells are with the trend, positive → buys
   (`GapAlerter.trend`, user 18 Nov). **Never mention MACD/EMA in anything users see** (user's request). Look:
-  bullish candles white, bearish black, light-blue background #E8F2FD, M5 box #D2E4F8. Subscribers (`bot/subs.py`, 18 Nov — "tap once, stays on for
-  everyone"): Postgres table `goldbot_alert_subs (chat_id)` when `DATABASE_URL` is set (Neon; survives deploys; a fresh
-  connection per change because Neon closes idle ones), else `alert_subs.json` (lost on redeploy); plus env
-  `ALERT_CHAT_IDS`. `psycopg[binary]` is back in requirements.txt.
+  bullish candles white, bearish black, light-blue background #E8F2FD, M5 box #D2E4F8. Subscribers: env
+  `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again).
 - Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not
 crowded"; `config.STRUCTURE_PAIRS` default). The others (GBPUSD, USDCHF, USDCAD, AUDUSD, NZDUSD, US30) stay in
 `config.ALL_SYMBOLS` and can come back by adding them to that default or to `STRUCTURE_PAIRS` on Render (if that env
@@ -178,8 +176,7 @@ var is set on Render it overrides the default — it must then be changed there 
 
 ## Environment notes
 - The cloud session cannot reach TradingView; real data is only on Render. Test with synthetic data and pictures.
-- Repo: bardiachatgpt-sudo/Goldbot. Env on Render: `BOT_TOKEN` (required), optional `STRUCTURE_PAIRS`, `ALERT_CHAT_IDS`,
-  `DATABASE_URL` (Neon Postgres; keeps gold-alert subscribers across deploys).
+- Repo: bardiachatgpt-sudo/Goldbot. Env on Render: `BOT_TOKEN` (required), optional `STRUCTURE_PAIRS`, `ALERT_CHAT_IDS`.
 - **Old user list in Postgres (Neon):** the bot before 678dacb (16 Nov) stored every chat that pressed /start in
   Postgres via `DATABASE_URL` (`bot/storage.py`): tables `goldbot_users (chat_id)` and `goldbot_follows (chat_id,
   pair)`. The current bot no longer reads or writes it, so those tables only hold users up to 16 Nov. To count:

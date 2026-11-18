@@ -18,6 +18,7 @@ MENU_STRUCTURE = "📐 Structure"
 MENU_BACKTEST = "🧪 Gap backtest"
 MENU_ALL = "🌍 All pairs"
 MENU_ALERTS = "🔔 Gold gap alerts"
+ALERT_FILE = "alert_subs.json"          # چت‌هایی که هشدار گپ طلا را روشن کرده‌اند (با دیپلوی تازه پاک می‌شود)
 ALERT_POLL = 15                         # ثانیه بین هر بار گرفتن کندل‌ها
 HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
         f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
@@ -36,8 +37,7 @@ class Telegram:
     def __init__(self, token):
         self.losers = {}                # چت → آخرین بک‌تست M1: نماد، کندل‌ها، M5، باخت‌ها، بردها، رقم اعشار
         self.bot = telebot.TeleBot(token, parse_mode=None) if token else None
-        from .subs import AlertSubs
-        self.alert_chats = AlertSubs()                      # یک بار روشن = همیشه روشن (Postgres اگر باشد)
+        self.alert_chats = self._load_alert_chats()
         if self.bot:
             self._register_handlers()
 
@@ -51,12 +51,29 @@ class Telegram:
         return kb
 
     # ------------------------------------------------------------ هشدار گپ طلا
+    @staticmethod
+    def _load_alert_chats():
+        chats = {int(x) for x in os.environ.get("ALERT_CHAT_IDS", "").replace(" ", "").split(",") if x}
+        try:
+            with open(ALERT_FILE) as f:
+                chats |= {int(x) for x in json.load(f)}
+        except Exception:
+            pass
+        return chats
+
+    def _save_alert_chats(self):
+        try:
+            with open(ALERT_FILE, "w") as f:
+                json.dump(sorted(self.alert_chats), f)
+        except Exception as e:
+            print("alert file error:", e)
+
     def toggle_alerts(self, chat_id, on=None):
         on = (chat_id not in self.alert_chats) if on is None else on
-        self.alert_chats.set(chat_id, on)
+        (self.alert_chats.add if on else self.alert_chats.discard)(chat_id)
+        self._save_alert_chats()
         self.bot.send_message(chat_id, "🔔 Gold M1 gap alerts are ON: a picture with the M5 structure each time a gap "
-                                       "forms (candle 3 closed; not in the Off session). It stays on (also after bot updates) until you "
-                                       "tap again to turn it off." if on else
+                                       "forms (candle 3 closed; not in the Off session). Tap again to turn off." if on else
                               "🔕 Gold gap alerts are OFF.")
 
     def alert_tick(self, alerter, df, m5_source=None):

@@ -604,10 +604,10 @@ class TestGapAlerts(unittest.TestCase):
 
     def test_button_turns_alerts_on_and_sends_to_subscribers(self):
         from bot.gap_alerts import GapAlerter
-        from bot.subs import AlertSubs
         tg = make_bot()
-        tg.alert_chats = AlertSubs(os.devnull, url="")
-        tg.toggle_alerts(7)
+        tg.alert_chats = set()
+        with mock.patch.object(telegram_bot, "ALERT_FILE", os.devnull):
+            tg.toggle_alerts(7)
         self.assertIn(7, tg.alert_chats)
         rows = self.FLAT + self.SELL
         a = GapAlerter("XAUUSD")
@@ -616,18 +616,9 @@ class TestGapAlerts(unittest.TestCase):
         tg.alert_tick(a, self.frame(rows[:41]))
         self.assertEqual(tg.bot.send_photo.call_count, 1)
         self.assertNotIn("Entry", str(tg.bot.send_message.call_args_list[1:]))
-        tg.toggle_alerts(7)
+        with mock.patch.object(telegram_bot, "ALERT_FILE", os.devnull):
+            tg.toggle_alerts(7)
         self.assertNotIn(7, tg.alert_chats)
-
-    def test_subscribers_survive_a_restart(self):
-        import tempfile
-        from bot.subs import AlertSubs
-        path = os.path.join(tempfile.mkdtemp(), "subs.json")
-        s = AlertSubs(path, url="")
-        s.set(42, True)
-        self.assertIn(42, AlertSubs(path, url=""))                                  # ری‌استارت: هنوز روشن
-        with mock.patch.dict(os.environ, {"ALERT_CHAT_IDS": "5, 6"}):
-            self.assertEqual(set(AlertSubs(path, url="")), {42, 5, 6})
 
 
 class TestLastLegAgainstTheChannel(unittest.TestCase):
