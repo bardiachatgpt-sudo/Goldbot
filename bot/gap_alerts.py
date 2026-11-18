@@ -3,7 +3,8 @@
 هر ~۱۵ ثانیه کندل‌های M1 طلا از TradingView گرفته می‌شود. با بسته شدن کندل ۳ هر گپ (همان قاعده‌ی gap.find_gap:
 سه کندل هم‌رنگ، کف ۱ > سقف ۳ برای فروش) یک عکس فرستاده می‌شود: ۶۰ کندل M1، جعبه‌ی گپ، و ساختار M5 همان لحظه.
 ورود، حد ضرر و حد سود نشان داده نمی‌شوند (کاربر، ۱۷ نوامبر: «فقط گپ را می‌خواهم»).
-همه‌ی گپ‌ها (همه‌ی لگ‌ها، بدون فیلتر M5)، ولی نه در سشن Off. گپ‌های زنجیره‌ای پشت گپ اول (۲-۳-۴ …) هشدار جدا ندارند.
+همه‌ی گپ‌ها (همه‌ی لگ‌ها، بدون فیلتر M5)، ولی نه در سشن Off. هر هشدار می‌گوید گپ «هم‌جهت با روند» است یا «خلاف روند»
+(روند از M5؛ تعریفش در GapAlerter.trend — نام شاخص در پیام‌ها نمی‌آید، خواست کاربر). گپ‌های زنجیره‌ای پشت گپ اول (۲-۳-۴ …) هشدار جدا ندارند.
 """
 import io
 
@@ -59,13 +60,31 @@ class GapAlerter:
         self.last_closed = t[-1]
         return events
 
+    # ------------------------------------------------------------ روند (داخلی؛ نام شاخص به کاربر گفته نمی‌شود)
+    @staticmethod
+    def trend(g, m5):
+        """+1 هم‌جهت با روند، −1 خلاف روند، None اگر داده‌ی M5 نباشد.
+        روند = علامت EMA(48) − EMA(104) بسته‌شدن‌های M5 (همان میله‌های MACD(48,104,36) در متاتریدر) روی کندل‌های
+        M5 که تا بسته شدن کندل ۳ گپ بسته شده‌اند. منفی = نزولی، مثبت = صعودی (خواست کاربر، ۱۸ نوامبر)."""
+        if m5 is None or len(m5) < 120:
+            return None
+        end = g["t3"] + pd.Timedelta(minutes=1)
+        c5 = m5["Close"][m5.index + pd.Timedelta(minutes=5) <= end].astype(float)
+        if len(c5) < 120:
+            return None
+        main = c5.ewm(span=48, adjust=False).mean().iloc[-1] - c5.ewm(span=104, adjust=False).mean().iloc[-1]
+        if main == 0:
+            return None
+        return 1 if (main < 0) == (g["side"] < 0) else -1
+
     # ------------------------------------------------------------ پیام
     def gap_caption(self, g):
         s = g["side"]
         m5 = f" · M5: {g['m5_state']}" if g.get("m5_state") and g["m5_state"] != "-" else ""
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
+        tr = {1: "\n📈 With the trend", -1: "\n↩️ Against the trend"}.get(g.get("trend"), "")
         return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}{m5}\n"
-                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}")
+                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}{tr}")
 
     def picture(self, g, m5=None):
         """m5: کندل‌های M5 بسته‌شده (اختیاری) → جعبه‌های ساختار M5 زیر کندل‌های M1؛ نامش در g['m5_state']."""
@@ -109,7 +128,8 @@ class GapAlerter:
         ax.grid(color="#D6E3F2")
         for sp in ax.spines.values():
             sp.set_color("#A9CDF3")
-        ax.set_title(f"{self.sym} M1 · {'SELL' if s < 0 else 'BUY'} gap · Leg {g['leg']} · "
+        tr = {1: " · with the trend", -1: " · against the trend"}.get(g.get("trend"), "")
+        ax.set_title(f"{self.sym} M1 · {'SELL' if s < 0 else 'BUY'} gap · Leg {g['leg']}{tr} · "
                      f"{g['t3'].tz_convert(TEHRAN):%a %d %b %H:%M} Tehran", loc="left", fontweight="bold")
         plt.tight_layout()
         buf = io.BytesIO()

@@ -23,7 +23,11 @@ No channel posts, no live trading.
   legs, NO M5 filter, not in the Off session) → ONE picture when candle 3 closes: last 60 M1 candles + the M5 structure
   boxes of that moment (600 closed M5 candles fetched at alert time, `gap_pictures.draw_m5`) + the gap box; caption =
   side, leg, session, M5 state, Tehran time, gap range. **Only the gap — no entry, SL, TP or "entry hit" message**
-  (user: "entry is not part of the setup, I only want the gap"). Chained gaps behind the first one get no alert. Look:
+  (user: "entry is not part of the setup, I only want the gap"). Chained gaps behind the first one get no alert.
+  Every alert still goes out, labelled **"📈 With the trend" / "↩️ Against the trend"** (caption + picture title).
+  Trend = sign of MT5-style MACD(48,104,36) main line on M5 (= EMA48 − EMA104 of M5 closes, the grey bars in MT5)
+  on the M5 candles closed when candle 3 closes: negative → sells are with the trend, positive → buys
+  (`GapAlerter.trend`, user 18 Nov). **Never mention MACD/EMA in anything users see** (user's request). Look:
   bullish candles white, bearish black, light-blue background #E8F2FD, M5 box #D2E4F8. Subscribers: env
   `ALERT_CHAT_IDS` (comma list, survives deploys) + `alert_subs.json` (lost on every redeploy → tap the button again).
 - Pairs on the buttons: **only XAUUSD, USDJPY, EURUSD** (user, 17 Nov: "only three pairs, not

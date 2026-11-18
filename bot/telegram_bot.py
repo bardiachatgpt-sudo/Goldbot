@@ -79,8 +79,14 @@ class Telegram:
     def alert_tick(self, alerter, df, m5_source=None):
         """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست. عکس گپ همراه ساختار M5 همان لحظه."""
         for kind, ev in alerter.poll(df):
+            m5 = None
             try:
-                png = alerter.picture(ev, m5_source() if m5_source else None)
+                m5 = m5_source() if m5_source else None
+            except Exception as e:
+                print("alert M5 error:", e)
+            ev["trend"] = alerter.trend(ev, m5)
+            try:
+                png = alerter.picture(ev, m5)
             except Exception as e:
                 print("alert picture error:", e)
                 png = alerter.picture(ev)

@@ -571,6 +571,26 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: تکراری نیست
         self.assertEqual(a.poll(self.frame(rows[:41])), [])               # بعدش: پیام ورود نیست
 
+    def test_with_or_against_the_trend_without_naming_the_indicator(self):
+        from bot.gap_alerts import GapAlerter
+        rows = self.FLAT + self.SELL
+        a = GapAlerter("XAUUSD")
+        a.poll(self.frame(rows[:36]))
+        g = a.poll(self.frame(rows[:39]))[0][1]
+        idx = pd.date_range(end=g["t3"] - pd.Timedelta(minutes=5), periods=300, freq="5min", tz="UTC")
+        down = pd.DataFrame({"Close": np.linspace(4100, 4000, 300)}, index=idx)     # M5 نزولی
+        up = pd.DataFrame({"Close": np.linspace(3900, 4000, 300)}, index=idx)       # M5 صعودی
+        self.assertEqual(a.trend(g, down), 1)                                        # فروش در روند نزولی
+        self.assertEqual(a.trend(g, up), -1)
+        self.assertIsNone(a.trend(g, None))
+        g["trend"] = 1
+        self.assertIn("With the trend", a.gap_caption(g))
+        g["trend"] = -1
+        cap = a.gap_caption(g)
+        self.assertIn("Against the trend", cap)
+        self.assertNotIn("MACD", cap.upper())
+        self.assertNotIn("EMA", cap.upper())
+
     def test_no_alerts_in_the_off_session(self):
         from bot.gap_alerts import GapAlerter
         rows = self.FLAT + self.SELL
