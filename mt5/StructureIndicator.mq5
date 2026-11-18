@@ -1,44 +1,51 @@
 //+------------------------------------------------------------------+
 //| StructureIndicator.mq5 — Market Structure Indicator              |
-//| Draws market structure (spike / channel / trading range, on      |
-//| closes) of a timeframe you choose — e.g. the 5-minute structure  |
-//| — with the same algorithm as the Goldbot Telegram bot.           |
+//| Draws the 5-MINUTE market structure (spike / channel / trading   |
+//| range, on closes; same algorithm as the Goldbot Telegram bot),   |
+//| visible on every chart timeframe. Optional: the 1-minute         |
+//| structure too, visible only on the 1-minute chart, inside the    |
+//| 5-minute one. No other structures are drawn.                     |
 //| Every line is an ordinary MT5 trend line: move it, recolour it,  |
 //| delete it. A line you change or delete is LOCKED: when new       |
-//| candles come and the structure is recalculated, it is left as    |
-//| you made it. The lines stay on the chart when you switch the     |
-//| chart's timeframe (e.g. draw the 5-min structure, edit it, then  |
-//| look at it on 1-min). The "Redraw" button clears your edits and  |
-//| draws everything again.                                          |
+//| candles come and the structure is recalculated, it stays as you  |
+//| left it. The "Redraw" button clears your edits.                  |
 //+------------------------------------------------------------------+
 #property copyright "Market Structure Indicator"
-#property description "Market structure (spike / channel / range) of a chosen timeframe; editable lines that stay locked."
-#property version   "1.00"
+#property description "5-minute market structure on every timeframe (+ optional 1-minute structure on M1); editable lines."
+#property version   "1.10"
 #property indicator_chart_window
 #property indicator_plots 0
 
-input ENUM_TIMEFRAMES InpTF       = PERIOD_M5;     // Structure of which timeframe
-input int             InpBars     = 500;           // Candles of that timeframe used
-input bool            InpShowM1   = true;          // Show on M1
-input bool            InpShowM5   = true;          // Show on M5
-input bool            InpShowM15  = true;          // Show on M15
-input bool            InpShowM30  = true;          // Show on M30
-input bool            InpShowH1   = true;          // Show on H1
-input bool            InpShowH4   = true;          // Show on H4
-input bool            InpShowD1   = true;          // Show on D1 and higher
-input color           InpColRange = clrSteelBlue;  // Trading range colour
-input color           InpColBull  = clrSeaGreen;   // Bull channel colour
-input color           InpColBear  = clrCrimson;    // Bear channel colour
-input color           InpColSpike = clrDarkOrange; // Spike colour
-input int             InpWidth    = 2;             // Line width
-input ENUM_LINE_STYLE InpStyle    = STYLE_SOLID;   // Line style
-input bool            InpLabels   = true;          // Write the structure's name
-input bool            InpButton   = true;          // Show the "Redraw" button
+input int             InpBars5     = 500;           // 5-min candles used
+input bool            InpShowM1    = false;         // Also draw the 1-minute structure (seen only on M1)
+input int             InpBars1     = 500;           // 1-min candles used
+input group           "5-minute structure"
+input color           InpColRange5 = clrSteelBlue;  // Trading range
+input color           InpColBull5  = clrSeaGreen;   // Bull channel
+input color           InpColBear5  = clrCrimson;    // Bear channel
+input color           InpColSpike5 = clrDarkOrange; // Spike
+input int             InpWidth5    = 2;             // Line width
+input ENUM_LINE_STYLE InpStyle5    = STYLE_SOLID;   // Line style
+input group           "1-minute structure"
+input color           InpColRange1 = clrLightSkyBlue; // Trading range
+input color           InpColBull1  = clrMediumAquamarine; // Bull channel
+input color           InpColBear1  = clrLightCoral; // Bear channel
+input color           InpColSpike1 = clrSandyBrown; // Spike
+input int             InpWidth1    = 1;             // Line width
+input ENUM_LINE_STYLE InpStyle1    = STYLE_DASH;    // Line style
+input group           "Other"
+input bool            InpLabels    = true;          // Write the structure's name
+input bool            InpButton    = true;          // Show the "Redraw" button
 
-string   PFX, BTN, LCK;
-datetime lastStructBar = 0;
-ENUM_TIMEFRAMES TF;
-string   drawn[];          // names drawn by the last update (to notice lines the user deleted)
+string   BTN = "GST_btn";
+string   LCKBASE;
+// two structures: 0 = 5-minute (all timeframes), 1 = 1-minute (only on M1)
+string   PFX[2]  = {"GST_M5_", "GST_M1_"};
+string   NAME[2] = {"M5", "M1"};
+ENUM_TIMEFRAMES STF[2] = {PERIOD_M5, PERIOD_M1};
+datetime lastBar[2] = {0, 0};
+string   drawn0[], drawn1[];   // names drawn by the last update (to notice lines the user deleted)
+int      S = 0;                // structure being drawn
 
 #define PH_RANGE   0
 #define PH_CHANNEL 1
@@ -429,11 +436,10 @@ int PhaseLines(const double &c[], int k, double &x0[], double &y0[], double &x1[
 }
 
 //+------------------------------------------------------------------+
-//| Locks (a global variable per edited / deleted line)               |
+//| Locks: an edited line carries "edited" in its tooltip (saved with |
+//| the chart); a deleted one is remembered in a global variable      |
 //+------------------------------------------------------------------+
-string LockName(string obj) { return LCK + StringSubstr(obj, StringLen(PFX)); }
-// a line you edited carries the mark in its tooltip (saved with the chart); a line you deleted is remembered in a
-// terminal global variable
+string LockName(string obj) { return LCKBASE + obj; }
 bool   Locked(string obj)
 {
    if(ObjectFind(0, obj) >= 0 && StringFind(ObjectGetString(0, obj, OBJPROP_TOOLTIP), "edited") == 0) return true;
@@ -444,24 +450,15 @@ void   Lock(string obj)
    if(ObjectFind(0, obj) >= 0) ObjectSetString(0, obj, OBJPROP_TOOLTIP, "edited by you (locked)");
    GlobalVariableSet(LockName(obj), 1);
 }
-void   ClearLocks()         { GlobalVariablesDeleteAll(LCK); }
+void   ClearLocks() { GlobalVariablesDeleteAll(LCKBASE); }
 
-long Visibility()
+long Visibility() { return S == 0 ? OBJ_ALL_PERIODS : OBJ_PERIOD_M1; }
+
+void Remember(string name)
 {
-   long f = 0;
-   if(InpShowM1)  f |= OBJ_PERIOD_M1 | OBJ_PERIOD_M2 | OBJ_PERIOD_M3 | OBJ_PERIOD_M4;
-   if(InpShowM5)  f |= OBJ_PERIOD_M5 | OBJ_PERIOD_M6 | OBJ_PERIOD_M10 | OBJ_PERIOD_M12;
-   if(InpShowM15) f |= OBJ_PERIOD_M15 | OBJ_PERIOD_M20;
-   if(InpShowM30) f |= OBJ_PERIOD_M30;
-   if(InpShowH1)  f |= OBJ_PERIOD_H1 | OBJ_PERIOD_H2 | OBJ_PERIOD_H3;
-   if(InpShowH4)  f |= OBJ_PERIOD_H4 | OBJ_PERIOD_H6 | OBJ_PERIOD_H8 | OBJ_PERIOD_H12;
-   if(InpShowD1)  f |= OBJ_PERIOD_D1 | OBJ_PERIOD_W1 | OBJ_PERIOD_MN1;
-   return f == 0 ? OBJ_NO_PERIODS : f;
+   if(S == 0) { int n = ArraySize(drawn0); ArrayResize(drawn0, n + 1); drawn0[n] = name; }
+   else       { int n = ArraySize(drawn1); ArrayResize(drawn1, n + 1); drawn1[n] = name; }
 }
-
-string TfName() { string s = EnumToString(TF); StringReplace(s, "PERIOD_", ""); return s; }
-
-void Remember(string name) { int n = ArraySize(drawn); ArrayResize(drawn, n + 1); drawn[n] = name; }
 
 void Line(string name, datetime t0, double p0, datetime t1, double p1, color col)
 {
@@ -469,8 +466,8 @@ void Line(string name, datetime t0, double p0, datetime t1, double p1, color col
    if(Locked(name)) return;
    ObjectCreate(0, name, OBJ_TREND, 0, t0, p0, t1, p1);
    ObjectSetInteger(0, name, OBJPROP_COLOR, col);
-   ObjectSetInteger(0, name, OBJPROP_WIDTH, InpWidth);
-   ObjectSetInteger(0, name, OBJPROP_STYLE, InpStyle);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, S == 0 ? InpWidth5 : InpWidth1);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, S == 0 ? InpStyle5 : InpStyle1);
    ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, true);
    ObjectSetInteger(0, name, OBJPROP_TIMEFRAMES, Visibility());
@@ -490,38 +487,49 @@ void Label(string name, datetime t, double p, string txt, color col)
    ObjectSetInteger(0, name, OBJPROP_TIMEFRAMES, Visibility());
 }
 
-//+------------------------------------------------------------------+
-bool Update()
+void DeleteOurs(bool lockedToo)
 {
-   MqlRates r[];
-   ArraySetAsSeries(r, false);
-   int n = CopyRates(_Symbol, TF, 1, InpBars, r);            // closed candles of the structure timeframe
-   if(n < 30) return false;                                   // data not loaded yet: try again on the next tick
-   // lines the user deleted since the last update: lock them as deleted
-   for(int i = 0; i < ArraySize(drawn); i++)
-      if(!Locked(drawn[i]) && ObjectFind(0, drawn[i]) < 0 && (InpLabels || StringFind(drawn[i], "_lbl") < 0))
-         Lock(drawn[i]);
-   ArrayResize(drawn, 0);
-   // remove our unlocked objects, keep the user's
    for(int i = ObjectsTotal(0, 0, -1) - 1; i >= 0; i--)
    {
       string nm = ObjectName(0, i, 0, -1);
-      if(StringFind(nm, PFX) == 0 && nm != BTN && !Locked(nm)) ObjectDelete(0, nm);
+      if(StringFind(nm, PFX[S]) == 0 && (lockedToo || !Locked(nm))) ObjectDelete(0, nm);
    }
+}
+
+//+------------------------------------------------------------------+
+bool Update(int s)
+{
+   S = s;
+   MqlRates r[];
+   ArraySetAsSeries(r, false);
+   int n = CopyRates(_Symbol, STF[S], 1, S == 0 ? InpBars5 : InpBars1, r);   // closed candles only
+   if(n < 30) return false;                                   // data not loaded yet: try again on the next tick
+   // lines the user deleted since the last update: lock them as deleted
+   int nd = S == 0 ? ArraySize(drawn0) : ArraySize(drawn1);
+   for(int i = 0; i < nd; i++)
+   {
+      string d = S == 0 ? drawn0[i] : drawn1[i];
+      if(!Locked(d) && ObjectFind(0, d) < 0 && (InpLabels || StringFind(d, "_lbl") < 0)) Lock(d);
+   }
+   if(S == 0) ArrayResize(drawn0, 0); else ArrayResize(drawn1, 0);
+   DeleteOurs(false);                                         // our unlocked lines go; the user's stay
    double c[]; datetime t[];
    ArrayResize(c, n); ArrayResize(t, n);
    for(int i = 0; i < n; i++) { c[i] = r[i].close; t[i] = r[i].time; }
    Segment(c, n);
-   int sec = PeriodSeconds(TF);
+   int sec = PeriodSeconds(STF[S]);
    for(int k = 0; k < nph; k++)
    {
       double x0[], y0[], x1[], y1[];
       PhaseLines(c, k, x0, y0, x1, y1);
-      color col = ph[k].type == PH_RANGE ? InpColRange : (ph[k].type == PH_SPIKE ? InpColSpike
-                  : (ph[k].side > 0 ? InpColBull : InpColBear));
+      color col;
+      if(S == 0) col = ph[k].type == PH_RANGE ? InpColRange5 : (ph[k].type == PH_SPIKE ? InpColSpike5
+                       : (ph[k].side > 0 ? InpColBull5 : InpColBear5));
+      else       col = ph[k].type == PH_RANGE ? InpColRange1 : (ph[k].type == PH_SPIKE ? InpColSpike1
+                       : (ph[k].side > 0 ? InpColBull1 : InpColBear1));
       string kind = ph[k].type == PH_RANGE ? "TRADING RANGE" : (ph[k].type == PH_SPIKE
                     ? (ph[k].side > 0 ? "SPIKE UP" : "SPIKE DOWN") : (ph[k].side > 0 ? "BULL CHANNEL" : "BEAR CHANNEL"));
-      string base = PFX + IntegerToString((long)t[ph[k].start]) + "_" + IntegerToString(ph[k].type) + "_";
+      string base = PFX[S] + IntegerToString((long)t[ph[k].start]) + "_" + IntegerToString(ph[k].type) + "_";
       bool lastPh = (k == nph - 1);
       for(int u = 0; u < 2; u++)
       {
@@ -531,7 +539,7 @@ bool Update()
          if(lastPh && x1[u] != x0[u]) pb = y0[u] + (y1[u] - y0[u]) / (x1[u] - x0[u]) * (n - x0[u]);
          Line(base + (u == 0 ? "a" : "b"), ta, y0[u], tb, pb, col);
       }
-      Label(base + "lbl", t[ph[k].start], MathMax(y0[0], y0[1]), TfName() + " · " + kind, col);
+      Label(base + "lbl", t[ph[k].start], MathMax(y0[0], y0[1]), NAME[S] + " · " + kind, col);
    }
    ChartRedraw();
    return true;
@@ -546,19 +554,16 @@ void MakeButton()
    ObjectSetInteger(0, BTN, OBJPROP_YDISTANCE, 20);
    ObjectSetInteger(0, BTN, OBJPROP_XSIZE, 120);
    ObjectSetInteger(0, BTN, OBJPROP_YSIZE, 22);
-   ObjectSetString(0, BTN, OBJPROP_TEXT, "Redraw " + TfName() + " structure");
+   ObjectSetString(0, BTN, OBJPROP_TEXT, "Redraw structure");
    ObjectSetInteger(0, BTN, OBJPROP_FONTSIZE, 8);
    ObjectSetInteger(0, BTN, OBJPROP_SELECTABLE, false);
 }
 
 int OnInit()
 {
-   TF = (InpTF == PERIOD_CURRENT) ? (ENUM_TIMEFRAMES)_Period : InpTF;
-   PFX = "GST_" + TfName() + "_";
-   BTN = PFX + "btn";
-   LCK = "GSTL" + IntegerToString(ChartID() % 100000) + "_" + TfName() + "_";
-   IndicatorSetString(INDICATOR_SHORTNAME, "Market Structure " + TfName());
-   lastStructBar = 0;
+   LCKBASE = "GSTL" + IntegerToString(ChartID() % 100000) + "_";
+   IndicatorSetString(INDICATOR_SHORTNAME, "Market Structure");
+   lastBar[0] = 0; lastBar[1] = 0;
    MakeButton();
    return(INIT_SUCCEEDED);
 }
@@ -566,7 +571,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    if(reason == REASON_REMOVE)                  // indicator removed: take everything away, forget the edits
-   { ObjectsDeleteAll(0, PFX); ClearLocks(); }
+   { ObjectsDeleteAll(0, "GST_"); ClearLocks(); }
    // timeframe change / settings change: the lines and your edits stay on the chart
 }
 
@@ -574,25 +579,35 @@ int OnCalculate(const int rates_total, const int prev_calculated, const datetime
                 const double &open[], const double &high[], const double &low[], const double &close[],
                 const long &tick_volume[], const long &volume[], const int &spread[])
 {
-   datetime b = iTime(_Symbol, TF, 0);
-   if(b != 0 && b != lastStructBar && Update()) lastStructBar = b;   // once per new candle of the structure TF
+   for(int s = 0; s < 2; s++)
+   {
+      if(s == 1 && !InpShowM1)
+      {
+         if(lastBar[1] != -1) { S = 1; DeleteOurs(true); lastBar[1] = -1; }   // 1-min structure switched off
+         continue;
+      }
+      datetime b = iTime(_Symbol, STF[s], 0);
+      if(b != 0 && b != lastBar[s] && Update(s)) lastBar[s] = b;   // once per new candle of that timeframe
+   }
    return(rates_total);
 }
 
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
-   if(StringFind(sparam, PFX) != 0) return;
+   if(StringFind(sparam, "GST_") != 0) return;
    if(id == CHARTEVENT_OBJECT_CLICK && sparam == BTN)
    {
       ObjectSetInteger(0, BTN, OBJPROP_STATE, false);
-      ClearLocks();                              // the redraw also deletes the edited lines, so their marks go too
-      for(int i = ObjectsTotal(0, 0, -1) - 1; i >= 0; i--)
-      { string nm = ObjectName(0, i, 0, -1); if(StringFind(nm, PFX) == 0 && nm != BTN) ObjectDelete(0, nm); }
-      ArrayResize(drawn, 0);
-      Update();
+      ClearLocks();
+      for(int s = 0; s < 2; s++)
+      {
+         S = s; DeleteOurs(true);
+         if(s == 0) ArrayResize(drawn0, 0); else ArrayResize(drawn1, 0);
+         if(s == 0 || InpShowM1) Update(s);
+      }
       return;
    }
-   if((id == CHARTEVENT_OBJECT_DRAG || id == CHARTEVENT_OBJECT_CHANGE || id == CHARTEVENT_OBJECT_ENDEDIT) && sparam != BTN)
+   if((id == CHARTEVENT_OBJECT_DRAG || id == CHARTEVENT_OBJECT_CHANGE) && sparam != BTN)
       Lock(sparam);                              // the user moved or edited this line: keep it as it is
 }
 //+------------------------------------------------------------------+
