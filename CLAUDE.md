@@ -207,6 +207,10 @@ var is set on Render it overrides the default — it must then be changed there 
   `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
   Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
   in the cloud) — fix compile errors from the user's MetaEditor messages.
+- `mt5/GoldbotGapDetector.mq5` — simple MT5 indicator (18 Nov): draws the gaps of whatever timeframe the chart shows
+  (same find_gap rule), closed candles only; inputs: bars to scan, bear/bull fill + border colours, fill on/off,
+  extend right N candles, show chained gaps, labels, popup alert / push on a new gap.
+- `mt5/GoldbotGapEA-guide-fa.pdf` — Persian user guide of the expert (made from HTML with Chromium + Vazirmatn font).
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
 - `data/` — the user's broker CSVs (gzip), list in `data/README.md`. Keep every file the user sends there; do not
   analyse until asked. The repo should be private (user confirmed, 17 Nov).
