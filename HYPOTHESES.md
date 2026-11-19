@@ -308,3 +308,13 @@ User's claim: "most losses come when the M5 histogram is negative and the M1 one
 → Not true: the share of losses follows the number of trades; win % is 45–49% in every cell. Sells only with
 M5 − / M1 +: USDJPY 47.2%, EURUSD 46.0% (not worse). Worst single cell: USDJPY sells with both negative 41.2% (388).
 Script: scratchpad `xtab.py`.
+
+### Both histograms in the trade's direction (user, 19 Nov): sell only if M5 AND M1 histogram < 0, buy only if both > 0
+Rerun with the filter (broker data Jan–Jun, legs 1–2, no Off, 1:1, no spread). Script: scratchpad `bothbt.py`.
+| pair | variant | trades | win % | R | R / trade | (no filter at all: R / trade) |
+| USDJPY | + M5 structure filter | 1470 | 45.8 | −124 | −0.084 | −0.037 |
+| USDJPY | without M5 filter | 1895 | 46.2 | −143 | −0.075 | |
+| EURUSD | + M5 structure filter | 1375 | 46.9 | −85 | −0.062 | −0.056 |
+| EURUSD | without M5 filter | 1927 | 47.1 | −111 | −0.058 | |
+Sells/buys without M5 filter: USDJPY sells 730 44.5% −80, buys 1165 47.3% −63; EURUSD sells 1046 48.6% −30,
+buys 881 45.4% −81. → No improvement (USDJPY slightly worse than no filter). Gold not tested (no gold CSV).
