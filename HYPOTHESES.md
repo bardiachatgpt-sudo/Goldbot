@@ -297,3 +297,14 @@ post-hoc). Script: scratchpad `trendbt.py`.
 | EURUSD | trend only | 3154 | 46.8 | −200 | −0.063 |
 → The trend filter removes ~30–35% of trades but the win rate does not move; the smaller total loss is only because
 there are fewer trades. No edge from the trend filter on these two pairs. Gold not tested (no gold CSV yet).
+
+### M5 sign × M1 sign of the same histogram (user's question, 19 Nov) — current rules (M5 filter), broker data
+User's claim: "most losses come when the M5 histogram is negative and the M1 one positive". Share of all losses / win %:
+| M5 | M1 | USDJPY trades | share of losses | win % | EURUSD trades | share of losses | win % |
+| + | + | 1593 | 38.8% | 47.6 | 1137 | 28.5% | 46.1 |
+| + | − | 849 | 20.2% | 48.8 | 673 | 16.7% | 46.8 |
+| − | + | 630 | 15.8% | 46.2 | 846 | 21.4% | 45.7 |
+| − | − | 1016 | 25.2% | 46.6 | 1311 | 33.5% | 45.2 |
+→ Not true: the share of losses follows the number of trades; win % is 45–49% in every cell. Sells only with
+M5 − / M1 +: USDJPY 47.2%, EURUSD 46.0% (not worse). Worst single cell: USDJPY sells with both negative 41.2% (388).
+Script: scratchpad `xtab.py`.
