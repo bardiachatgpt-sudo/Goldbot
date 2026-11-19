@@ -281,3 +281,19 @@ the path (sublevel + superlevel): total persistence / range (`tp0`) and number o
 - Added to the 19 earlier features: test AUC 0.513 (vs 0.52 without) — no improvement.
 → The Ricci / topology view of the last hour of price does not predict which gap trades win on EURUSD M1. (Its known
   use in finance is market-wide fragility across many assets over days/weeks, not single M1 entries.)
+
+## Trend filter only (user's question, 19 Nov) — broker data, Jan–Jun 2026, no spread
+Trend = sign of the M5 MACD(48,104,36) histogram at candle-3 close (forming M5 candle included, as in the live bot):
+sells only when negative, buys only when positive. Legs 1–2, no Off session, fixed 1:1, rerun with the filter (not
+post-hoc). Script: scratchpad `trendbt.py`.
+| pair | variant | trades | win % | R | R / trade |
+| USDJPY | M5 filter (current) | 4088 | 47.4 | −214 | −0.052 |
+| USDJPY | M5 + trend | 2592 | 47.1 | −148 | −0.057 |
+| USDJPY | no filter | 4342 | 48.1 | −162 | −0.037 |
+| USDJPY | trend only | 3049 | 47.7 | −139 | −0.046 |
+| EURUSD | M5 filter (current) | 3967 | 45.8 | −331 | −0.083 |
+| EURUSD | M5 + trend | 2524 | 46.2 | −190 | −0.075 |
+| EURUSD | no filter | 4359 | 47.2 | −243 | −0.056 |
+| EURUSD | trend only | 3154 | 46.8 | −200 | −0.063 |
+→ The trend filter removes ~30–35% of trades but the win rate does not move; the smaller total loss is only because
+there are fewer trades. No edge from the trend filter on these two pairs. Gold not tested (no gold CSV yet).
