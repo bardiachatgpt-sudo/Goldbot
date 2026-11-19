@@ -318,3 +318,12 @@ Rerun with the filter (broker data Jan–Jun, legs 1–2, no Off, 1:1, no spread
 | EURUSD | without M5 filter | 1927 | 47.1 | −111 | −0.058 | |
 Sells/buys without M5 filter: USDJPY sells 730 44.5% −80, buys 1165 47.3% −63; EURUSD sells 1046 48.6% −30,
 buys 881 45.4% −81. → No improvement (USDJPY slightly worse than no filter). Gold not tested (no gold CSV).
+
+### + skip when the M5 histogram bar is the tallest of its wave (user, 19 Nov)
+Both histograms in the trade's direction, no M5 structure filter, and NO trade if the M5 histogram value at candle-3
+close (forming bar) is ≥ every closed M5 bar since the last zero cross ("tallest bar of this wave"). Script
+`tallbt.py <sym> <path> wave`. Alternative "tallest of the last 100 M5 bars" in brackets.
+| pair | trades | win % | R | R / trade | (without this rule: R / trade) |
+| USDJPY | 1040 (1207) | 45.7 (45.7) | −90 (−103) | −0.087 | −0.075 |
+| EURUSD | 1016 (1166) | 46.2 (46.2) | −78 (−88) | −0.077 | −0.058 |
+→ Slightly WORSE per trade: the trades taken on the tallest bar were not the bad ones. No edge.
