@@ -327,3 +327,20 @@ close (forming bar) is ≥ every closed M5 bar since the last zero cross ("talle
 | USDJPY | 1040 (1207) | 45.7 (45.7) | −90 (−103) | −0.087 | −0.075 |
 | EURUSD | 1016 (1166) | 46.2 (46.2) | −78 (−88) | −0.077 | −0.058 |
 → Slightly WORSE per trade: the trades taken on the tallest bar were not the bad ones. No edge.
+
+## Machine learning on the gap trades (user asked, 20 Nov)
+Data: every closed gap trade, no filters (legs 1–2, no Off, 1:1, no spread), USDJPY + EURUSD broker data, 8,274
+trades with 28 features known at candle-3 close (MACD-histogram value/sign on 1/5/15/60 min "at that moment" in ATR
+units, tallest-bar flags, slopes, stop/ATR, gap and candle sizes/ATR, wait to entry, leg, volatility regime,
+position in the last 60/300-min range, momentum 30/120 min, hour, weekday, session, pair). sklearn (pip worked).
+Train Jan–Mar (4,459, 47.1% wins), test Apr–Jun (3,815, 48.7%); thresholds for "top 10/20%" taken from the TRAIN
+scores. Scripts: scratchpad `mlfeat.py`, `mltrain.py`.
+| model | AUC train | AUC test | test top 20%: n, win %, R | test top 10%: n, win %, R |
+| logistic | 0.54 | 0.52 | 747, 50.9%, +13 | 364, 50.5%, +4 |
+| boosting | 0.72 | 0.51 | 776, 49.9%, −2 | 378, 44.4%, −42 |
+| random forest | 0.70 | 0.52 | 788, 51.0%, +16 | 382, 54.2%, +32 (JPY 55.6%, EUR 53.1%) |
+Forest top 20% by month: Apr 52.7%, May 49.8%, Jun 49.1% (fading). Test AUC 0.51–0.52 = barely better than a coin.
+Forest top 10% (+0.08R/trade before costs) is ~2 standard errors above the base rate but 3 models × 2 thresholds were
+tried, and EURUSD spread alone ≈ 0.12R/trade → negative after costs. Boosting overfits badly. → No usable edge.
+Top forest features (all small, 0.055–0.07): 15-min histogram, candle 1/2 size, 15-min slope, 60-min histogram,
+5-min histogram, gap size, hour, 120-min momentum, stop/ATR.
