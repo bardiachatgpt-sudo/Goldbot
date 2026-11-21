@@ -229,7 +229,7 @@ var is set on Render it overrides the default — it must then be changed there 
   Separate colours/width/style for 5-min and 1-min; labels; "Redraw structure" button clears edits.
 - `mt5/GoldbotGapEA-guide-fa.pdf` — Persian user guide of the expert (made from HTML with Chromium + Vazirmatn font).
 - `HYPOTHESES.md` — parked hypotheses (not rules, not coded).
-- `data/` — the user's broker CSVs (gzip), list in `data/README.md`. Keep every file the user sends there; do not
+- `data/` — the user's broker CSVs (gzip; gold M1 Jan 2 → Nov 17 2026 complete, received 21 Nov), list in `data/README.md`. Keep every file the user sends there; do not
   analyse until asked. The repo should be private (user confirmed, 17 Nov).
 - Tests: `python -m unittest discover -s tests` (all in `tests/test_structure.py`).
 - Old features (alerts, pin-bar/range setups, MACD, range backtest) were removed on purpose; in git history before 678dacb.
