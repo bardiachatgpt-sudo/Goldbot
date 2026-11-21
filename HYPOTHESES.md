@@ -377,3 +377,22 @@ Gold, only WITH the M5 structure trend (user 21 Nov): sells only in a bear chann
 channel / spike ↑, no trades in ranges; M5 target filter, all legs, no MACD, no Off, 1:1 (`chanbt.py`):
 3,125 trades 47.2% −175R. Sells 1,412 50.1% +4R (≈ break-even before spread; gold fell all year), buys 1,713 44.8%
 −179R. Every month negative (−2 … −25). Legs 1–4+ all negative. → no edge; the sell side only breaks even.
+
+## SPIKE first-candle entry on gold M1 (user asked, 21 Nov) — FIRST POSITIVE OUT-OF-SAMPLE RESULT (needs confirmation)
+Candidate = a closed M1 candle (not Off) with body ≥ 1.5 × avg body of the 20 before and close in the top/bottom 40%
+of its range; entry at its close in its direction. Stop "f" = 1 pipette beyond the candle (full), "m" = its middle;
+target 1R or 2R; first touch within 200 candles, a candle touching both = loss. Features: body/avg body (bm), close
+location (clv), breakout (close beyond the high/low of the last 10/20 candles), volatility regime ATR20/ATR200
+(comp), tick volume / avg 20 (vol), range/ATR20 (ra). Grid of 2,320 variants chosen on Jan–Jun, tested on Jul–Nov.
+Scripts: scratchpad `spike.py`, `spike_grid.py`, `spike_check.py`.
+- All 64,464 candidates: ≈ 0R before spread, −0.05R after → a big candle alone is nothing.
+- Train-vs-test correlation of variant results 0.43 (not noise); 59% of variants positive in the test half.
+- Best family = **full-candle stop, 2R target, bm ≥ 2–3, clv ≥ 0.6, close beyond the last 10 candles,
+  ATR20/ATR200 ≥ 1.2 (already volatile), tick volume ≥ 1.5 × average**:
+| rule | n | Jan–Jun R/trade (win) | Jul–Nov R/trade (win) | avg stop | spread cost |
+| bm ≥ 2 | 460 | +0.14 (38%) | +0.25 (42%) | $7.38 | 0.02R |
+| bm ≥ 3 | 302 | +0.17 (40%) | +0.38 (47%) | $9.03 | 0.02R |
+| bm ≥ 2, no volatility filter | 2,314 | +0.08 (36%) | +0.12 (38%) | $5.05 | 0.03R |
+  Months (bm ≥ 2): +10 +25 −17 +6 +3 +9 +12 +16 +15 +2 +5; buys better than sells. Non-overlapping (≥ 20 candles
+  apart) still +0.18R/trade. Caveats: one market, 11 months, many variants tried, commission unknown, holding up to
+  200 min. Next checks: same rule unchanged on USDJPY/EURUSD; realistic one-at-a-time backtest.
