@@ -344,3 +344,6 @@ Forest top 10% (+0.08R/trade before costs) is ~2 standard errors above the base 
 tried, and EURUSD spread alone ≈ 0.12R/trade → negative after costs. Boosting overfits badly. → No usable edge.
 Top forest features (all small, 0.055–0.07): 15-min histogram, candle 1/2 size, 15-min slope, 60-min histogram,
 5-min histogram, gap size, hour, 120-min momentum, stop/ATR.
+Most recent month in the data = June 2026 (1–17 Jun, 858 trades, base 46.4%). Random forest top 20% / top 10%:
+trained Jan–Mar → 171 trades 49.1% −3R / 90 trades 45.6% −8R (AUC 0.500); retrained Jan–May → 169 trades 46.2%
+−13R / 87 trades 50.6% +1R (AUC 0.503). → In the latest month the model is a pure coin flip. Script `mljune.py`.
