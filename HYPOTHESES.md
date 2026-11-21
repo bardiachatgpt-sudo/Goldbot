@@ -359,3 +359,10 @@ No M5 structure filter, legs 1–2, no Off, 1:1, no spread. Script `zonebt.py <s
 | M5 B | 892, 44.2%, −104 | 43.9%, −62 | 44.5%, −42 | 928, 48.4%, −30 | 46.5%, −36 | 50.7%, +6 |
 → No variant is positive on both pairs or both halves. Only EURUSD M5 B in Apr–Jun is slightly positive (+6R, 414
 trades) while the same rule on USDJPY is the worst (44.2%; sells 40.5%). Not an edge. Gold not tested.
+
+## GOLD broker data (XAUUSD M1, 2 Jan → 17 Nov 2026, received 21 Nov) — current bot rule
+M5 structure filter, legs 1–2, no Off, fixed 1:1, no spread: **8,614 trades, 47.6%, −416R**. Every month negative
+(Jan −39, Feb −55, Mar −63, Apr −22, May −20, Jun −24, Jul −10, Aug −62, Sep −55, Oct −33, Nov 1–17 −33).
+Sells 4,306 49.2% −66 (Apr–Jun +34); buys 4,308 45.9% −350 (gold fell 4330 → 3854 over the year). Leg 1 −293,
+Leg 2 −123; every session negative. Avg stop $5.01 (median $3.79); with spread $0.20 → −976R, $0.30 → −1,256R.
+→ Same as USDJPY/EURUSD: no edge on gold M1 as defined.
