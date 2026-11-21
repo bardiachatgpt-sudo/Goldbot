@@ -347,3 +347,15 @@ Top forest features (all small, 0.055–0.07): 15-min histogram, candle 1/2 size
 Most recent month in the data = June 2026 (1–17 Jun, 858 trades, base 46.4%). Random forest top 20% / top 10%:
 trained Jan–Mar → 171 trades 49.1% −3R / 90 trades 45.6% −8R (AUC 0.500); retrained Jan–May → 169 trades 46.2%
 −13R / 87 trades 50.6% +1R (AUC 0.503). → In the latest month the model is a pure coin flip. Script `mljune.py`.
+
+## MACD "momentum zone" (user's screenshot, 21 Nov) — MT5 MACD(48,104,36): bars = main, orange line = signal (SMA 36)
+Sell only if at candle-3 close the signal line is ABOVE the bars and that state started while the bars were > 0
+(A = whole zone); B = A + bars now < 0. Buy mirrored. On the M1 MACD and on the M5 MACD (forming bar included).
+No M5 structure filter, legs 1–2, no Off, 1:1, no spread. Script `zonebt.py <sym> <path> <1|5> <A|B>`.
+| variant | USDJPY all: n, win, R | Jan–Mar | Apr–Jun | EURUSD all: n, win, R | Jan–Mar | Apr–Jun |
+| M1 A | 2204, 47.4%, −114 | 47.5%, −64 | 47.3%, −50 | 2297, 46.5%, −163 | 46.4%, −94 | 46.5%, −69 |
+| M1 B | 918, 46.8%, −58 | 47.9%, −22 | 45.5%, −36 | 986, 46.5%, −70 | 45.1%, −54 | 48.1%, −16 |
+| M5 A | 2124, 45.5%, −190 | 44.7%, −125 | 46.5%, −65 | 2159, 47.8%, −93 | 46.5%, −81 | 49.4%, −12 |
+| M5 B | 892, 44.2%, −104 | 43.9%, −62 | 44.5%, −42 | 928, 48.4%, −30 | 46.5%, −36 | 50.7%, +6 |
+→ No variant is positive on both pairs or both halves. Only EURUSD M5 B in Apr–Jun is slightly positive (+6R, 414
+trades) while the same rule on USDJPY is the worst (44.2%; sells 40.5%). Not an edge. Gold not tested.
