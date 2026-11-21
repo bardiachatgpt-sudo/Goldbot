@@ -55,6 +55,11 @@ No channel posts, no live trading.
   replaces the setup; price beyond SL 5-min before the 1-min gap cancels it; Off session: no alert. The user manages
   the trade (after 1:1 on the 1-min trade they trail the SL behind each new 1-min setup; target = the 5-min setup's
   1:1; one position, no new ones). Runs in the same 15 s alert loop; the gap alerts are unchanged. Not backtested.
+- **₿ Bitcoin weekend gaps** (21 Nov, `TelegramBot.btc_tick`, same 15 s loop): only Saturday 00:00 → Sunday 24:00
+  Tehran (`config.is_weekend_tehran`), to the 🔔 gold-alert subscribers (no own button): every BTCUSD 1-min gap =
+  the same picture/caption as the gold M1 alert (M5 structure, trend label, session shows "Weekend", no Off filter:
+  `GapAlerter(sessions=False)`), and every 5-min gap = the milky-white 5-min picture, caption "🔴 Bearish gap ·
+  BTCUSD". TradingView BITSTAMP:BTCUSD (→ COINBASE, BINANCE:BTCUSDT); BTCUSD is in `ALL_SYMBOLS` but not on buttons.
 - **5-min gap pictures** (18 Nov, `gap_alerts.M5GapAlerter`, sent to the 🔥 Runner subscribers in the same loop): every
   gold 5-min gap, up or down (same `find_gap` rule, 5-min candles built from the 1-min feed by `m5_frame`, chained
   gaps not repeated, no Off session) → a separate picture of the last 60 5-min candles on a milky-white background

@@ -572,6 +572,37 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: تکراری نیست
         self.assertEqual(a.poll(self.frame(rows[:41])), [])               # بعدش: پیام ورود نیست
 
+    def test_btc_weekend_gaps_go_to_bell_subscribers(self):
+        rows = self.FLAT + self.SELL
+        tg = make_bot()
+        tg.alert_chats = {7}
+        from bot.gap_alerts import GapAlerter, M5GapAlerter
+
+        def frame_at(start, k):                                       # شنبه به وقت تهران (سشن Off)
+            o, h, l, c = zip(*rows[:k])
+            return pd.DataFrame({"Open": o, "High": h, "Low": l, "Close": c},
+                                index=pd.date_range(start, periods=k, freq="1min", tz="UTC"))
+        sat = pd.Timestamp("2026-11-21 10:00", tz="UTC")
+        b1, b5 = GapAlerter("BTCUSD", sessions=False), M5GapAlerter("BTCUSD", sessions=False)
+        with mock.patch("bot.gap_alerts.live_candles", side_effect=lambda *a, **k: frame_at(sat, n[0])), \
+                mock.patch("bot.gap_alerts.m5_candles", return_value=None):
+            n = [36]
+            tg.btc_tick(b1, b5, now=sat)
+            n = [39]
+            tg.btc_tick(b1, b5, now=sat)
+        self.assertEqual(tg.bot.send_photo.call_count, 1)
+        cap = tg.bot.send_photo.call_args.kwargs["caption"]
+        self.assertIn("BTCUSD M1", cap)
+        self.assertIn("Weekend", cap)
+        tg.bot.send_photo.reset_mock()
+        mon = pd.Timestamp("2026-11-23 10:00", tz="UTC")              # دوشنبه: هیچ
+        with mock.patch("bot.gap_alerts.live_candles") as lc:
+            tg.btc_tick(b1, b5, now=mon)
+            lc.assert_not_called()
+        self.assertEqual(tg.bot.send_photo.call_count, 0)
+        self.assertEqual(M5GapAlerter("BTCUSD").gap_caption({"side": -1}), "🔴 Bearish gap · BTCUSD")
+        self.assertEqual(M5GapAlerter().gap_caption({"side": 1}), "🟢 Bullish gap")
+
     def test_with_or_against_the_trend_without_naming_the_indicator(self):
         from bot.gap_alerts import GapAlerter
         rows = self.FLAT + self.SELL

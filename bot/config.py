@@ -24,6 +24,7 @@ ALL_SYMBOLS = {
     "AUDUSD": _chain("AUDUSD"),
     "NZDUSD": _chain("NZDUSD"),
     "US30": ["OANDA:US30USD", "FOREXCOM:DJI", "CAPITALCOM:US30", "TVC:DJI"],     # داوجونز (CFD تقریباً ۲۳ ساعته)
+    "BTCUSD": ["BITSTAMP:BTCUSD", "COINBASE:BTCUSD", "BINANCE:BTCUSDT"],          # فقط هشدار گپ آخر هفته
 }
 
 # نمادهای دکمه‌ها: فقط طلا، ین ژاپن و یورو (خواست کاربر، ۱۷ نوامبر؛ با STRUCTURE_PAIRS در Render عوض می‌شود).
@@ -44,7 +45,13 @@ FLAGS = {
     "AUDUSD": "🇦🇺🇺🇸",
     "NZDUSD": "🇳🇿🇺🇸",
     "US30": "🇺🇸📊",
+    "BTCUSD": "₿",
 }
+
+
+def is_weekend_tehran(ts):
+    """شنبه ۰۰:۰۰ تا یکشنبه ۲۴:۰۰ به وقت تهران (هشدار گپ بیت‌کوین، خواست کاربر ۲۱ نوامبر)."""
+    return ts.tz_convert(TEHRAN).weekday() in (5, 6)
 
 
 def label(name):

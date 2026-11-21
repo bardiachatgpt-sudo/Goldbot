@@ -23,13 +23,15 @@ UP_FACE, DOWN_FACE, EDGE = "white", "black", "black"   # صعودی سفید، �
 
 class GapAlerter:
     MIN_BARS = 30
-    def __init__(self, sym=ALERT_SYMBOL):
+
+    def __init__(self, sym=ALERT_SYMBOL, sessions=True):
         self.sym = sym
+        self.sessions = sessions       # False: سشن Off هم هشدار دارد (بیت‌کوین آخر هفته)
         self.last_closed = None        # زمان آخرین کندل بسته‌شده‌ای که بررسی شد
         self.last = None               # آخرین گپ (برای تشخیص زنجیره)
 
     def _fmt(self, x):
-        return f"{x:.2f}" if self.sym == "XAUUSD" else f"{x:.5f}"
+        return f"{x:.2f}" if self.sym in ("XAUUSD", "BTCUSD") else f"{x:.5f}"
 
     def poll(self, df):
         """df: کندل‌های M1 (Open/High/Low/Close، زمان = شروع کندل)، ردیف آخر = کندل در حال تشکیل (نادیده).
@@ -55,7 +57,7 @@ class GapAlerter:
                 continue
             self.last = p = {"side": side, "t1": t[i - 2], "t3": t[i], "chain": t[i], "gap_hi": zone[0],
                              "gap_lo": zone[1], "leg": leg_number(heads, h, l, i - 2, side),
-                             "session": session_of(t[i]), "close3": c[i]}
+                             "session": session_of(t[i]) if self.sessions else "Weekend", "close3": c[i]}
             if p["session"] != "Off":                      # سشن Off: هشدار نمی‌دهد
                 events.append(("gap", dict(p, window=closed.tail(PICTURE_BARS))))
         self.last_closed = t[-1]
@@ -177,7 +179,8 @@ class M5GapAlerter(GapAlerter):
     MIN_BARS = 5
 
     def gap_caption(self, g):
-        return "🔴 Bearish gap" if g["side"] < 0 else "🟢 Bullish gap"
+        cap = "🔴 Bearish gap" if g["side"] < 0 else "🟢 Bullish gap"
+        return cap if self.sym == ALERT_SYMBOL else f"{cap} · {self.sym}"      # طلا: مثل قبل، بدون نام
 
     def picture(self, g, m5=None):
         import matplotlib

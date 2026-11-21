@@ -104,8 +104,9 @@ class Telegram:
                 except Exception as e:
                     print("runner send error:", chat, e)
 
-    def m5gap_tick(self, alerter, df):
-        """گپ‌های ۵ دقیقه: عکس جدا (کندل‌های ۵ دقیقه، زمینه‌ی سفید شیری) به همان کسانی که رانر را روشن کرده‌اند."""
+    def m5gap_tick(self, alerter, df, chats=None):
+        """گپ‌های ۵ دقیقه: عکس جدا (کندل‌های ۵ دقیقه، زمینه‌ی سفید شیری) به همان کسانی که رانر را روشن کرده‌اند
+        (یا به chats اگر داده شود — بیت‌کوین آخر هفته به مشترکان 🔔)."""
         from .gap_alerts import m5_frame
         for _, ev in alerter.poll(m5_frame(df)):
             try:
@@ -113,7 +114,7 @@ class Telegram:
             except Exception as e:
                 print("5-min gap picture error:", e)
                 continue
-            for chat in list(self.runner_chats):
+            for chat in list(self.runner_chats if chats is None else chats):
                 try:
                     self.bot.send_photo(chat, png, caption=alerter.gap_caption(ev))
                 except Exception as e:
@@ -139,11 +140,30 @@ class Telegram:
                 except Exception as e:
                     print("alert send error:", chat, e)
 
+    def btc_tick(self, btc1, btc5, now=None):
+        """آخر هفته (شنبه و یکشنبه به وقت تهران): گپ‌های ۱ و ۵ دقیقه‌ی بیت‌کوین به مشترکان 🔔 (خواست کاربر، ۲۱ نوامبر)."""
+        import pandas as pd
+
+        from .config import is_weekend_tehran
+        from .gap_alerts import live_candles, m5_candles
+        now = now or pd.Timestamp.now(tz="UTC")
+        if not self.alert_chats or not is_weekend_tehran(now):
+            btc1.last_closed = btc5.last_closed = None    # بیرون آخر هفته: از نو شروع کن
+            return
+        df = live_candles("BTCUSD")
+        self.alert_tick(btc1, df, lambda: m5_candles("BTCUSD"))
+        self.m5gap_tick(btc5, df, chats=self.alert_chats)
+
     def alert_loop(self):
         from .gap_alerts import GapAlerter, M5GapAlerter, live_candles, m5_candles
         from .runner import RunnerWatcher
         alerter, runner, m5gaps = GapAlerter(), RunnerWatcher(), M5GapAlerter()
+        btc1, btc5 = GapAlerter("BTCUSD", sessions=False), M5GapAlerter("BTCUSD", sessions=False)
         while True:
+            try:
+                self.btc_tick(btc1, btc5)
+            except Exception as e:
+                print("btc alert error:", e)
             try:
                 df = live_candles() if (self.alert_chats or self.runner_chats) else None
                 if self.alert_chats:

@@ -18,7 +18,7 @@ RR = 1.0
 
 def pip(sym):
     """کوچک‌ترین واحد قیمت (پیپت)."""
-    if sym == "XAUUSD":
+    if sym in ("XAUUSD", "BTCUSD"):
         return 0.01
     if sym == "US30":
         return 0.1
