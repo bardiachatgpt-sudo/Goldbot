@@ -373,3 +373,7 @@ Gold, ALL legs, no MACD, 1:1 (user 21 Nov: "every gap you see"): with M5 structu
 (sells 49.0% −98, buys 46.4% −355; Jan–Mar −159, Apr–Jun −54, Jul–Nov −240; only June positive +7; by leg: L1 6,210
 47.9% −258, L2 1,938 47.0% −118, L3 1,008 49.1% −18, L4+ 765 46.1% −59). Without structure filter: no Off 10,724
 48.4% −338R; with Off 11,317 48.4% −369R. → no edge.
+Gold, only WITH the M5 structure trend (user 21 Nov): sells only in a bear channel / spike ↓, buys only in a bull
+channel / spike ↑, no trades in ranges; M5 target filter, all legs, no MACD, no Off, 1:1 (`chanbt.py`):
+3,125 trades 47.2% −175R. Sells 1,412 50.1% +4R (≈ break-even before spread; gold fell all year), buys 1,713 44.8%
+−179R. Every month negative (−2 … −25). Legs 1–4+ all negative. → no edge; the sell side only breaks even.
