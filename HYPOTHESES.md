@@ -396,3 +396,7 @@ Scripts: scratchpad `spike.py`, `spike_grid.py`, `spike_check.py`.
   Months (bm ≥ 2): +10 +25 −17 +6 +3 +9 +12 +16 +15 +2 +5; buys better than sells. Non-overlapping (≥ 20 candles
   apart) still +0.18R/trade. Caveats: one market, 11 months, many variants tried, commission unknown, holding up to
   200 min. Next checks: same rule unchanged on USDJPY/EURUSD; realistic one-at-a-time backtest.
+Money test (`spike_money.py`): one trade at a time, real spread from the file (buy at Ask, sell closed at Ask), 2R,
+compounding, 2 Jan → 17 Nov: bm ≥ 2: 362 trades 38.1% → $1,000 → $1,522 at 1% (max DD 25.6%), $2,151 at 2% (DD 45%);
+bm ≥ 3: 254 trades 41.7% → $1,733 at 1% (DD 11.5%), $2,847 at 2% (DD 22%). Jul–Nov only at 1%: $1,377 / $1,439.
+Commission not included.
