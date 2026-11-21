@@ -369,3 +369,7 @@ Leg 2 −123; every session negative. Avg stop $5.01 (median $3.79); with spread
 Gold, other variants (no M5 structure filter): no filter 9,524 48.3% −316R; MACD zone M1 A 4,863 49.1% −89
 (Jan–Mar −12, Apr–Jun −9, Jul–Nov −68); M1 B 1,947 49.1% −35 (−34 / +23 / −24); M5 A 4,983 47.2% −283;
 M5 B 2,115 48.1% −79 (−50 / −34 / +5). Best = M1 zone (~49%, ≈ −0.02R/trade) but still negative before spread.
+Gold, ALL legs, no MACD, 1:1 (user 21 Nov: "every gap you see"): with M5 structure filter (no Off) 9,921 47.7% −453R
+(sells 49.0% −98, buys 46.4% −355; Jan–Mar −159, Apr–Jun −54, Jul–Nov −240; only June positive +7; by leg: L1 6,210
+47.9% −258, L2 1,938 47.0% −118, L3 1,008 49.1% −18, L4+ 765 46.1% −59). Without structure filter: no Off 10,724
+48.4% −338R; with Off 11,317 48.4% −369R. → no edge.
