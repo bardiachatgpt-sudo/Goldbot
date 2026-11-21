@@ -366,3 +366,6 @@ M5 structure filter, legs 1–2, no Off, fixed 1:1, no spread: **8,614 trades, 4
 Sells 4,306 49.2% −66 (Apr–Jun +34); buys 4,308 45.9% −350 (gold fell 4330 → 3854 over the year). Leg 1 −293,
 Leg 2 −123; every session negative. Avg stop $5.01 (median $3.79); with spread $0.20 → −976R, $0.30 → −1,256R.
 → Same as USDJPY/EURUSD: no edge on gold M1 as defined.
+Gold, other variants (no M5 structure filter): no filter 9,524 48.3% −316R; MACD zone M1 A 4,863 49.1% −89
+(Jan–Mar −12, Apr–Jun −9, Jul–Nov −68); M1 B 1,947 49.1% −35 (−34 / +23 / −24); M5 A 4,983 47.2% −283;
+M5 B 2,115 48.1% −79 (−50 / −34 / +5). Best = M1 zone (~49%, ≈ −0.02R/trade) but still negative before spread.
