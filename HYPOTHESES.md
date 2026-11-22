@@ -400,3 +400,12 @@ Money test (`spike_money.py`): one trade at a time, real spread from the file (b
 compounding, 2 Jan → 17 Nov: bm ≥ 2: 362 trades 38.1% → $1,000 → $1,522 at 1% (max DD 25.6%), $2,151 at 2% (DD 45%);
 bm ≥ 3: 254 trades 41.7% → $1,733 at 1% (DD 11.5%), $2,847 at 2% (DD 22%). Jul–Nov only at 1%: $1,377 / $1,439.
 Commission not included.
+
+## Gold, Jan–Feb 2026, EA v1.30 rules (colour-free gaps, all legs, no filters, all hours, 1:1, one at a time)
+Stop at the last M1 swing (user 22 Nov) vs stop beyond candle 1. Script: scratchpad `swingbt.py`.
+| stop | trades | win % | R | after spread | avg / median stop | $1,000 at 1% (spread) |
+| last swing | 1,512 | 49.4 | −18 | −47 | $10.70 / $6.77 | $577 |
+| candle 1 | 3,207 | 47.4 | −167 | −263 | $7.19 / $4.64 | $61 |
+Swing stop = candle 1 in 35% of trades (otherwise a swing before candle 1, so a bigger stop and fewer trades because
+each trade lasts longer). Swing: sells 716 46.4% −52, buys 796 52.1% +34; Jan −11, Feb −7. Much better than the
+candle-1 stop but still slightly negative; only two months.
