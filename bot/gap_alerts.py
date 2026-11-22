@@ -58,10 +58,24 @@ class GapAlerter:
             self.last = p = {"side": side, "t1": t[i - 2], "t3": t[i], "chain": t[i], "gap_hi": zone[0],
                              "gap_lo": zone[1], "leg": leg_number(heads, h, l, i - 2, side),
                              "session": session_of(t[i]) if self.sessions else "Weekend", "close3": c[i]}
+            p.update(self.swing_sl(h, l, t, i, side))
             if p["session"] != "Off":                      # سشن Off: هشدار نمی‌دهد
                 events.append(("gap", dict(p, window=closed.tail(PICTURE_BARS))))
         self.last_closed = t[-1]
         return events
+
+    def swing_sl(self, h, l, t, i, side):
+        """حد ضرر در لحظه‌ی دیدن گپ (کاربر، ۲۲ نوامبر): از کندل ۳ (= i) به عقب، نزدیک‌ترین کندلی که همسایه‌ی راستش
+        بسته شده و کفش از کف هر دو همسایه پایین‌تر است (فروش: سقفش از هر دو بالاتر) → ۱ پیپت آن طرفش.
+        فقط سقف/کف، نه کلوز. همان قانون اکسپرت (SL_SWING)؛ اگر ورود دیرتر بخورد ممکن است کندل ۳ خودش سوینگ شود."""
+        from .gap import _r, pip
+        pp = pip(self.sym)
+        for k in range(i - 1, 0, -1):
+            if side > 0 and l[k] < l[k - 1] and l[k] < l[k + 1]:
+                return {"sl": _r(l[k] - pp), "sl_t": t[k]}
+            if side < 0 and h[k] > h[k - 1] and h[k] > h[k + 1]:
+                return {"sl": _r(h[k] + pp), "sl_t": t[k]}
+        return {"sl": None, "sl_t": None}
 
     # ------------------------------------------------------------ روند (داخلی؛ نام شاخص به کاربر گفته نمی‌شود)
     @staticmethod
@@ -92,8 +106,9 @@ class GapAlerter:
         m5 = f" · M5: {g['m5_state']}" if g.get("m5_state") and g["m5_state"] != "-" else ""
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
         tr = {1: "\n📈 With the trend", -1: "\n↩️ Against the trend"}.get(g.get("trend"), "")
+        sl = f"\n🛑 SL {self._fmt(g['sl'])}" if g.get("sl") is not None else ""
         return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}{m5}\n"
-                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}{tr}")
+                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}{sl}{tr}")
 
     def picture(self, g, m5=None):
         """m5: کندل‌های M5 بسته‌شده (اختیاری) → جعبه‌های ساختار M5 زیر کندل‌های M1؛ نامش در g['m5_state']."""
@@ -106,6 +121,8 @@ class GapAlerter:
         o, h, l, c = (w[k].values.astype(float) for k in ("Open", "High", "Low", "Close"))
         n, s = len(w), g["side"]
         lo, hi = l.min(), h.max()
+        if g.get("sl") is not None:                        # خط حد ضرر باید در عکس دیده شود
+            lo, hi = min(lo, g["sl"]), max(hi, g["sl"])
         pad = (hi - lo) * 0.05 or 1.0
         fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
         fig.patch.set_facecolor(BG)
@@ -129,10 +146,15 @@ class GapAlerter:
                     va="bottom" if s < 0 else "top", fontweight="bold", color=gc)
             ax.text(g3, l[g3] - pad * 0.3 if s < 0 else h[g3] + pad * 0.3, "3", ha="center",
                     va="top" if s < 0 else "bottom", fontweight="bold", color=gc)
+        if g.get("sl") is not None:                        # حد ضرر: از کندل سوینگ تا آخر عکس، با قیمت
+            a = max(w.index.searchsorted(g["sl_t"]) - 0.4, -0.5)
+            ax.hlines(g["sl"], a, n + 0.5, color="#DC2626", lw=1.8, zorder=7)
+            ax.text(n + 0.8, g["sl"], f"SL {self._fmt(g['sl'])}", color="#DC2626", fontsize=10, fontweight="bold",
+                    ha="left", va="center", zorder=8)
         step = max(1, n // 9)
         ax.set_xticks(range(0, n, step))
         ax.set_xticklabels([d.strftime("%H:%M") for d in w.index.tz_convert(TEHRAN)[::step]], fontsize=9)
-        ax.set_xlim(-1, n + 2)
+        ax.set_xlim(-1, n + (9 if g.get("sl") is not None else 2))
         ax.set_ylim(lo - pad, hi + pad * 3)
         ax.grid(color="#D6E3F2")
         for sp in ax.spines.values():

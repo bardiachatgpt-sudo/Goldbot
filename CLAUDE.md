@@ -24,6 +24,12 @@ described below for history. The "📈 With / ↩️ Against the trend" label wa
 the M5 structure boxes and state in the alert picture/caption STAY. Every gold 5-min gap (milky-white picture) now goes
 to the 🔔 subscribers too. So 🔔 subscribers get: gold 1-min gaps + gold 5-min gaps, and on Saturday/Sunday (Tehran)
 Bitcoin 1-min + 5-min gaps. No channel posts, no live trading.
+**SL in the 1-min alerts (22 Nov, user: "when we see the gap only the stop is known, no entry yet, so no TP"):** red
+line in the picture from the swing candle to the right edge + "SL price", and "🛑 SL price" in the caption
+(`GapAlerter.swing_sl`): from candle 3 back, the nearest candle whose right neighbour is closed and whose low is lower
+than both neighbours' lows (sell: high higher than both), 1 pipette beyond — same rule as the EA's `SL_SWING`. (If the
+entry comes after candle 4, candle 3 itself may become the swing; the user moves the stop by hand.) No entry, no TP.
+5-min gap pictures unchanged (no SL).
 
 Before 22 Nov (history): bottom bar 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts · 🔥 Runner alerts.
 - **🔔 Gold gap alerts** (17 Nov, `bot/gap_alerts.py`, button or `/alerts [on|off]`): a thread polls TradingView every

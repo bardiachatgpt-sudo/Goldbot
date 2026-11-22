@@ -568,7 +568,9 @@ class TestGapAlerts(unittest.TestCase):
         cap = a.gap_caption(g)
         self.assertIn("SELL gap", cap)
         self.assertNotIn("Entry", cap)
-        self.assertNotIn("SL", cap)
+        self.assertNotIn("TP", cap)
+        self.assertAlmostEqual(g["sl"], 4011.01)                    # سوینگ‌های: سقف کندل ۱ از هر دو همسایه بالاتر
+        self.assertIn("SL 4011.01", cap)
         self.assertEqual(a.picture(g)[:4], b"\x89PNG")
         self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: تکراری نیست
         self.assertEqual(a.poll(self.frame(rows[:41])), [])               # بعدش: پیام ورود نیست
