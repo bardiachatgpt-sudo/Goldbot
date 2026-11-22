@@ -244,6 +244,9 @@ var is set on Render it overrides the default — it must then be changed there 
   positions are open, each trade only ends at its own SL or TP (needs a HEDGING account; warning in the log
   otherwise); open trades tracked in `open_[]` so each result is drawn. `InpRiskPct` default now 1% (user: "we go on
   1% risk, I can change it by hand").
+  **v1.50 (22 Nov): candle-3 colour switch** (user): input `InpC3LikeC2` (default false = colour does not matter) +
+  chart button "Candle 3: SAME colour as 2 / any colour" → when on, a gap counts only if candle 3 has the same colour
+  as candle 2 (both bullish or both bearish); candle 1 never matters. Applies to the gaps used for legs too.
   **All filters off switch** (v1.10, user 22 Nov): input `InpNoFilters` (works in the Strategy Tester) and an on-chart
   button "Filters: ON / ALL OFF" (live chart only — buttons do not work in the tester) → trend, M5 structure, max leg
   and hours all off, every trigger taken (`UseStructure()/MaxLeg()/Hours()` wrap the inputs).

@@ -19,7 +19,7 @@
 //| Attach to an M1 chart.                                           |
 //+------------------------------------------------------------------+
 #property copyright "Goldbot"
-#property version   "1.40"
+#property version   "1.50"
 
 #include <Trade\Trade.mqh>
 
@@ -40,6 +40,7 @@ input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
 input ENUM_SL    InpSLMode       = SL_SWING;         // Where the stop-loss goes
 input double     InpSLValue      = 0.5;              // SL value (fraction or price distance, see SL mode)
 input string     InpSLEdits      = "";               // Hand-moved stops: "2026.01.15 10:32=4012.50; 2026.02.03 16:05=3998.20"
+input bool       InpC3LikeC2     = false;            // Candle 3 must be the same colour as candle 2 (false = colour does not matter)
 input bool       InpNoFilters    = false;            // ALL FILTERS OFF (structure, leg, hours) — every trigger
 input bool       InpUseStructure = false;            // M5 structure filter (TP inside the M5 box)
 input int        InpMaxLeg       = 0;                // Max leg (0 = all legs)
@@ -87,6 +88,7 @@ struct OpenTrade { ulong ticket; datetime t; double entry, sl, tp; int side, no;
 OpenTrade open_[];
 int      tradeNo = 0;
 bool     gEvery = true;                 // every trade (many at once) or one trade at a time
+bool     gC3LikeC2 = false;             // candle 3 must have the colour of candle 2
 
 //+------------------------------------------------------------------+
 // all filters off (input InpNoFilters, or the "Filters" button on a live chart)
@@ -97,6 +99,22 @@ ENUM_HOURS Hours()  { return gNoFilters ? HOURS_ALL : InpHours; }
 
 #define FBTN "GBG_filters_btn"
 #define MBTN "GBG_mode_btn"
+#define CBTN "GBG_c3_btn"
+void DrawC3Button()
+{
+   if(MQLInfoInteger(MQL_TESTER) && !MQLInfoInteger(MQL_VISUAL_MODE)) return;
+   if(ObjectFind(0, CBTN) < 0) ObjectCreate(0, CBTN, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, CBTN, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, CBTN, OBJPROP_XDISTANCE, 400);
+   ObjectSetInteger(0, CBTN, OBJPROP_YDISTANCE, 30);
+   ObjectSetInteger(0, CBTN, OBJPROP_XSIZE, 230);
+   ObjectSetInteger(0, CBTN, OBJPROP_YSIZE, 24);
+   ObjectSetString(0, CBTN, OBJPROP_TEXT, gC3LikeC2 ? "Candle 3: SAME colour as 2" : "Candle 3: any colour");
+   ObjectSetInteger(0, CBTN, OBJPROP_BGCOLOR, gC3LikeC2 ? clrKhaki : clrLightGray);
+   ObjectSetInteger(0, CBTN, OBJPROP_COLOR, clrBlack);
+   ObjectSetInteger(0, CBTN, OBJPROP_STATE, false);
+   ChartRedraw();
+}
 void DrawModeButton()
 {
    if(MQLInfoInteger(MQL_TESTER) && !MQLInfoInteger(MQL_VISUAL_MODE)) return;
@@ -130,6 +148,12 @@ void DrawFilterButton()
 
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
+   if(id == CHARTEVENT_OBJECT_CLICK && sparam == CBTN)
+   {
+      gC3LikeC2 = !gC3LikeC2;
+      PrintFormat("candle 3: %s", gC3LikeC2 ? "same colour as candle 2" : "any colour");
+      DrawC3Button();
+   }
    if(id == CHARTEVENT_OBJECT_CLICK && sparam == MBTN)
    {
       gEvery = !gEvery;
@@ -148,7 +172,9 @@ int OnInit()
 {
    gNoFilters = InpNoFilters;
    gEvery = InpEveryTrade;
+   gC3LikeC2 = InpC3LikeC2;
    DrawFilterButton();
+   DrawC3Button();
    DrawModeButton();
    if(gEvery && AccountInfoInteger(ACCOUNT_MARGIN_MODE) != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
       Print("WARNING: 'every trade' needs a HEDGING account; on a netting account a new trade changes the open one.");
@@ -167,6 +193,7 @@ void OnDeinit(const int reason)
 {
    ObjectDelete(0, FBTN);
    ObjectDelete(0, MBTN);
+   ObjectDelete(0, CBTN);
 }
 
 //+------------------------------------------------------------------+
@@ -189,7 +216,9 @@ int FindGap(const double &o[], const double &h[], const double &l[], const doubl
 {
    if(i < 2) return 0;
    double bLo = MathMin(o[i-1], c[i-1]), bHi = MathMax(o[i-1], c[i-1]);
-   // candle colours do not matter: only the gap shape made by candle 2 (user, 22 Nov)
+   // candle colours do not matter: only the gap shape made by candle 2 (user, 22 Nov);
+   // optional (user 22 Nov): candle 3 the same colour as candle 2
+   if(gC3LikeC2 && !((c[i-1] > o[i-1] && c[i] > o[i]) || (c[i-1] < o[i-1] && c[i] < o[i]))) return 0;
    if(l[i-2] > h[i])
    {
       double lo = h[i], hi = l[i-2];
