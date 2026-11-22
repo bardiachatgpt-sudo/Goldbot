@@ -115,8 +115,7 @@ class GapAlerter:
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
         tr = {1: "\n📈 With the trend", -1: "\n↩️ Against the trend"}.get(g.get("trend"), "")
         sl = f"\n🛑 SL {self._fmt(g['sl'])}" if g.get("sl") is not None else ""
-        hint = {"with": "\n✅ First gap WITH the last 5-min gap → likely TP",
-                "against": "\n⚠️ First gap AGAINST the last 5-min gap → likely SL"}.get(g.get("m5_hint"), "")
+        hint = {"with": "\n✅ With the 5-min gap, after its entry → likely TP"}.get(g.get("m5_hint"), "")
         return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}{m5}\n"
                 f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}{sl}{tr}{hint}")
 
@@ -265,12 +264,11 @@ def m5_frame(m1):
 
 # ------------------------------------------------------------------ معامله‌ی ۵ دقیقه (برای برچسب هشدار ۱ دقیقه)
 class M5TradeWatch:
-    """کاربر، ۲۲ نوامبر: بعد از هر گپ ۵ دقیقه (نه زنجیره)
-    - اولین گپ ۱ دقیقه‌ی خلاف جهت → «⚠️ likely SL»؛
-    - اولین گپ ۱ دقیقه‌ی هم‌جهت که کندل ۳ آن در/بعد از کندل ۱ دقیقه‌ای بسته شود که ورود ۵ دقیقه در آن خورد
-      (سقف کندل ۵ دقیقه‌ی قبلی + ۱ پیپت برای فروش، کف − ۱ پیپت برای خرید؛ اگر ورود وسط خود گپ بخورد هم حساب است)
-      و تا وقتی معامله‌ی ۵ دقیقه به حد ضرر (۱ پیپت آن طرف کندل ۱ گپ ۵ دقیقه) یا حد سود ۱:۱ نرسیده → «✅ likely TP».
-    کندل‌های ۵ دقیقه از کندل‌های ۱ دقیقه‌ی بسته‌شده ساخته می‌شوند (فقط بازه‌های کامل)."""
+    """کاربر، ۲۲ نوامبر (نسخه‌ی دوم: «فعلاً فقط حد سودها»): بعد از هر گپ ۵ دقیقه (نه زنجیره)، وقتی ورود ۵ دقیقه
+    خورد (سقف کندل ۵ دقیقه‌ی قبلی + ۱ پیپت برای فروش، کف − ۱ پیپت برای خرید)، **هر** گپ ۱ دقیقه‌ی هم‌جهت که کندل ۳ آن
+    در/بعد از کندل ۱ دقیقه‌ای بسته شود که ورود در آن خورد → «✅ likely TP»؛ تا وقتی گپ ۵ دقیقه پر نشده (خرید: قیمت تا
+    سقف کندل ۱ گپ ۵ دقیقه پایین آمد، فروش: تا کف کندل ۱ بالا رفت) و حد ضرر ۵ دقیقه (۱ پیپت آن طرف کندل ۱) نخورده.
+    گپ‌های خلاف جهت برچسب ندارند. کندل‌های ۵ دقیقه از کندل‌های ۱ دقیقه‌ی بسته‌شده ساخته می‌شوند."""
 
     def __init__(self, sym=ALERT_SYMBOL):
         from .gap import pip
@@ -284,13 +282,14 @@ class M5TradeWatch:
         try:
             c1 = m5.loc[ev["t1"]]
             sl5 = _r(float(c1["High"]) + self.pp if s < 0 else float(c1["Low"]) - self.pp)
+            fill = float(c1["Low"]) if s < 0 else float(c1["High"])      # لبه‌ی گپ سمت کندل ۱
         except Exception:
-            sl5 = None
-        self.ctx = {"side": s, "t3": ev["t3"], "end": ev["t3"] + pd.Timedelta(minutes=5), "sl5": sl5,
-                    "entry": None, "tp5": None, "trig": None, "done": False, "with": False, "against": False}
+            sl5 = fill = None
+        self.ctx = {"side": s, "t3": ev["t3"], "end": ev["t3"] + pd.Timedelta(minutes=5), "sl5": sl5, "fill": fill,
+                    "entry": None, "trig": None, "done": False}
 
     def update(self, df):
-        """کندل‌های ۱ دقیقه‌ی تازه‌ی بسته‌شده: ورود ۵ دقیقه خورد؟ معامله‌ی ۵ دقیقه تمام شد؟"""
+        """کندل‌های ۱ دقیقه‌ی تازه‌ی بسته‌شده: ورود ۵ دقیقه خورد؟ گپ ۵ دقیقه پر شد یا حد ضرر ۵ دقیقه خورد؟"""
         from .gap import _r
         from .runner import to_m5
         if df is None or len(df) < 3:
@@ -310,33 +309,20 @@ class M5TradeWatch:
             if ts < st["end"] or st["done"]:
                 continue
             hi, lo = float(bar["High"]), float(bar["Low"])
-            if (hi >= st["sl5"]) if s < 0 else (lo <= st["sl5"]):
-                st["done"] = True                          # حد ضرر ۵ دقیقه خورد
-                break
             if st["entry"] is None:
                 prev = ts.floor("5min") - pd.Timedelta(minutes=5)
-                if prev < st["t3"] or prev not in m5.index:
-                    continue
-                k = m5.loc[prev]
-                lvl = _r(float(k["High"]) + self.pp if s < 0 else float(k["Low"]) - self.pp)
-                if (hi >= lvl) if s < 0 else (lo <= lvl):
-                    risk = abs(st["sl5"] - lvl)
-                    st.update(entry=lvl, trig=ts, tp5=_r(lvl - risk if s < 0 else lvl + risk))
-            elif (lo <= st["tp5"]) if s < 0 else (hi >= st["tp5"]):
-                st["done"] = True                          # حد سود ۱:۱ معامله‌ی ۵ دقیقه خورد
+                if prev >= st["t3"] and prev in m5.index:
+                    k = m5.loc[prev]
+                    lvl = _r(float(k["High"]) + self.pp if s < 0 else float(k["Low"]) - self.pp)
+                    if (hi >= lvl) if s < 0 else (lo <= lvl):
+                        st.update(entry=lvl, trig=ts)
+            if (hi >= st["fill"]) if s < 0 else (lo <= st["fill"]):
+                st["done"] = True                          # گپ ۵ دقیقه پر شد (حد ضرر ۵ دقیقه هم آن طرف‌تر است)
 
     def hint(self, ev):
-        """"with" / "against" / None برای گپ ۱ دقیقه‌ی ev."""
+        """"with" (هر گپ هم‌جهت بعد از ورود ۵ دقیقه، تا پر شدن گپ) یا None."""
         st = self.ctx
-        if st is None or ev["t3"] + pd.Timedelta(minutes=1) <= st["end"]:
+        if (st is None or st["done"] or st["trig"] is None or ev["side"] != st["side"]
+                or ev["t3"] + pd.Timedelta(minutes=1) <= st["end"] or ev["t3"] < st["trig"]):
             return None
-        if ev["side"] != st["side"]:
-            if not st["against"]:
-                st["against"] = True
-                return "against"
-            return None
-        if (not st["with"] and st["entry"] is not None and not st["done"] and st["trig"] is not None
-                and ev["t3"] >= st["trig"]):
-            st["with"] = True
-            return "with"
-        return None
+        return "with"

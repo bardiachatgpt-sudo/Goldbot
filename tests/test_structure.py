@@ -575,31 +575,31 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: تکراری نیست
         self.assertEqual(a.poll(self.frame(rows[:41])), [])               # بعدش: پیام ورود نیست
 
-    def test_first_gap_with_and_against_the_5min_gap(self):
+    def test_gaps_with_the_5min_gap_after_its_entry(self):
         from bot.gap_alerts import M5TradeWatch, GapAlerter
         from bot.runner import to_m5
         R = TestRunner()
         UP = [(3996.5, 4002.2, 3996.4, 4001.8), (4001.8, 4001.9, 3999.0, 3999.1)]   # ورود ۵ دقیقه (4002.01) در 10:45
-        rows = R.rows(UP + [(3999.1, 3999.3, 3998.8, 3999.0)] * 4)
+        rows = R.rows(UP + [(3999.1, 3999.3, 3998.8, 3999.0)] * 3 + [(3999.0, 4006.5, 3998.9, 4006.2)] + [(4006, 4006, 4005, 4005)] * 2)
         df = R.frame(rows)
         T = lambda m: pd.Timestamp(f"2026-11-16 10:{m:02d}", tz="UTC")
         w = M5TradeWatch()
-        w.update(df.iloc[:45])                                          # شروع: تا 10:43
+        w.update(df.iloc[:45])
         w.new_gap({"side": -1, "t1": T(30), "t3": T(40)}, to_m5(df.iloc[:45]))
-        self.assertAlmostEqual(w.ctx["sl5"], 4011.01)
+        self.assertAlmostEqual(w.ctx["fill"], 4006.0)                   # کف کندل ۱ گپ فروش ۵ دقیقه
         ev = lambda side, m: {"side": side, "t3": T(m)}
-        self.assertIsNone(w.hint(ev(-1, 44)))                           # قبل از بسته شدن گپ ۵ دقیقه
-        w.update(df.iloc[:46])                                          # 10:44 بسته شد؛ ورود هنوز نه
-        self.assertIsNone(w.hint(ev(-1, 45)))                           # هم‌جهت ولی ورود ۵ دقیقه هنوز نخورده
-        w.update(df.iloc[:48])                                          # 10:45 و 10:46 بسته شدند → ورود 10:45
+        w.update(df.iloc[:46])
+        self.assertIsNone(w.hint(ev(-1, 45)))                           # ورود ۵ دقیقه هنوز نخورده
+        w.update(df.iloc[:48])                                          # ورود در 10:45
         self.assertEqual(w.ctx["trig"], T(45))
-        self.assertAlmostEqual(w.ctx["tp5"], 3993.01)
-        self.assertEqual(w.hint(ev(1, 46)), "against")
-        self.assertIsNone(w.hint(ev(1, 47)))                            # فقط اولین
         self.assertEqual(w.hint(ev(-1, 47)), "with")
-        self.assertIsNone(w.hint(ev(-1, 48)))
-        g = dict(ev(1, 46), gap_hi=4001, gap_lo=4000, leg=1, session="London", sl=3990, m5_hint="against")
-        self.assertIn("likely SL", GapAlerter().gap_caption(g))
+        self.assertEqual(w.hint(ev(-1, 48)), "with")                    # هر گپ هم‌جهت، نه فقط اولی
+        self.assertIsNone(w.hint(ev(1, 48)))                            # خلاف جهت: برچسب ندارد
+        w.update(df.iloc[:52])                                          # 10:50 تا 4006.5 بالا رفت: گپ پر شد
+        self.assertTrue(w.ctx["done"])
+        self.assertIsNone(w.hint(ev(-1, 51)))
+        g = dict(ev(-1, 47), gap_hi=4001, gap_lo=4000, leg=1, session="London", sl=4002, m5_hint="with")
+        self.assertIn("likely TP", GapAlerter().gap_caption(g))
 
     def test_swing_stop_with_equal_lows(self):
         from bot.gap_alerts import GapAlerter
