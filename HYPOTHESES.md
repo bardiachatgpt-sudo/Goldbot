@@ -421,3 +421,6 @@ drops the gap (like the EA). Script `ny90.py`.
   +12 −18 −3 −7; $1,000 at 1% with spread → $526.
 - Every trade (many open): 3,171 trades 47.0% −193R (−267); every month negative; $1,000 at 1% → $59.
 → No edge in the first NY 90 minutes either.
++ "stop for the day after 2 winners" (user 22 Nov; NY 90 min, one at a time; `ny90w.py`): after 2 wins that day
+769 trades 47.9% −33R (−49 spread), $1,000 at 1% → $590; after 2 wins IN A ROW 838 trades 48.7% −22R (−39), → $648.
+Without the rule −37R (−59), $526. Slightly less loss, still negative; sells ≈ +2…+6R, buys −28…−35R.
