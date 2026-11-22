@@ -220,6 +220,9 @@ var is set on Render it overrides the default — it must then be changed there 
   distance (`InpSLValue`). `InpSLEdits` = hand-moved stops for single trades in the backtest (user 18 Nov): "2026.01.15 10:32=4012.50; …",
   key = time of gap candle 1 (shown in each trade's result text and order comment); only those trades get the new
   stop, lot re-sized to keep risk %, TP = 1:RR from the new stop; later trades may change because of one-at-a-time.
+  **All filters off switch** (v1.10, user 22 Nov): input `InpNoFilters` (works in the Strategy Tester) and an on-chart
+  button "Filters: ON / ALL OFF" (live chart only — buttons do not work in the tester) → trend, M5 structure, max leg
+  and hours all off, every trigger taken (`UseTrend()/UseStructure()/MaxLeg()/Hours()` wrap the inputs).
   `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
   Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
   in the cloud) — fix compile errors from the user's MetaEditor messages.

@@ -22,7 +22,7 @@
 //| Attach to an M1 chart.                                           |
 //+------------------------------------------------------------------+
 #property copyright "Goldbot"
-#property version   "1.00"
+#property version   "1.10"
 
 #include <Trade\Trade.mqh>
 
@@ -41,6 +41,7 @@ input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
 input ENUM_SL    InpSLMode       = SL_CANDLE1;       // Where the stop-loss goes
 input double     InpSLValue      = 0.5;              // SL value (fraction or price distance, see SL mode)
 input string     InpSLEdits      = "";               // Hand-moved stops: "2026.01.15 10:32=4012.50; 2026.02.03 16:05=3998.20"
+input bool       InpNoFilters    = false;            // ALL FILTERS OFF (trend, structure, leg, hours) — every trigger
 input bool       InpUseTrend     = true;             // Trend filter (MACD 48,104,36 on M5)
 input bool       InpShowMACD     = true;             // Show the M5 MACD(48,104,36) under the chart
 input bool       InpUseStructure = false;            // M5 structure filter (TP inside the M5 box)
@@ -95,8 +96,44 @@ string   lastKey = "";
 bool     lastEdited = false;
 
 //+------------------------------------------------------------------+
+// all filters off (input InpNoFilters, or the "Filters" button on a live chart)
+bool gNoFilters = false;
+bool UseTrend()     { return !gNoFilters && InpUseTrend; }
+bool UseStructure() { return !gNoFilters && InpUseStructure; }
+int  MaxLeg()       { return gNoFilters ? 0 : InpMaxLeg; }
+ENUM_HOURS Hours()  { return gNoFilters ? HOURS_ALL : InpHours; }
+
+#define FBTN "GBG_filters_btn"
+void DrawFilterButton()
+{
+   if(MQLInfoInteger(MQL_TESTER) && !MQLInfoInteger(MQL_VISUAL_MODE)) return;
+   if(ObjectFind(0, FBTN) < 0) ObjectCreate(0, FBTN, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, FBTN, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, FBTN, OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, FBTN, OBJPROP_YDISTANCE, 30);
+   ObjectSetInteger(0, FBTN, OBJPROP_XSIZE, 170);
+   ObjectSetInteger(0, FBTN, OBJPROP_YSIZE, 24);
+   ObjectSetString(0, FBTN, OBJPROP_TEXT, gNoFilters ? "Filters: ALL OFF" : "Filters: ON");
+   ObjectSetInteger(0, FBTN, OBJPROP_BGCOLOR, gNoFilters ? clrOrange : clrLightGray);
+   ObjectSetInteger(0, FBTN, OBJPROP_COLOR, clrBlack);
+   ObjectSetInteger(0, FBTN, OBJPROP_STATE, false);
+   ChartRedraw();
+}
+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   if(id == CHARTEVENT_OBJECT_CLICK && sparam == FBTN)
+   {
+      gNoFilters = !gNoFilters;
+      PrintFormat("filters %s", gNoFilters ? "ALL OFF: every trigger is taken" : "ON (as set in the inputs)");
+      DrawFilterButton();
+   }
+}
+
 int OnInit()
 {
+   gNoFilters = InpNoFilters;
+   DrawFilterButton();
    if(_Period != PERIOD_M1)
       Print("GoldbotGapEA: attach to an M1 chart (the setup is defined on M1).");
    pp = InpPipette;
@@ -118,6 +155,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    if(macdHandle != INVALID_HANDLE) IndicatorRelease(macdHandle);
+   ObjectDelete(0, FBTN);
 }
 
 //+------------------------------------------------------------------+
@@ -293,7 +331,7 @@ int SessionMinutes(datetime local, int openH, int closeH)
 
 bool HoursOk(datetime server)
 {
-   if(InpHours == HOURS_ALL) return true;
+   if(Hours() == HOURS_ALL) return true;
    datetime utc = ToUTC(server);
    int m[3];
    m[0] = SessionMinutes(utc + 9 * 3600, 9, 18);                               // Tokyo
@@ -302,7 +340,7 @@ bool HoursOk(datetime server)
    for(int k = 0; k < 3; k++)
    {
       if(m[k] < 0) continue;
-      if(InpHours == HOURS_SESSIONS) return true;
+      if(Hours() == HOURS_SESSIONS) return true;
       if(m[k] < 90) return true;
    }
    return false;
@@ -313,7 +351,7 @@ bool HoursOk(datetime server)
 //+------------------------------------------------------------------+
 int TrendAt(datetime t)              // +1 up, -1 down, 0 unknown
 {
-   if(macdHandle == INVALID_HANDLE || !InpUseTrend) return 0;
+   if(macdHandle == INVALID_HANDLE || !UseTrend()) return 0;
    double b[];
    if(CopyBuffer(macdHandle, 0, t - 300, 1, b) != 1) return 0;
    if(b[0] > 0) return 1;
@@ -850,8 +888,8 @@ void OnNewBar()
    pend = true; pSide = side; pT1 = t[i-2]; pT3 = t[i]; pChain = t[i];
    pC1High = h[i-2]; pC1Low = l[i-2]; pC2High = h[i-1]; pC2Low = l[i-1]; pGapHi = zhi; pGapLo = zlo;
    pLeg = LegNumber(o, h, l, c, n, side);
-   int tr = InpUseTrend ? TrendAt(t[i] + 60) : side;
-   pTrendOk = !InpUseTrend || tr == side;
+   int tr = UseTrend() ? TrendAt(t[i] + 60) : side;
+   pTrendOk = !UseTrend() || tr == side;
    DrawBox("GBG" + TimeToString(pT1, TIME_DATE | TIME_MINUTES), pT1, pT3 + 60, pGapHi, pGapLo,
            side < 0 ? InpColSellGap : InpColBuyGap);
 }
@@ -884,10 +922,10 @@ void OnTick()
    double tp = R8(entry + pSide * InpRR * risk);
 
    string why = "";
-   if(InpMaxLeg > 0 && pLeg > InpMaxLeg) why = "leg";
+   if(MaxLeg() > 0 && pLeg > MaxLeg()) why = "leg";
    else if(!HoursOk(bar)) why = "hours";
    else if(!pTrendOk) why = "trend";
-   else if(InpUseStructure && !StructureOk(bar, pSide, tp)) why = "M5 structure";
+   else if(UseStructure() && !StructureOk(bar, pSide, tp)) why = "M5 structure";
    if(why != "")
    {
       Print(StringFormat("gap %s %s skipped: %s", TimeToString(pT1), pSide < 0 ? "SELL" : "BUY", why));
