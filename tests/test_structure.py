@@ -262,12 +262,15 @@ class TestGapSetup(unittest.TestCase):
         self.assertAlmostEqual(t["tp"], 102.01 - (111.01 - 102.01))    # ۱:۱
         self.assertEqual((t["result"], t["r"]), ("TP", 1.0))
 
-    def test_three_gap_candles_must_be_the_same_colour(self):
+    def test_gap_candle_colours_do_not_matter(self):
         from bot import gap
         o, h, l, c = candles(self.SELL)
         o[2], c[2] = 100.5, 101.5                                     # کندل ۳ سبز شد
+        o[0], c[0] = 108.5, 110                                       # کندل ۱ هم سبز
+        self.assertEqual(gap.find_gap(o, h, l, c, 2)[0], -1)          # فقط شکل گپ (کاربر، ۲۲ نوامبر)
+        self.assertEqual(gap.find_gap(o, h, l, c, 2, same_color=True)[0], 0)   # قانون قدیمی هنوز هست
+        o[1], c[1] = 108.5, 108.55                                    # بدنه‌ی کندل ۲ از فاصله رد نمی‌شود
         self.assertEqual(gap.find_gap(o, h, l, c, 2)[0], 0)
-        self.assertEqual(gap.find_gap(o, h, l, c, 2, same_color=False)[0], -1)
 
     def test_target_outside_the_m5_box_is_not_taken(self):
         from bot import gap
@@ -312,10 +315,10 @@ class TestGapSetup(unittest.TestCase):
                 (100.5, 102, 99, 99.5), (99.5, 102.5, 99.4, 102.2), (102.2, 102.3, 92, 92.5),     # فروش، حد سود
                 (92.5, 93, 91, 91.5), (91.5, 91.6, 85, 85.5), (85.5, 88, 84, 84.5)]              # گپ فروش دوم
         heads = gap.gap_heads(*candles(rows))
-        self.assertEqual(heads, [(0, -1), (5, -1)])
+        self.assertEqual(heads, [(0, -1), (4, -1)])                   # رنگ مهم نیست: کندل ۴ (سبز) کندل ۱ گپ دوم است
         o, h, l, c = candles(rows)
         self.assertEqual(gap.leg_number(heads, h, l, 0, -1), 1)       # اولین گپ این حرکت نزولی
-        self.assertEqual(gap.leg_number(heads, h, l, 5, -1), 2)       # قبلش در همین حرکت یک گپ فروش بوده
+        self.assertEqual(gap.leg_number(heads, h, l, 4, -1), 2)       # قبلش در همین حرکت یک گپ فروش بوده
         t = gap.trades(o, h, l, c, sym="XAUUSD")[0]
         self.assertEqual(t["leg"], 1)
 
@@ -432,8 +435,7 @@ class TestGapBacktest(unittest.TestCase):
             {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
         res = gap_backtest.run("XAUUSD", m1, "1", m5=m5)
         self.assertTrue(res["m5_filter"])
-        n0 = res["no_filter"][0]
-        self.assertLessEqual(res["trades"], n0)
+        self.assertGreater(res["no_filter"][0], 0)     # با «یکی در هر لحظه» فیلتر می‌تواند تعداد را کمی بیشتر هم کند
         txt = gap_backtest.report_text(res)
         self.assertIn("Not taken (1:1 target outside the M5 box)", txt)
         self.assertIn("Same data without the M5 filter", txt)

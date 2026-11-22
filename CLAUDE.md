@@ -96,8 +96,11 @@ var is set on Render it overrides the default — it must then be changed there 
   2% risk (final $ and growth %), totals, best/worst pair.
 
 ## The gap setup (bot/gap.py) — rules agreed with the user
-- Gap = exactly 3 candles. Sell: candle 1 low > candle 3 high, candle 2's body overlaps that space, and **all three
-  candles bearish** (buy: mirror, all bullish). Same-direction gaps that keep forming right behind it (2-3-4, 3-4-5 …)
+- Gap = exactly 3 candles. Sell: candle 1 low > candle 3 high and candle 2's body overlaps that space (buy: mirror).
+  **Candle colours do NOT matter** (user, 22 Nov, with a screenshot of a buy gap whose candle 1 was red: "only the gap
+  shape made by candle 2"; `gap.SAME_COLOR = False`; the old "all three same colour" rule from 17 Nov is still
+  available with `same_color=True`). Applies to everything in the bot (alerts, runner, 5-min pictures, BTC, backtests).
+  The MT5 files (EA, Gap Detector) still use the same-colour rule — not changed yet. Same-direction gaps that keep forming right behind it (2-3-4, 3-4-5 …)
   are ignored: candle 1, the box and the stop stay those of the FIRST gap. A separate or opposite gap replaces a
   waiting one. No invalidation (user's choice).
 - From the close of candle 3, compare each candle's high with the previous candle's high (buy: lows). Entry when

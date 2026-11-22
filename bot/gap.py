@@ -25,9 +25,16 @@ def pip(sym):
     return 0.001 if "JPY" in sym else 0.00001
 
 
-def find_gap(o, h, l, c, i, same_color=True):
+# رنگ کندل‌های گپ مهم نیست (کاربر، ۲۲ نوامبر): فقط شکل گپ — کف ۱ > سقف ۳ (فروش) یا سقف ۱ < کف ۳ (خرید) و
+# بدنه‌ی کندل ۲ از آن فاصله رد شود. قانون «هر سه هم‌رنگ» با same_color=True هنوز در دسترس است.
+SAME_COLOR = False
+
+
+def find_gap(o, h, l, c, i, same_color=None):
     """گپ با کندل ۳ = i: -1 فروش، +1 خرید، 0 نیست. (لبه‌ی بالا، لبه‌ی پایین) گپ هم برمی‌گرداند.
     same_color: هر سه کندل گپ هم‌رنگ باشند (فروش: هر سه نزولی، خرید: هر سه صعودی)."""
+    if same_color is None:
+        same_color = SAME_COLOR
     if i < 2:
         return 0, None
     b_lo, b_hi = min(o[i - 1], c[i - 1]), max(o[i - 1], c[i - 1])
@@ -80,7 +87,7 @@ def _exit(path, sl, tp, side):
     return None
 
 
-def gap_heads(o, h, l, c, same_color=True):
+def gap_heads(o, h, l, c, same_color=None):
     """همه‌ی گپ‌ها، مستقل از معامله‌ها: [(i1, side)]. گپ‌های زنجیره‌ای پشت‌سرهم (هم‌جهت) یک گپ حساب می‌شوند."""
     heads, last = [], {1: -10, -1: -10}
     for i in range(2, len(c)):
@@ -115,7 +122,7 @@ def _r(x):
 WATCH_BEFORE = 3        # چند کندل قبل از کندل ۱ هم در جدول عکس
 
 
-def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=True, skipped=None, max_leg=MAX_LEG, session_ok=None):
+def trades(o, h, l, c, sym="XAUUSD", allow=None, same_color=None, skipped=None, max_leg=MAX_LEG, session_ok=None):
     """معامله‌های ستاپ گپ روی کندل‌ها (آرایه‌ها). هر معامله:
     {side, gap: (i1, i3), gap_hi, gap_lo, entry_i, entry, sl, tp, exit_i, exit, result, r}
     و آخری ممکن است باز (exit_i=None) یا گپ در انتظار ورود (entry_i=None) باشد.
