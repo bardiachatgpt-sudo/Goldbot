@@ -228,6 +228,11 @@ var is set on Render it overrides the default — it must then be changed there 
   distance (`InpSLValue`). `InpSLEdits` = hand-moved stops for single trades in the backtest (user 18 Nov): "2026.01.15 10:32=4012.50; …",
   key = time of gap candle 1 (shown in each trade's result text and order comment); only those trades get the new
   stop, lot re-sized to keep risk %, TP = 1:RR from the new stop; later trades may change because of one-at-a-time.
+  **v1.30 (22 Nov) stop rule = last M1 swing, now the DEFAULT `InpSLMode = SL_SWING`** (user): at the entry
+  moment go back over closed M1 candles to the NEAREST one whose low is lower than the lows of both neighbours (sell:
+  high higher than both highs; highs/lows only, not closes; the right neighbour must be closed, so bar 2 is the newest
+  possible); a swing not beyond the entry is skipped and the search goes further back; SL = 1 pipette beyond it; TP =
+  1:RR from that stop; no swing in 1000 bars → gap skipped (`SwingSL`). The other SL modes still exist.
   **All filters off switch** (v1.10, user 22 Nov): input `InpNoFilters` (works in the Strategy Tester) and an on-chart
   button "Filters: ON / ALL OFF" (live chart only — buttons do not work in the tester) → trend, M5 structure, max leg
   and hours all off, every trigger taken (`UseStructure()/MaxLeg()/Hours()` wrap the inputs).

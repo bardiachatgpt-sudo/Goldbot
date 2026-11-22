@@ -19,7 +19,7 @@
 //| Attach to an M1 chart.                                           |
 //+------------------------------------------------------------------+
 #property copyright "Goldbot"
-#property version   "1.20"
+#property version   "1.30"
 
 #include <Trade\Trade.mqh>
 
@@ -27,7 +27,8 @@ enum ENUM_SL { SL_CANDLE1 = 0,    // Beyond candle 1 (the setup)
                SL_CANDLE2 = 1,    // Beyond candle 2
                SL_GAP_EDGE = 2,   // Beyond the gap edge (candle 1 low / high)
                SL_FRACTION = 3,   // Fraction of the candle-1 stop (SL value = 0.5 -> half)
-               SL_FIXED = 4 };    // Fixed price distance from entry (SL value = e.g. 3.0 dollars)
+               SL_FIXED = 4,      // Fixed price distance from entry (SL value = e.g. 3.0 dollars)
+               SL_SWING = 5 };    // Last M1 swing: buy = nearest low lower than both neighbours (sell: high)
 
 enum ENUM_HOURS { HOURS_ALL = 0,          // All hours
                   HOURS_SESSIONS = 1,     // Tokyo / London / New York (no Off)
@@ -35,7 +36,7 @@ enum ENUM_HOURS { HOURS_ALL = 0,          // All hours
 
 input double     InpRiskPct      = 2.0;              // Risk per trade (% of balance)
 input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
-input ENUM_SL    InpSLMode       = SL_CANDLE1;       // Where the stop-loss goes
+input ENUM_SL    InpSLMode       = SL_SWING;         // Where the stop-loss goes
 input double     InpSLValue      = 0.5;              // SL value (fraction or price distance, see SL mode)
 input string     InpSLEdits      = "";               // Hand-moved stops: "2026.01.15 10:32=4012.50; 2026.02.03 16:05=3998.20"
 input bool       InpNoFilters    = false;            // ALL FILTERS OFF (structure, leg, hours) — every trigger
@@ -863,6 +864,32 @@ void OnNewBar()
            side < 0 ? InpColSellGap : InpColBuyGap);
 }
 
+// Stop at the last M1 swing (user, 22 Nov): going back from now, the nearest CLOSED candle whose low is lower than the
+// lows of the candles on both sides (sell: high higher than both). Only highs/lows count, not closes. The right-hand
+// neighbour must be closed too (so the newest possible swing is bar 2). A swing on the wrong side of the entry (for a
+// buy: not below the entry) is skipped and the search goes further back. SL = 1 pipette beyond it.
+double SwingSL(int side, double entry)
+{
+   int n = 1000;
+   double h[], l[];
+   ArraySetAsSeries(h, true); ArraySetAsSeries(l, true);
+   if(CopyHigh(_Symbol, PERIOD_M1, 0, n, h) != n || CopyLow(_Symbol, PERIOD_M1, 0, n, l) != n) return 0;
+   for(int k = 2; k < n - 1; k++)
+   {
+      if(side > 0 && l[k] < l[k-1] && l[k] < l[k+1])
+      {
+         double sl = R8(l[k] - pp);
+         if(sl < entry) return sl;
+      }
+      if(side < 0 && h[k] > h[k-1] && h[k] > h[k+1])
+      {
+         double sl = R8(h[k] + pp);
+         if(sl > entry) return sl;
+      }
+   }
+   return 0;
+}
+
 void OnTick()
 {
    CheckClosedTrade();
@@ -883,6 +910,11 @@ void OnTick()
    if(InpSLMode == SL_GAP_EDGE) sl = R8(pSide < 0 ? pGapHi + pp : pGapLo - pp);
    if(InpSLMode == SL_FRACTION) sl = R8(entry - pSide * InpSLValue * MathAbs(sl1 - entry));
    if(InpSLMode == SL_FIXED)    sl = R8(entry - pSide * InpSLValue);
+   if(InpSLMode == SL_SWING)
+   {
+      sl = SwingSL(pSide, entry);
+      if(sl == 0) { Print("no swing found for the stop, gap skipped"); pend = false; return; }
+   }
    double edited;
    bool isEdited = EditedSL(pT1, edited);
    if(isEdited) sl = R8(edited);                                // this trade's stop moved by hand
