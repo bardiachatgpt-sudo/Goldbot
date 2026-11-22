@@ -100,7 +100,7 @@ var is set on Render it overrides the default — it must then be changed there 
   **Candle colours do NOT matter** (user, 22 Nov, with a screenshot of a buy gap whose candle 1 was red: "only the gap
   shape made by candle 2"; `gap.SAME_COLOR = False`; the old "all three same colour" rule from 17 Nov is still
   available with `same_color=True`). Applies to everything in the bot (alerts, runner, 5-min pictures, BTC, backtests).
-  The MT5 files (EA, Gap Detector) still use the same-colour rule — not changed yet. Same-direction gaps that keep forming right behind it (2-3-4, 3-4-5 …)
+  The EA follows it since v1.20; the Gap Detector indicator still uses the same-colour rule — not changed yet. Same-direction gaps that keep forming right behind it (2-3-4, 3-4-5 …)
   are ignored: candle 1, the box and the stop stay those of the FIRST gap. A separate or opposite gap replaces a
   waiting one. No invalidation (user's choice).
 - From the close of candle 3, compare each candle's high with the previous candle's high (buy: lows). Entry when
@@ -209,8 +209,9 @@ var is set on Render it overrides the default — it must then be changed there 
 - `mt5/GoldbotGapEA.mq5` — MT5 Expert Advisor for the user's own Strategy Tester review (18 Nov): the M1 gap setup
   exactly as the bot (same find_gap, chains, entry 1 pipette beyond the previous candle, SL beyond candle 1, one
   trade at a time); entry fires when the chart price (Bid) reaches the level — sell at Bid, buy at Ask (user accepts
-  the spread); TP = risk × InpRR; lot from InpRiskPct of balance. Switchable filters: trend (MACD 48,104,36 main line
-  on M5 at candle-3 close: < 0 sells only, > 0 buys only), M5 structure (port of structure3.segment + mtf._edges:
+  the spread); TP = risk × InpRR; lot from InpRiskPct of balance. **v1.20 (22 Nov): MACD/trend filter REMOVED entirely
+  (user: "remove MACD from the expert"), gap colours do not matter (same as the bot), hours default = All.**
+  Switchable filters: M5 structure (port of structure3.segment + mtf._edges:
   TP inside the M5 box of 500 closed M5 bars), max leg, hours (all / sessions / first 90 min). Broker time zone auto-detected (`DetectServerTime`: server hour
   of each weekly open vs Sunday 17:00 NY, metals 18:00 → server = NY + k, or UTC + g if that fits better; printed in
   the Experts log; `InpServerMinusNY` = 99 auto, else manual). Every colour is an input (gap boxes, entry/SL/TP
@@ -222,8 +223,7 @@ var is set on Render it overrides the default — it must then be changed there 
   stop, lot re-sized to keep risk %, TP = 1:RR from the new stop; later trades may change because of one-at-a-time.
   **All filters off switch** (v1.10, user 22 Nov): input `InpNoFilters` (works in the Strategy Tester) and an on-chart
   button "Filters: ON / ALL OFF" (live chart only — buttons do not work in the tester) → trend, M5 structure, max leg
-  and hours all off, every trigger taken (`UseTrend()/UseStructure()/MaxLeg()/Hours()` wrap the inputs).
-  `InpShowMACD` adds the same M5 MACD(48,104,36) in a sub-window of the M1 chart (ChartIndicatorAdd).
+  and hours all off, every trigger taken (`UseStructure()/MaxLeg()/Hours()` wrap the inputs).
   Draws gap boxes, entry arrows, SL/TP/entry lines and "#n ±xR WIN/LOSS" on the chart. Never compiled here (no MT5
   in the cloud) — fix compile errors from the user's MetaEditor messages.
 - `mt5/GapDetectorIndicator.mq5` ("Gap Detector Indicator", renamed at the user's request) — simple MT5 indicator, any symbol, (18 Nov): draws the gaps of whatever timeframe the chart shows

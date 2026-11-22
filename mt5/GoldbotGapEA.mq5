@@ -2,8 +2,8 @@
 //| GoldbotGapEA.mq5                                                 |
 //| Gap setup on M1 (same rules as the Goldbot Telegram bot).        |
 //|                                                                  |
-//| SELL gap: 3 bearish candles, candle 1 low > candle 3 high, the   |
-//| body of candle 2 crosses that space (BUY: mirror).               |
+//| SELL gap: candle 1 low > candle 3 high and the body of candle 2  |
+//| crosses that space (BUY: mirror). Candle colours do not matter.  |
 //| Chained gaps right behind the first one (2-3-4, 3-4-5 ...) are   |
 //| ignored; a separate or opposite gap replaces a waiting one.      |
 //| Entry: after candle 3 closes, SELL when the chart price (Bid)    |
@@ -12,9 +12,6 @@
 //| SL: 1 pipette beyond candle 1. TP: risk x RR. One trade at once. |
 //| Lot: risk % of the balance.                                      |
 //| Filters (each can be switched on/off):                           |
-//|  - Trend: MACD(48,104,36) main line on M5 (the grey bars in MT5) |
-//|    < 0 -> only sells, > 0 -> only buys (checked when candle 3    |
-//|    closes).                                                      |
 //|  - M5 structure: the TP must lie inside the M5 structure box     |
 //|    of that moment (500 closed M5 candles; same algorithm as the  |
 //|    bot: spike / channel / trading range on closes).              |
@@ -22,7 +19,7 @@
 //| Attach to an M1 chart.                                           |
 //+------------------------------------------------------------------+
 #property copyright "Goldbot"
-#property version   "1.10"
+#property version   "1.20"
 
 #include <Trade\Trade.mqh>
 
@@ -41,12 +38,10 @@ input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
 input ENUM_SL    InpSLMode       = SL_CANDLE1;       // Where the stop-loss goes
 input double     InpSLValue      = 0.5;              // SL value (fraction or price distance, see SL mode)
 input string     InpSLEdits      = "";               // Hand-moved stops: "2026.01.15 10:32=4012.50; 2026.02.03 16:05=3998.20"
-input bool       InpNoFilters    = false;            // ALL FILTERS OFF (trend, structure, leg, hours) — every trigger
-input bool       InpUseTrend     = true;             // Trend filter (MACD 48,104,36 on M5)
-input bool       InpShowMACD     = true;             // Show the M5 MACD(48,104,36) under the chart
+input bool       InpNoFilters    = false;            // ALL FILTERS OFF (structure, leg, hours) — every trigger
 input bool       InpUseStructure = false;            // M5 structure filter (TP inside the M5 box)
 input int        InpMaxLeg       = 0;                // Max leg (0 = all legs)
-input ENUM_HOURS InpHours        = HOURS_SESSIONS;   // Trading hours
+input ENUM_HOURS InpHours        = HOURS_ALL;        // Trading hours
 input int        InpServerMinusNY = 99;              // Server time minus New York time (hours; 99 = auto-detect)
 input double     InpPipette      = 0.0;              // Pipette (0 = auto: gold 0.01, else Point)
 input bool       InpDraw         = true;             // Draw gaps and trades on the chart
@@ -74,7 +69,6 @@ CTrade trade;
 int    gNY = 7;
 bool   gUTC = false;
 int    gUTCoff = 0;
-int    macdHandle = INVALID_HANDLE;
 double pp;                       // pipette
 datetime lastBar = 0;
 
@@ -84,7 +78,6 @@ int      pSide;                  // -1 sell, +1 buy
 datetime pT1, pT3, pChain;
 double   pC1High, pC1Low, pC2High, pC2Low, pGapHi, pGapLo;
 int      pLeg;
-bool     pTrendOk;
 
 // open trade bookkeeping (for drawing the result)
 ulong    lastTicket = 0;
@@ -98,7 +91,6 @@ bool     lastEdited = false;
 //+------------------------------------------------------------------+
 // all filters off (input InpNoFilters, or the "Filters" button on a live chart)
 bool gNoFilters = false;
-bool UseTrend()     { return !gNoFilters && InpUseTrend; }
 bool UseStructure() { return !gNoFilters && InpUseStructure; }
 int  MaxLeg()       { return gNoFilters ? 0 : InpMaxLeg; }
 ENUM_HOURS Hours()  { return gNoFilters ? HOURS_ALL : InpHours; }
@@ -142,19 +134,11 @@ int OnInit()
    DetectServerTime();
    trade.SetExpertMagicNumber(InpMagic);
    trade.SetDeviationInPoints(InpDeviation);
-   if(InpUseTrend || InpShowMACD)
-   {
-      macdHandle = iMACD(_Symbol, PERIOD_M5, 48, 104, 36, PRICE_CLOSE);
-      if(macdHandle == INVALID_HANDLE) { Print("iMACD failed"); return(INIT_FAILED); }
-      if(InpShowMACD)                        // the same M5 MACD the filter uses, in a window under the M1 chart
-         ChartIndicatorAdd(0, (int)ChartGetInteger(0, CHART_WINDOWS_TOTAL), macdHandle);
-   }
    return(INIT_SUCCEEDED);
 }
 
 void OnDeinit(const int reason)
 {
-   if(macdHandle != INVALID_HANDLE) IndicatorRelease(macdHandle);
    ObjectDelete(0, FBTN);
 }
 
@@ -178,14 +162,13 @@ int FindGap(const double &o[], const double &h[], const double &l[], const doubl
 {
    if(i < 2) return 0;
    double bLo = MathMin(o[i-1], c[i-1]), bHi = MathMax(o[i-1], c[i-1]);
-   bool red   = (c[i-2] < o[i-2] && c[i-1] < o[i-1] && c[i] < o[i]);
-   bool green = (c[i-2] > o[i-2] && c[i-1] > o[i-1] && c[i] > o[i]);
-   if(l[i-2] > h[i] && red)
+   // candle colours do not matter: only the gap shape made by candle 2 (user, 22 Nov)
+   if(l[i-2] > h[i])
    {
       double lo = h[i], hi = l[i-2];
       if(MathMax(lo, bLo) < MathMin(hi, bHi)) { zhi = hi; zlo = lo; return -1; }
    }
-   if(h[i-2] < l[i] && green)
+   if(h[i-2] < l[i])
    {
       double lo = h[i-2], hi = l[i];
       if(MathMax(lo, bLo) < MathMin(hi, bHi)) { zhi = hi; zlo = lo; return 1; }
@@ -346,18 +329,6 @@ bool HoursOk(datetime server)
    return false;
 }
 
-//+------------------------------------------------------------------+
-//| Trend: MACD(48,104,36) main line on the M5 candle closed at t     |
-//+------------------------------------------------------------------+
-int TrendAt(datetime t)              // +1 up, -1 down, 0 unknown
-{
-   if(macdHandle == INVALID_HANDLE || !UseTrend()) return 0;
-   double b[];
-   if(CopyBuffer(macdHandle, 0, t - 300, 1, b) != 1) return 0;
-   if(b[0] > 0) return 1;
-   if(b[0] < 0) return -1;
-   return 0;
-}
 
 //+------------------------------------------------------------------+
 //| M5 structure (port of bot/structure3.py segment + mtf._edges)     |
@@ -888,8 +859,6 @@ void OnNewBar()
    pend = true; pSide = side; pT1 = t[i-2]; pT3 = t[i]; pChain = t[i];
    pC1High = h[i-2]; pC1Low = l[i-2]; pC2High = h[i-1]; pC2Low = l[i-1]; pGapHi = zhi; pGapLo = zlo;
    pLeg = LegNumber(o, h, l, c, n, side);
-   int tr = UseTrend() ? TrendAt(t[i] + 60) : side;
-   pTrendOk = !UseTrend() || tr == side;
    DrawBox("GBG" + TimeToString(pT1, TIME_DATE | TIME_MINUTES), pT1, pT3 + 60, pGapHi, pGapLo,
            side < 0 ? InpColSellGap : InpColBuyGap);
 }
@@ -924,7 +893,6 @@ void OnTick()
    string why = "";
    if(MaxLeg() > 0 && pLeg > MaxLeg()) why = "leg";
    else if(!HoursOk(bar)) why = "hours";
-   else if(!pTrendOk) why = "trend";
    else if(UseStructure() && !StructureOk(bar, pSide, tp)) why = "M5 structure";
    if(why != "")
    {
