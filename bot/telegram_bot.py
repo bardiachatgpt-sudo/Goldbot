@@ -124,7 +124,11 @@ class Telegram:
 
     def _m5_hint(self, sym, ev):
         """برچسب اولین گپ خلاف جهت / هم‌جهت بعد از گپ ۵ دقیقه (قانون در gap_alerts.M5TradeWatch)."""
-        h = self._watch(sym).hint(ev)
+        w = self._watch(sym)
+        info = w.entry_info(ev)                          # اولین گپ هم‌جهت: ورود ۵ دقیقه خورده یا نه (روی عکس)
+        if info:
+            ev["m5_entry"] = info
+        h = w.hint(ev)
         if h:
             ev["m5_hint"] = h
 

@@ -590,6 +590,12 @@ class TestGapAlerts(unittest.TestCase):
         ev = lambda side, m: {"side": side, "t3": T(m)}
         w.update(df.iloc[:46])
         self.assertIsNone(w.hint(ev(-1, 45)))                           # ورود ۵ دقیقه هنوز نخورده
+        info = w.entry_info(ev(-1, 45))                                 # اولین هم‌جهت: «هنوز نخورده» + سطح فعلی
+        self.assertIsNone(info["trig"])
+        self.assertAlmostEqual(info["level"], 4002.01)
+        self.assertIsNone(w.entry_info(ev(-1, 46)))                      # فقط اولین
+        g0 = dict(ev(-1, 45), gap_hi=4001, gap_lo=4000, leg=1, session="London", sl=4002, m5_entry=info)
+        self.assertIn("NOT triggered yet", GapAlerter().gap_caption(g0))
         w.update(df.iloc[:48])                                          # ورود در 10:45
         self.assertEqual(w.ctx["trig"], T(45))
         self.assertEqual(w.hint(ev(-1, 47)), "with")
