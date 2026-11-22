@@ -136,8 +136,7 @@ class TestStructureBot(unittest.TestCase):
         self.assertEqual([b.callback_data for row in kb.keyboard for b in row],
                          ["sxp:XAUUSD", "sxp:USDJPY", "sxp:EURUSD"])
         self.assertEqual([b["text"] for row in tg.menu().keyboard for b in row],
-                         ["📐 Structure", "🧪 Gap backtest", "🌍 All pairs", "🔔 Gold gap alerts",
-                          "🔥 Runner alerts"])
+                         ["🔔 Gold gap alerts"])                     # فقط هشدار گپ (کاربر، ۲۲ نوامبر)
 
     def test_every_timeframe_can_be_chosen(self):
         tfs = [b.callback_data for row in make_bot().structure_tf_keyboard("US30").keyboard for b in row]
@@ -595,6 +594,7 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(tg.bot.send_photo.call_count, 1)
         cap = tg.bot.send_photo.call_args.kwargs["caption"]
         self.assertIn("BTCUSD M1", cap)
+        self.assertNotIn("trend", cap)                                # برچسب روند حذف شد
         self.assertIn("Weekend", cap)
         tg.bot.send_photo.reset_mock()
         mon = pd.Timestamp("2026-11-23 10:00", tz="UTC")              # دوشنبه: هیچ

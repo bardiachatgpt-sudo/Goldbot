@@ -13,7 +13,7 @@ from telebot import types
 from .config import MIN_BARS, PERIODS, STRUCTURE_BARS, STRUCTURE_SYMBOLS, TIMEFRAMES, label
 from .data import get_closed_candles
 
-VERSION = "gold runner alerts · gold M1 gap alerts · structure · gold, USDJPY, EURUSD · M1 to D1 · M1 + M5 with the gap setup · gap backtest M1/M5/M15"
+VERSION = "gap alerts only · gold 1-min and 5-min gaps · bitcoin on Saturday and Sunday"
 MENU_STRUCTURE = "📐 Structure"
 MENU_BACKTEST = "🧪 Gap backtest"
 MENU_ALL = "🌍 All pairs"
@@ -22,16 +22,10 @@ MENU_RUNNER = "🔥 Runner alerts"
 RUNNER_FILE = "runner_subs.json"        # چت‌هایی که هشدار رانر را روشن کرده‌اند (با دیپلوی تازه پاک می‌شود)
 ALERT_FILE = "alert_subs.json"          # چت‌هایی که هشدار گپ طلا را روشن کرده‌اند (با دیپلوی تازه پاک می‌شود)
 ALERT_POLL = 15                         # ثانیه بین هر بار گرفتن کندل‌ها
-HELP = ("📐 This bot only draws market structure (spike / channel / trading range) on the last "
-        f"{STRUCTURE_BARS} candles, plus a zoom on the last two structures.\n"
-        "Pick a pair, then a timeframe.\n\n"
-        "🔬 M1 + M5: M1 candles; each M5 structure is a light-blue box (range flat, channel slanted) with its "
-        "top and bottom price, and the M1 gap setup on it (gap, entry, stop, 1:1 target, result).\n\n"
-        "🧪 Gap backtest: pick a pair and M1, M5 or M15; the gap setup runs on all available candles.\n\n"
-        "🔔 Gold gap alerts: a picture of every gold M1 gap as it forms, with the M5 structure.\n\n"
-        "🔥 Runner alerts: a gold 5-min gap, then the first 1-min gap the same way → picture (possible strong setup).\n\n"
-        "/structure · /structure XAUUSD 5  (timeframes: " + ", ".join(
-            f"{k}={v}" for k, v in TIMEFRAMES.items()) + ") · /structure XAUUSD mtf")
+HELP = ("🔔 Gap alerts only.\n"
+        "Tap 🔔 Gold gap alerts to turn them on or off.\n"
+        "• Gold: every 1-min gap (with the 5-min structure) and every 5-min gap.\n"
+        "• Saturday and Sunday (Tehran time): Bitcoin 1-min and 5-min gaps too.")
 
 
 class Telegram:
@@ -48,10 +42,8 @@ class Telegram:
     # ------------------------------------------------------------ دکمه‌ها
     def menu(self):
         """دکمه‌ی ثابت پایین چت."""
-        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=3)
-        kb.add(types.KeyboardButton(MENU_STRUCTURE), types.KeyboardButton(MENU_BACKTEST),
-               types.KeyboardButton(MENU_ALL))
-        kb.row(types.KeyboardButton(MENU_ALERTS), types.KeyboardButton(MENU_RUNNER))
+        kb = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
+        kb.add(types.KeyboardButton(MENU_ALERTS))          # فقط هشدار گپ (کاربر، ۲۲ نوامبر: «هیچ چیز دیگری نباشد»)
         return kb
 
     # ------------------------------------------------------------ هشدار گپ طلا
@@ -128,7 +120,7 @@ class Telegram:
                 m5 = m5_source() if m5_source else None
             except Exception as e:
                 print("alert M5 error:", e)
-            ev["trend"] = alerter.trend(ev, m5)
+            # برچسب «با روند / خلاف روند» حذف شد (کاربر، ۲۲ نوامبر)
             try:
                 png = alerter.picture(ev, m5)
             except Exception as e:
@@ -155,9 +147,9 @@ class Telegram:
         self.m5gap_tick(btc5, df, chats=self.alert_chats)
 
     def alert_loop(self):
+        """فقط هشدار گپ (کاربر، ۲۲ نوامبر): گپ‌های ۱ و ۵ دقیقه‌ی طلا، و شنبه/یکشنبه بیت‌کوین، به مشترکان 🔔."""
         from .gap_alerts import GapAlerter, M5GapAlerter, live_candles, m5_candles
-        from .runner import RunnerWatcher
-        alerter, runner, m5gaps = GapAlerter(), RunnerWatcher(), M5GapAlerter()
+        alerter, m5gaps = GapAlerter(), M5GapAlerter()
         btc1, btc5 = GapAlerter("BTCUSD", sessions=False), M5GapAlerter("BTCUSD", sessions=False)
         while True:
             try:
@@ -165,17 +157,12 @@ class Telegram:
             except Exception as e:
                 print("btc alert error:", e)
             try:
-                df = live_candles() if (self.alert_chats or self.runner_chats) else None
                 if self.alert_chats:
+                    df = live_candles()
                     self.alert_tick(alerter, df, m5_candles)
+                    self.m5gap_tick(m5gaps, df, chats=self.alert_chats)
                 else:
-                    alerter.last_closed = None         # کسی گوش نمی‌دهد: وقتی روشن شد از همان لحظه شروع کن
-                if self.runner_chats:
-                    self.runner_tick(runner, df)
-                    self.m5gap_tick(m5gaps, df)
-                else:
-                    runner.last_m1 = None
-                    m5gaps.last_closed = None
+                    alerter.last_closed = m5gaps.last_closed = None   # کسی گوش نمی‌دهد: از همان لحظه‌ی روشن شدن
             except Exception as e:
                 print("alert loop error:", e)
             time.sleep(ALERT_POLL)
@@ -477,111 +464,29 @@ class Telegram:
 
     # ------------------------------------------------------------ دستورها
     def _register_handlers(self):
+        """فقط هشدار گپ؛ ساختار، بک‌تست، همه‌ی جفت‌ها و رانر از ربات برداشته شدند (کاربر، ۲۲ نوامبر).
+        کدشان در فایل‌ها مانده ولی هیچ دکمه یا دستوری به آن‌ها نمی‌رسد."""
         bot = self.bot
 
         @bot.message_handler(commands=["start", "help"])
         def on_start(m):
             bot.send_message(m.chat.id, f"{HELP}\n\n🆕 Version: {VERSION}", reply_markup=self.menu())
-            self.ask_structure(m.chat.id)
-
-        @bot.message_handler(commands=["structure", "sx"])
-        def on_structure(m):
-            parts = m.text.split()
-            sym = parts[1].upper() if len(parts) > 1 else None
-            if sym is None:
-                self.ask_structure(m.chat.id)
-            elif sym not in STRUCTURE_SYMBOLS:
-                bot.send_message(m.chat.id, f"Unknown pair. Available: {', '.join(STRUCTURE_SYMBOLS)}")
-            elif len(parts) > 2 and parts[2].lower() in ("mtf", "1+5", "m1m5"):  # /structure XAUUSD mtf
-                self.send_mtf(m.chat.id, sym)
-            elif len(parts) > 2 and parts[2].upper() in TIMEFRAMES:          # /structure EURUSD 5
-                self.send_structure(m.chat.id, sym, parts[2].upper())
-            else:
-                self.ask_structure_tf(m.chat.id, sym)
-
-        @bot.message_handler(commands=["backtest", "bt"])
-        def on_backtest(m):
-            from .gap_backtest import BT_TIMEFRAMES
-            parts = m.text.split()
-            sym = parts[1].upper() if len(parts) > 1 else None
-            if sym is not None and sym not in STRUCTURE_SYMBOLS:
-                bot.send_message(m.chat.id, f"Unknown pair. Available: {', '.join(STRUCTURE_SYMBOLS)}")
-            elif sym and len(parts) > 3 and parts[2] in BT_TIMEFRAMES and parts[3].upper() in PERIODS:
-                self.send_gap_backtest(m.chat.id, sym, parts[2], parts[3].upper())   # /backtest XAUUSD 1 L
-            elif sym and len(parts) > 2 and parts[2] in BT_TIMEFRAMES:          # /backtest XAUUSD 5 → بازه؟
-                self.ask_period(m.chat.id, sym, parts[2])
-            else:
-                self.ask_backtest(m.chat.id, sym)
 
         @bot.message_handler(commands=["alerts"])
         def on_alerts(m):                                        # /alerts · /alerts on · /alerts off
             parts = m.text.split()
             self.toggle_alerts(m.chat.id, None if len(parts) < 2 else parts[1].lower() == "on")
 
-        @bot.message_handler(commands=["runner"])
-        def on_runner(m):                                        # /runner · /runner on · /runner off
-            parts = m.text.split()
-            self.toggle_runner(m.chat.id, None if len(parts) < 2 else parts[1].lower() == "on")
-
         @bot.message_handler(func=lambda m: True)
-        def on_text(m):                                          # دکمه‌های پایین چت یا هر پیام دیگر
-            if (m.text or "").strip() == MENU_RUNNER:
-                self.toggle_runner(m.chat.id)
-                return
+        def on_text(m):                                          # دکمه‌ی پایین چت یا هر پیام دیگر
             if (m.text or "").strip() == MENU_ALERTS:
                 self.toggle_alerts(m.chat.id)
                 return
-            if (m.text or "").strip() == MENU_BACKTEST:
-                self.ask_backtest(m.chat.id)
-                return
-            if (m.text or "").strip() == MENU_ALL:
-                self.ask_all_pairs(m.chat.id)
-                return
-            self.ask_structure(m.chat.id)
+            bot.send_message(m.chat.id, HELP, reply_markup=self.menu())
 
         @bot.callback_query_handler(func=lambda c: bool(c.data))
-        def on_button(c):
-            chat_id = c.message.chat.id
-            action, _, rest = c.data.partition(":")
-            sym, _, tf = rest.partition(":")
-            if action == "sxa":                                 # همه‌ی جفت‌ها: انتخاب بازه
-                bot.answer_callback_query(c.id)
-                self.ask_all_pairs(chat_id)
-                return
-            if action == "sxap":                                # همه‌ی جفت‌ها: اجرا
-                bot.answer_callback_query(c.id, "Running all pairs…")
-                self.send_all_pairs(chat_id, sym)
-                return
-            if action == "sxr" and sym in STRUCTURE_SYMBOLS:    # بک‌تست یک جفت: تایم‌فریم و بازه انتخاب شده
-                tf, _, code = tf.partition(":")
-                bot.answer_callback_query(c.id, f"Backtesting {sym}…")
-                self.send_gap_backtest(chat_id, sym, tf, code)
-                return
-            if action == "sxwl":                                # فهرست بردها + ۵ عکس اول
-                bot.answer_callback_query(c.id)
-                self.send_winners(chat_id)
-                return
-            if action in ("sxl", "sxw"):                        # ۵ عکس باخت / برد بعدی
-                bot.answer_callback_query(c.id)
-                self.send_loser_batch(chat_id, int(sym) if sym.isdigit() else 0, "loss" if action == "sxl" else "win")
-            elif action == "sxb" and sym in STRUCTURE_SYMBOLS and tf:   # تایم‌فریم انتخاب شد → از کی؟
-                bot.answer_callback_query(c.id)
-                self.ask_period(chat_id, sym, tf)
-            elif action in ("sxb", "sxbp"):                     # انتخاب جفت / تایم‌فریم بک‌تست
-                bot.answer_callback_query(c.id)
-                self.ask_backtest(chat_id, sym if sym in STRUCTURE_SYMBOLS else None)
-            elif action == "sxm" and sym in STRUCTURE_SYMBOLS:
-                bot.answer_callback_query(c.id, f"Drawing {sym} M1 + M5…")
-                self.send_mtf(chat_id, sym)
-            elif action == "sxt" and sym in STRUCTURE_SYMBOLS and tf in TIMEFRAMES:
-                bot.answer_callback_query(c.id, f"Drawing {sym} {TIMEFRAMES[tf]}…")
-                self.send_structure(chat_id, sym, tf)
-            elif action in ("sxp", "sxt") and sym in STRUCTURE_SYMBOLS:
-                bot.answer_callback_query(c.id)
-                self.ask_structure_tf(chat_id, sym)
-            else:                                                # sx و دکمه‌های قدیمی (وضعیت، بک‌تست، فالو…)
-                bot.answer_callback_query(c.id)
-                self.ask_structure(chat_id)
+        def on_button(c):                                        # دکمه‌های پیام‌های قدیمی: دیگر کاری نمی‌کنند
+            bot.answer_callback_query(c.id, "This feature was removed. Only gap alerts now.")
 
     def run(self):
         """حلقه‌ی اصلی (مسدودکننده)."""
@@ -594,10 +499,7 @@ class Telegram:
             print("remove_webhook error:", e)
         try:                                     # منوی دستورها در تلگرام
             self.bot.set_my_commands([types.BotCommand("start", "Menu"),
-                                      types.BotCommand("structure", "📐 Market structure"),
-                                      types.BotCommand("backtest", "🧪 Gap setup backtest (M1 / M5 / M15)"),
-                                      types.BotCommand("alerts", "🔔 Gold M1 gap alerts on/off"),
-                                      types.BotCommand("runner", "🔥 Gold runner alerts (5-min gap → 1-min gap) on/off")])
+                                      types.BotCommand("alerts", "🔔 Gap alerts on/off")])
         except Exception as e:
             print("set_my_commands error:", e)
         threading.Thread(target=self.alert_loop, daemon=True).start()     # هشدار زنده‌ی گپ طلا

@@ -16,9 +16,16 @@ Read this first. It replaces the long conversation that built this bot. **Keep i
   (17 Nov: "I don't want a backtest now, just keep these until I tell you").
 
 ## What the bot does now
-Telegram bot (`/start` shows a bottom bar: 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts ·
-🔥 Runner alerts).
-No channel posts, no live trading.
+**22 Nov: the bot is ONLY gap alerts** (user: "I want nothing else on the bot, only the gap alert; gold, and Bitcoin
+on Saturday/Sunday"). Bottom bar = one button **🔔 Gold gap alerts** (`/alerts [on|off]`); `/start` shows a short help.
+Structure, gap backtest, all pairs and runner alerts are NOT reachable any more (buttons, commands and old inline
+buttons removed — old buttons answer "This feature was removed"); their code is still in the files (unused) and is
+described below for history. The "📈 With / ↩️ Against the trend" label was REMOVED from the alerts (user 22 Nov);
+the M5 structure boxes and state in the alert picture/caption STAY. Every gold 5-min gap (milky-white picture) now goes
+to the 🔔 subscribers too. So 🔔 subscribers get: gold 1-min gaps + gold 5-min gaps, and on Saturday/Sunday (Tehran)
+Bitcoin 1-min + 5-min gaps. No channel posts, no live trading.
+
+Before 22 Nov (history): bottom bar 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts · 🔥 Runner alerts.
 - **🔔 Gold gap alerts** (17 Nov, `bot/gap_alerts.py`, button or `/alerts [on|off]`): a thread polls TradingView every
   15 s (XAUUSD M1, 300 bars) only while at least one chat is subscribed. Every gold M1 gap (same `find_gap` rule, ALL
   legs, NO M5 filter, not in the Off session) → ONE picture when candle 3 closes: last 60 M1 candles + the M5 structure
