@@ -575,6 +575,21 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: تکراری نیست
         self.assertEqual(a.poll(self.frame(rows[:41])), [])               # بعدش: پیام ورود نیست
 
+    def test_first_gap_with_and_against_the_5min_gap(self):
+        tg = make_bot()
+        tg.m5ctx = {"XAUUSD": {"side": 1, "end": pd.Timestamp("2026-11-23 10:15", tz="UTC"), "with": False, "against": False}}
+        ev = lambda side, m: {"side": side, "t3": pd.Timestamp(f"2026-11-23 10:{m:02d}", tz="UTC")}
+        early = ev(-1, 14)                                              # قبل از بسته شدن گپ ۵ دقیقه: هیچ
+        tg._m5_hint("XAUUSD", early)
+        self.assertNotIn("m5_hint", early)
+        a, b, c, d = ev(-1, 16), ev(-1, 20), ev(1, 22), ev(1, 25)
+        for e in (a, b, c, d):
+            tg._m5_hint("XAUUSD", e)
+        self.assertEqual([e.get("m5_hint") for e in (a, b, c, d)], ["against", None, "with", None])
+        from bot.gap_alerts import GapAlerter
+        g = dict(a, gap_hi=4001, gap_lo=4000, leg=1, session="London", sl=4002)
+        self.assertIn("likely SL", GapAlerter().gap_caption(g))
+
     def test_swing_stop_with_equal_lows(self):
         from bot.gap_alerts import GapAlerter
         a = GapAlerter("XAUUSD")

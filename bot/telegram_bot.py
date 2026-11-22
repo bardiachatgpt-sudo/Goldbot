@@ -36,6 +36,7 @@ class Telegram:
         self.bot = telebot.TeleBot(token, parse_mode=None) if token else None
         self.alert_chats = self._load_alert_chats()
         self.runner_chats = self._load_alert_chats(RUNNER_FILE, "RUNNER_CHAT_IDS")
+        self.m5ctx = {}                 # نماد → آخرین گپ ۵ دقیقه (برای «اولین هم‌جهت / اولین خلاف جهت» در هشدار ۱ دقیقه)
         if self.bot:
             self._register_handlers()
 
@@ -100,7 +101,11 @@ class Telegram:
         """گپ‌های ۵ دقیقه: عکس جدا (کندل‌های ۵ دقیقه، زمینه‌ی سفید شیری) به همان کسانی که رانر را روشن کرده‌اند
         (یا به chats اگر داده شود — بیت‌کوین آخر هفته به مشترکان 🔔)."""
         from .gap_alerts import m5_frame
+        import pandas as pd
         for _, ev in alerter.poll(m5_frame(df)):
+            # گپ ۵ دقیقه‌ی تازه (نه زنجیره): از حالا اولین گپ ۱ دقیقه‌ی هم‌جهت و اولین خلاف جهت برچسب می‌گیرند
+            self.m5ctx[alerter.sym] = {"side": ev["side"], "end": ev["t3"] + pd.Timedelta(minutes=5),
+                                       "with": False, "against": False}
             try:
                 png = alerter.picture(ev)
             except Exception as e:
@@ -112,9 +117,25 @@ class Telegram:
                 except Exception as e:
                     print("5-min gap send error:", chat, e)
 
+    def _m5_hint(self, sym, ev):
+        """کاربر، ۲۲ نوامبر: بعد از هر گپ ۵ دقیقه، اولین گپ ۱ دقیقه‌ی خلاف جهت «احتمالاً حد ضرر می‌خورد» و اولین
+        گپ ۱ دقیقه‌ی هم‌جهت «احتمالاً حد سود می‌خورد». گپ ۱ دقیقه باید بعد از بسته شدن کندل ۳ گپ ۵ دقیقه کامل شود.
+        همه‌ی گپ‌ها مثل قبل فرستاده می‌شوند؛ فقط این دو برچسب می‌گیرند."""
+        import pandas as pd
+        ctx = self.m5ctx.get(sym)
+        if not ctx or ev["t3"] + pd.Timedelta(minutes=1) <= ctx["end"]:
+            return
+        if ev["side"] == ctx["side"] and not ctx["with"]:
+            ctx["with"] = True
+            ev["m5_hint"] = "with"
+        elif ev["side"] != ctx["side"] and not ctx["against"]:
+            ctx["against"] = True
+            ev["m5_hint"] = "against"
+
     def alert_tick(self, alerter, df, m5_source=None):
         """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست. عکس گپ همراه ساختار M5 همان لحظه."""
         for kind, ev in alerter.poll(df):
+            self._m5_hint(alerter.sym, ev)
             m5 = None
             try:
                 m5 = m5_source() if m5_source else None

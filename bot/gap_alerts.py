@@ -115,8 +115,10 @@ class GapAlerter:
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
         tr = {1: "\n📈 With the trend", -1: "\n↩️ Against the trend"}.get(g.get("trend"), "")
         sl = f"\n🛑 SL {self._fmt(g['sl'])}" if g.get("sl") is not None else ""
+        hint = {"with": "\n✅ First gap WITH the last 5-min gap → likely TP",
+                "against": "\n⚠️ First gap AGAINST the last 5-min gap → likely SL"}.get(g.get("m5_hint"), "")
         return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}{m5}\n"
-                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}{sl}{tr}")
+                f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}{sl}{tr}{hint}")
 
     def picture(self, g, m5=None):
         """m5: کندل‌های M5 بسته‌شده (اختیاری) → جعبه‌های ساختار M5 زیر کندل‌های M1؛ نامش در g['m5_state']."""
