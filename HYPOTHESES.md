@@ -409,3 +409,7 @@ Stop at the last M1 swing (user 22 Nov) vs stop beyond candle 1. Script: scratch
 Swing stop = candle 1 in 35% of trades (otherwise a swing before candle 1, so a bigger stop and fewer trades because
 each trade lasts longer). Swing: sells 716 46.4% −52, buys 796 52.1% +34; Jan −11, Feb −7. Much better than the
 candle-1 stop but still slightly negative; only two months.
+Same test on all 11 months (2 Jan → 17 Nov, `swing11.py`): swing stop 9,346 trades 48.2% −328R (−588 after spread;
+avg stop $7.39, median $5.13); candle-1 stop 16,531 trades 47.6% −807R (−1,436). Swing by month: −11 −6 −90 −75 −6 −6
+−36 +24 −62 −40 −20 (only Aug positive). Buys −231 (the +34 of Jan–Feb did not hold), sells −97. $1,000 at 1% with
+spread → $2. → The swing stop loses less than the candle-1 stop but the setup is still negative.
