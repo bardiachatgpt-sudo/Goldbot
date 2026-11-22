@@ -413,3 +413,11 @@ Same test on all 11 months (2 Jan → 17 Nov, `swing11.py`): swing stop 9,346 tr
 avg stop $7.39, median $5.13); candle-1 stop 16,531 trades 47.6% −807R (−1,436). Swing by month: −11 −6 −90 −75 −6 −6
 −36 +24 −62 −40 −20 (only Aug positive). Buys −231 (the +34 of Jan–Feb did not hold), sells −97. $1,000 at 1% with
 spread → $2. → The swing stop loses less than the candle-1 stop but the setup is still negative.
+
+## Gold, only the first 90 min of New York (08:00–09:30 NY, entry candle inside), EA v1.60 rules (22 Nov)
+Colour-free gaps, all legs, swing stop (equal lows = one swing), 1:1, 2 Jan → 17 Nov; a trigger outside the window
+drops the gap (like the EA). Script `ny90.py`.
+- One trade at a time: 1,113 trades 48.3% −37R (−59 after spread); sells −7, buys −30; months −15 +2 +2 −13 −5 +6 +2
+  +12 −18 −3 −7; $1,000 at 1% with spread → $526.
+- Every trade (many open): 3,171 trades 47.0% −193R (−267); every month negative; $1,000 at 1% → $59.
+→ No edge in the first NY 90 minutes either.
