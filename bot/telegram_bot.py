@@ -36,7 +36,7 @@ class Telegram:
         self.bot = telebot.TeleBot(token, parse_mode=None) if token else None
         self.alert_chats = self._load_alert_chats()
         self.runner_chats = self._load_alert_chats(RUNNER_FILE, "RUNNER_CHAT_IDS")
-        self.m5ctx = {}                 # نماد → آخرین گپ ۵ دقیقه (برای «اولین هم‌جهت / اولین خلاف جهت» در هشدار ۱ دقیقه)
+        self.m5trade = {}               # نماد → M5TradeWatch (برچسب «اولین هم‌جهت / اولین خلاف جهت» در هشدار ۱ دقیقه)
         if self.bot:
             self._register_handlers()
 
@@ -104,8 +104,7 @@ class Telegram:
         import pandas as pd
         for _, ev in alerter.poll(m5_frame(df)):
             # گپ ۵ دقیقه‌ی تازه (نه زنجیره): از حالا اولین گپ ۱ دقیقه‌ی هم‌جهت و اولین خلاف جهت برچسب می‌گیرند
-            self.m5ctx[alerter.sym] = {"side": ev["side"], "end": ev["t3"] + pd.Timedelta(minutes=5),
-                                       "with": False, "against": False}
+            self._watch(alerter.sym).new_gap(ev, m5_frame(df))
             try:
                 png = alerter.picture(ev)
             except Exception as e:
@@ -117,23 +116,24 @@ class Telegram:
                 except Exception as e:
                     print("5-min gap send error:", chat, e)
 
+    def _watch(self, sym):
+        from .gap_alerts import M5TradeWatch
+        if sym not in self.m5trade:
+            self.m5trade[sym] = M5TradeWatch(sym)
+        return self.m5trade[sym]
+
     def _m5_hint(self, sym, ev):
-        """کاربر، ۲۲ نوامبر: بعد از هر گپ ۵ دقیقه، اولین گپ ۱ دقیقه‌ی خلاف جهت «احتمالاً حد ضرر می‌خورد» و اولین
-        گپ ۱ دقیقه‌ی هم‌جهت «احتمالاً حد سود می‌خورد». گپ ۱ دقیقه باید بعد از بسته شدن کندل ۳ گپ ۵ دقیقه کامل شود.
-        همه‌ی گپ‌ها مثل قبل فرستاده می‌شوند؛ فقط این دو برچسب می‌گیرند."""
-        import pandas as pd
-        ctx = self.m5ctx.get(sym)
-        if not ctx or ev["t3"] + pd.Timedelta(minutes=1) <= ctx["end"]:
-            return
-        if ev["side"] == ctx["side"] and not ctx["with"]:
-            ctx["with"] = True
-            ev["m5_hint"] = "with"
-        elif ev["side"] != ctx["side"] and not ctx["against"]:
-            ctx["against"] = True
-            ev["m5_hint"] = "against"
+        """برچسب اولین گپ خلاف جهت / هم‌جهت بعد از گپ ۵ دقیقه (قانون در gap_alerts.M5TradeWatch)."""
+        h = self._watch(sym).hint(ev)
+        if h:
+            ev["m5_hint"] = h
 
     def alert_tick(self, alerter, df, m5_source=None):
         """یک بار: رویدادهای تازه را به همه‌ی چت‌های مشترک بفرست. عکس گپ همراه ساختار M5 همان لحظه."""
+        try:
+            self._watch(alerter.sym).update(df)          # ورود / پایان معامله‌ی ۵ دقیقه تا همین کندل
+        except Exception as e:
+            print("5-min trade watch error:", e)
         for kind, ev in alerter.poll(df):
             self._m5_hint(alerter.sym, ev)
             m5 = None

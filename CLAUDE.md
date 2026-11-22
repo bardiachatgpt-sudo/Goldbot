@@ -33,10 +33,16 @@ entry comes after candle 4, candle 3 itself may become the swing; the user moves
 candle before and the candle after the group (bot `swing_sl` and EA `SwingSL` v1.60).
 5-min gap pictures unchanged (no SL).
 **First gap with / against the 5-min gap (22 Nov, user):** all 1-min gaps are still sent, but after every new 5-min gap
-(not a chained one) the FIRST 1-min gap in the opposite direction gets "⚠️ First gap AGAINST the last 5-min gap →
-likely SL" and the FIRST one in the same direction "✅ First gap WITH the last 5-min gap → likely TP" (caption line).
-The 1-min gap's candle 3 must close after the 5-min gap's candle 3 closed. `Telegram.m5ctx` (per symbol, set in
-`m5gap_tick`) + `Telegram._m5_hint`; gold and BTC. User's claim, not backtested.
+(not a chained one; a new 5-min gap replaces the old one) two 1-min gaps get a caption line (`gap_alerts.M5TradeWatch`,
+one per symbol in `Telegram.m5trade`, updated with the 1-min feed at the start of every `alert_tick`; gold and BTC):
+- "⚠️ First gap AGAINST the last 5-min gap → likely SL": the FIRST opposite 1-min gap whose candle 3 closes after the
+  5-min gap's candle 3 closed.
+- "✅ First gap WITH the last 5-min gap → likely TP": only AFTER THE 5-MIN ENTRY HAS TRIGGERED (user: the 1-min gap must
+  come when the 5-min trade's entry has been given): 5-min entry = previous complete 5-min candle's high + 1 pipette
+  (buy: low − 1), checked on each closed 1-min candle; the FIRST same-direction 1-min gap whose candle 3 is at/after the
+  1-min candle in which the 5-min entry triggered (a trigger inside the gap counts), while the 5-min trade is still
+  open (SL5 = 1 pipette beyond 5-min candle 1, TP5 = 1:1; SL5 broken before the entry also ends it).
+User's claim, not backtested.
 
 Before 22 Nov (history): bottom bar 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts · 🔥 Runner alerts.
 - **🔔 Gold gap alerts** (17 Nov, `bot/gap_alerts.py`, button or `/alerts [on|off]`): a thread polls TradingView every

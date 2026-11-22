@@ -261,3 +261,82 @@ def m5_frame(m1):
         return None
     return m1.resample("5min", label="left", closed="left").agg(
         {"Open": "first", "High": "max", "Low": "min", "Close": "last"}).dropna()
+
+
+# ------------------------------------------------------------------ معامله‌ی ۵ دقیقه (برای برچسب هشدار ۱ دقیقه)
+class M5TradeWatch:
+    """کاربر، ۲۲ نوامبر: بعد از هر گپ ۵ دقیقه (نه زنجیره)
+    - اولین گپ ۱ دقیقه‌ی خلاف جهت → «⚠️ likely SL»؛
+    - اولین گپ ۱ دقیقه‌ی هم‌جهت که کندل ۳ آن در/بعد از کندل ۱ دقیقه‌ای بسته شود که ورود ۵ دقیقه در آن خورد
+      (سقف کندل ۵ دقیقه‌ی قبلی + ۱ پیپت برای فروش، کف − ۱ پیپت برای خرید؛ اگر ورود وسط خود گپ بخورد هم حساب است)
+      و تا وقتی معامله‌ی ۵ دقیقه به حد ضرر (۱ پیپت آن طرف کندل ۱ گپ ۵ دقیقه) یا حد سود ۱:۱ نرسیده → «✅ likely TP».
+    کندل‌های ۵ دقیقه از کندل‌های ۱ دقیقه‌ی بسته‌شده ساخته می‌شوند (فقط بازه‌های کامل)."""
+
+    def __init__(self, sym=ALERT_SYMBOL):
+        from .gap import pip
+        self.sym, self.pp = sym, pip(sym)
+        self.ctx, self.last = None, None
+
+    def new_gap(self, ev, m5):
+        """ev: گپ ۵ دقیقه (side, t1, t3)؛ m5: کندل‌های ۵ دقیقه که کندل ۱ گپ در آن است."""
+        from .gap import _r
+        s = ev["side"]
+        try:
+            c1 = m5.loc[ev["t1"]]
+            sl5 = _r(float(c1["High"]) + self.pp if s < 0 else float(c1["Low"]) - self.pp)
+        except Exception:
+            sl5 = None
+        self.ctx = {"side": s, "t3": ev["t3"], "end": ev["t3"] + pd.Timedelta(minutes=5), "sl5": sl5,
+                    "entry": None, "tp5": None, "trig": None, "done": False, "with": False, "against": False}
+
+    def update(self, df):
+        """کندل‌های ۱ دقیقه‌ی تازه‌ی بسته‌شده: ورود ۵ دقیقه خورد؟ معامله‌ی ۵ دقیقه تمام شد؟"""
+        from .gap import _r
+        from .runner import to_m5
+        if df is None or len(df) < 3:
+            return
+        m1 = df.iloc[:-1]
+        if self.last is None:
+            self.last = m1.index[-1]
+            return
+        new = m1[m1.index > self.last]
+        self.last = m1.index[-1]
+        st = self.ctx
+        if st is None or st["done"] or st["sl5"] is None or not len(new):
+            return
+        m5 = to_m5(m1)
+        s = st["side"]
+        for ts, bar in new.iterrows():
+            if ts < st["end"] or st["done"]:
+                continue
+            hi, lo = float(bar["High"]), float(bar["Low"])
+            if (hi >= st["sl5"]) if s < 0 else (lo <= st["sl5"]):
+                st["done"] = True                          # حد ضرر ۵ دقیقه خورد
+                break
+            if st["entry"] is None:
+                prev = ts.floor("5min") - pd.Timedelta(minutes=5)
+                if prev < st["t3"] or prev not in m5.index:
+                    continue
+                k = m5.loc[prev]
+                lvl = _r(float(k["High"]) + self.pp if s < 0 else float(k["Low"]) - self.pp)
+                if (hi >= lvl) if s < 0 else (lo <= lvl):
+                    risk = abs(st["sl5"] - lvl)
+                    st.update(entry=lvl, trig=ts, tp5=_r(lvl - risk if s < 0 else lvl + risk))
+            elif (lo <= st["tp5"]) if s < 0 else (hi >= st["tp5"]):
+                st["done"] = True                          # حد سود ۱:۱ معامله‌ی ۵ دقیقه خورد
+
+    def hint(self, ev):
+        """"with" / "against" / None برای گپ ۱ دقیقه‌ی ev."""
+        st = self.ctx
+        if st is None or ev["t3"] + pd.Timedelta(minutes=1) <= st["end"]:
+            return None
+        if ev["side"] != st["side"]:
+            if not st["against"]:
+                st["against"] = True
+                return "against"
+            return None
+        if (not st["with"] and st["entry"] is not None and not st["done"] and st["trig"] is not None
+                and ev["t3"] >= st["trig"]):
+            st["with"] = True
+            return "with"
+        return None
