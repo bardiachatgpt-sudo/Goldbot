@@ -233,6 +233,11 @@ var is set on Render it overrides the default — it must then be changed there 
   high higher than both highs; highs/lows only, not closes; the right neighbour must be closed, so bar 2 is the newest
   possible); a swing not beyond the entry is skipped and the search goes further back; SL = 1 pipette beyond it; TP =
   1:RR from that stop; no swing in 1000 bars → gap skipped (`SwingSL`). The other SL modes still exist.
+  **v1.40 (22 Nov): every trade or one at a time** (user): input `InpEveryTrade` (default true) + chart button
+  "Trades: EVERY trade / ONE at a time" (live chart only). Every-trade mode: gaps and triggers are taken while other
+  positions are open, each trade only ends at its own SL or TP (needs a HEDGING account; warning in the log
+  otherwise); open trades tracked in `open_[]` so each result is drawn. `InpRiskPct` default now 1% (user: "we go on
+  1% risk, I can change it by hand").
   **All filters off switch** (v1.10, user 22 Nov): input `InpNoFilters` (works in the Strategy Tester) and an on-chart
   button "Filters: ON / ALL OFF" (live chart only — buttons do not work in the tester) → trend, M5 structure, max leg
   and hours all off, every trigger taken (`UseStructure()/MaxLeg()/Hours()` wrap the inputs).

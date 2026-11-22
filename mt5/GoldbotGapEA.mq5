@@ -19,7 +19,7 @@
 //| Attach to an M1 chart.                                           |
 //+------------------------------------------------------------------+
 #property copyright "Goldbot"
-#property version   "1.30"
+#property version   "1.40"
 
 #include <Trade\Trade.mqh>
 
@@ -34,7 +34,8 @@ enum ENUM_HOURS { HOURS_ALL = 0,          // All hours
                   HOURS_SESSIONS = 1,     // Tokyo / London / New York (no Off)
                   HOURS_FIRST90 = 2 };    // First 90 minutes of each session
 
-input double     InpRiskPct      = 2.0;              // Risk per trade (% of balance)
+input double     InpRiskPct      = 1.0;              // Risk per trade (% of balance)
+input bool       InpEveryTrade   = true;             // Take EVERY trade (many open at once); false = one trade at a time
 input double     InpRR           = 1.0;              // Reward : risk (1 = 1:1)
 input ENUM_SL    InpSLMode       = SL_SWING;         // Where the stop-loss goes
 input double     InpSLValue      = 0.5;              // SL value (fraction or price distance, see SL mode)
@@ -81,13 +82,11 @@ double   pC1High, pC1Low, pC2High, pC2Low, pGapHi, pGapLo;
 int      pLeg;
 
 // open trade bookkeeping (for drawing the result)
-ulong    lastTicket = 0;
-datetime lastEntryTime = 0;
-double   lastEntry = 0, lastSL = 0, lastTP = 0;
-int      lastSide = 0;
+// open trades the EA follows (to draw their result when they close)
+struct OpenTrade { ulong ticket; datetime t; double entry, sl, tp; int side, no; string key; bool edited; };
+OpenTrade open_[];
 int      tradeNo = 0;
-string   lastKey = "";
-bool     lastEdited = false;
+bool     gEvery = true;                 // every trade (many at once) or one trade at a time
 
 //+------------------------------------------------------------------+
 // all filters off (input InpNoFilters, or the "Filters" button on a live chart)
@@ -97,6 +96,22 @@ int  MaxLeg()       { return gNoFilters ? 0 : InpMaxLeg; }
 ENUM_HOURS Hours()  { return gNoFilters ? HOURS_ALL : InpHours; }
 
 #define FBTN "GBG_filters_btn"
+#define MBTN "GBG_mode_btn"
+void DrawModeButton()
+{
+   if(MQLInfoInteger(MQL_TESTER) && !MQLInfoInteger(MQL_VISUAL_MODE)) return;
+   if(ObjectFind(0, MBTN) < 0) ObjectCreate(0, MBTN, OBJ_BUTTON, 0, 0, 0);
+   ObjectSetInteger(0, MBTN, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, MBTN, OBJPROP_XDISTANCE, 190);
+   ObjectSetInteger(0, MBTN, OBJPROP_YDISTANCE, 30);
+   ObjectSetInteger(0, MBTN, OBJPROP_XSIZE, 200);
+   ObjectSetInteger(0, MBTN, OBJPROP_YSIZE, 24);
+   ObjectSetString(0, MBTN, OBJPROP_TEXT, gEvery ? "Trades: EVERY trade" : "Trades: ONE at a time");
+   ObjectSetInteger(0, MBTN, OBJPROP_BGCOLOR, gEvery ? clrLightSkyBlue : clrLightGray);
+   ObjectSetInteger(0, MBTN, OBJPROP_COLOR, clrBlack);
+   ObjectSetInteger(0, MBTN, OBJPROP_STATE, false);
+   ChartRedraw();
+}
 void DrawFilterButton()
 {
    if(MQLInfoInteger(MQL_TESTER) && !MQLInfoInteger(MQL_VISUAL_MODE)) return;
@@ -115,6 +130,12 @@ void DrawFilterButton()
 
 void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
 {
+   if(id == CHARTEVENT_OBJECT_CLICK && sparam == MBTN)
+   {
+      gEvery = !gEvery;
+      PrintFormat("trades: %s", gEvery ? "EVERY trade (many open at once)" : "ONE at a time");
+      DrawModeButton();
+   }
    if(id == CHARTEVENT_OBJECT_CLICK && sparam == FBTN)
    {
       gNoFilters = !gNoFilters;
@@ -126,7 +147,11 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 int OnInit()
 {
    gNoFilters = InpNoFilters;
+   gEvery = InpEveryTrade;
    DrawFilterButton();
+   DrawModeButton();
+   if(gEvery && AccountInfoInteger(ACCOUNT_MARGIN_MODE) != ACCOUNT_MARGIN_MODE_RETAIL_HEDGING)
+      Print("WARNING: 'every trade' needs a HEDGING account; on a netting account a new trade changes the open one.");
    if(_Period != PERIOD_M1)
       Print("GoldbotGapEA: attach to an M1 chart (the setup is defined on M1).");
    pp = InpPipette;
@@ -141,6 +166,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    ObjectDelete(0, FBTN);
+   ObjectDelete(0, MBTN);
 }
 
 //+------------------------------------------------------------------+
@@ -817,28 +843,31 @@ void DrawText(string name, datetime t, double p, string txt, color col)
 //+------------------------------------------------------------------+
 void CheckClosedTrade()
 {
-   if(lastTicket == 0 || HasPosition()) return;
-   if(!HistorySelectByPosition(lastTicket)) return;
-   double profit = 0, exitPrice = 0; datetime exitTime = 0;
-   for(int i = 0; i < HistoryDealsTotal(); i++)
+   for(int k = ArraySize(open_) - 1; k >= 0; k--)
    {
-      ulong d = HistoryDealGetTicket(i);
-      if(HistoryDealGetInteger(d, DEAL_ENTRY) == DEAL_ENTRY_OUT)
-      { exitPrice = HistoryDealGetDouble(d, DEAL_PRICE); exitTime = (datetime)HistoryDealGetInteger(d, DEAL_TIME); }
-      profit += HistoryDealGetDouble(d, DEAL_PROFIT) + HistoryDealGetDouble(d, DEAL_COMMISSION) + HistoryDealGetDouble(d, DEAL_SWAP);
-   }
-   if(exitTime > 0)
-   {
-      double r = MathAbs(lastEntry - lastSL) > 0 ? (exitPrice - lastEntry) * lastSide / MathAbs(lastEntry - lastSL) : 0;
-      string n = "GBT" + IntegerToString(tradeNo);
-      DrawLine(n + "_sl", lastEntryTime, exitTime, lastSL, InpColSL, STYLE_DASH);
-      DrawLine(n + "_tp", lastEntryTime, exitTime, lastTP, InpColTP, STYLE_DASH);
-      DrawLine(n + "_en", lastEntryTime, exitTime, lastEntry, InpColEntry, STYLE_DOT);
-      DrawText(n + "_res", exitTime, exitPrice, StringFormat(" #%d %+.2fR %s · %s%s", tradeNo, r, profit >= 0 ? "WIN" : "LOSS",
-                                                             lastKey, lastEdited ? " (SL edited)" : ""),
+      OpenTrade tr = open_[k];
+      if(PositionSelectByTicket(tr.ticket)) continue;          // still open
+      if(!HistorySelectByPosition(tr.ticket)) continue;
+      double profit = 0, exitPrice = 0; datetime exitTime = 0;
+      for(int i = 0; i < HistoryDealsTotal(); i++)
+      {
+         ulong d = HistoryDealGetTicket(i);
+         if(HistoryDealGetInteger(d, DEAL_ENTRY) == DEAL_ENTRY_OUT)
+         { exitPrice = HistoryDealGetDouble(d, DEAL_PRICE); exitTime = (datetime)HistoryDealGetInteger(d, DEAL_TIME); }
+         profit += HistoryDealGetDouble(d, DEAL_PROFIT) + HistoryDealGetDouble(d, DEAL_COMMISSION) + HistoryDealGetDouble(d, DEAL_SWAP);
+      }
+      if(exitTime == 0) continue;
+      double r = MathAbs(tr.entry - tr.sl) > 0 ? (exitPrice - tr.entry) * tr.side / MathAbs(tr.entry - tr.sl) : 0;
+      string n = "GBT" + IntegerToString(tr.no);
+      DrawLine(n + "_sl", tr.t, exitTime, tr.sl, InpColSL, STYLE_DASH);
+      DrawLine(n + "_tp", tr.t, exitTime, tr.tp, InpColTP, STYLE_DASH);
+      DrawLine(n + "_en", tr.t, exitTime, tr.entry, InpColEntry, STYLE_DOT);
+      DrawText(n + "_res", exitTime, exitPrice, StringFormat(" #%d %+.2fR %s · %s%s", tr.no, r, profit >= 0 ? "WIN" : "LOSS",
+                                                             tr.key, tr.edited ? " (SL edited)" : ""),
                profit >= 0 ? InpColWin : InpColLoss);
+      for(int j = k; j < ArraySize(open_) - 1; j++) open_[j] = open_[j + 1];
+      ArrayResize(open_, ArraySize(open_) - 1);
    }
-   lastTicket = 0;
 }
 
 //+------------------------------------------------------------------+
@@ -851,7 +880,7 @@ void OnNewBar()
       CopyLow(_Symbol, PERIOD_M1, 1, n, l) != n || CopyClose(_Symbol, PERIOD_M1, 1, n, c) != n ||
       CopyTime(_Symbol, PERIOD_M1, 1, n, t) != n)
       return;
-   if(HasPosition()) return;                      // one trade at a time: gaps during a trade are ignored
+   if(!gEvery && HasPosition()) return;           // one trade at a time: gaps during a trade are ignored
    double zhi, zlo;
    int i = n - 1;
    int side = FindGap(o, h, l, c, i, zhi, zlo);
@@ -895,7 +924,7 @@ void OnTick()
    CheckClosedTrade();
    datetime bar = iTime(_Symbol, PERIOD_M1, 0);
    if(bar != lastBar) { lastBar = bar; OnNewBar(); }
-   if(!pend || HasPosition() || bar <= pT3) return;
+   if(!pend || (!gEvery && HasPosition()) || bar <= pT3) return;
 
    double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID), ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
    double prevH = iHigh(_Symbol, PERIOD_M1, 1), prevL = iLow(_Symbol, PERIOD_M1, 1);
@@ -951,10 +980,13 @@ void OnTick()
    pend = false;
    if(!ok) { Print("order failed: ", trade.ResultRetcode(), " ", trade.ResultComment()); return; }
    tradeNo++;
-   lastTicket = trade.ResultOrder();
-   if(PositionSelectByTicket(lastTicket)) lastEntry = PositionGetDouble(POSITION_PRICE_OPEN); else lastEntry = entry;
-   lastEntryTime = TimeCurrent(); lastSL = sl; lastTP = tp; lastSide = pSide;
-   lastKey = Key(pT1); lastEdited = isEdited;
+   OpenTrade tr;
+   tr.ticket = trade.ResultOrder();
+   tr.entry = PositionSelectByTicket(tr.ticket) ? PositionGetDouble(POSITION_PRICE_OPEN) : entry;
+   tr.t = TimeCurrent(); tr.sl = sl; tr.tp = tp; tr.side = pSide; tr.no = tradeNo;
+   tr.key = Key(pT1); tr.edited = isEdited;
+   int m = ArraySize(open_); ArrayResize(open_, m + 1); open_[m] = tr;
+   double lastEntry = tr.entry; datetime lastEntryTime = tr.t;
    if(InpDraw)
    {
       string nm = "GBT" + IntegerToString(tradeNo) + "_in";
