@@ -29,6 +29,8 @@ line in the picture from the swing candle to the right edge + "SL price", and "�
 (`GapAlerter.swing_sl`): from candle 3 back, the nearest candle whose right neighbour is closed and whose low is lower
 than both neighbours' lows (sell: high higher than both), 1 pipette beyond — same rule as the EA's `SL_SWING`. (If the
 entry comes after candle 4, candle 3 itself may become the swing; the user moves the stop by hand.) No entry, no TP.
+**Equal lows (22 Nov, user):** candles side by side with EQUAL lows (sell: highs) are ONE swing, compared with the
+candle before and the candle after the group (bot `swing_sl` and EA `SwingSL` v1.60).
 5-min gap pictures unchanged (no SL).
 
 Before 22 Nov (history): bottom bar 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts · 🔥 Runner alerts.

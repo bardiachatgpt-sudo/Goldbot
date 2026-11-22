@@ -19,7 +19,7 @@
 //| Attach to an M1 chart.                                           |
 //+------------------------------------------------------------------+
 #property copyright "Goldbot"
-#property version   "1.50"
+#property version   "1.60"
 
 #include <Trade\Trade.mqh>
 
@@ -926,22 +926,32 @@ void OnNewBar()
 // lows of the candles on both sides (sell: high higher than both). Only highs/lows count, not closes. The right-hand
 // neighbour must be closed too (so the newest possible swing is bar 2). A swing on the wrong side of the entry (for a
 // buy: not below the entry) is skipped and the search goes further back. SL = 1 pipette beyond it.
+// Candles side by side with equal lows (sell: highs) count as one swing (user, 22 Nov).
 double SwingSL(int side, double entry)
 {
    int n = 1000;
    double h[], l[];
    ArraySetAsSeries(h, true); ArraySetAsSeries(l, true);
    if(CopyHigh(_Symbol, PERIOD_M1, 0, n, h) != n || CopyLow(_Symbol, PERIOD_M1, 0, n, l) != n) return 0;
+   // candles side by side with EQUAL lows (sell: highs) are one swing, compared with the candles before and after
+   // the group (user, 22 Nov). k = newest candle of the group, s = oldest.
    for(int k = 2; k < n - 1; k++)
    {
-      if(side > 0 && l[k] < l[k-1] && l[k] < l[k+1])
+      double xk = side > 0 ? l[k] : h[k];
+      double xn = side > 0 ? l[k-1] : h[k-1];
+      if(xk == xn) continue;                                  // member of a group already looked at
+      int s = k;
+      while(s + 1 < n && (side > 0 ? l[s+1] : h[s+1]) == xk) s++;
+      if(s + 1 >= n) break;
+      double xo = side > 0 ? l[s+1] : h[s+1];
+      if(side > 0 && xk < xn && xk < xo)
       {
-         double sl = R8(l[k] - pp);
+         double sl = R8(xk - pp);
          if(sl < entry) return sl;
       }
-      if(side < 0 && h[k] > h[k-1] && h[k] > h[k+1])
+      if(side < 0 && xk > xn && xk > xo)
       {
-         double sl = R8(h[k] + pp);
+         double sl = R8(xk + pp);
          if(sl > entry) return sl;
       }
    }

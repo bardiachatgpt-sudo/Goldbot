@@ -575,6 +575,18 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(a.poll(self.frame(rows[:39])), [])               # همان داده: تکراری نیست
         self.assertEqual(a.poll(self.frame(rows[:41])), [])               # بعدش: پیام ورود نیست
 
+    def test_swing_stop_with_equal_lows(self):
+        from bot.gap_alerts import GapAlerter
+        a = GapAlerter("XAUUSD")
+        t = list(range(8))
+        l = [3511.0, 3510.5, 3509.8, 3509.8, 3510.2, 3511.0, 3512.0, 3513.0]   # «ب» و «ج» کف برابر = یک سوینگ
+        h = [x + 1 for x in l]
+        g = a.swing_sl(h, l, t, 7, 1)
+        self.assertAlmostEqual(g["sl"], 3509.79)
+        self.assertEqual(g["sl_t"], 2)                                  # از قدیمی‌ترین کندل گروه
+        l2 = [3511.0, 3510.5, 3509.8, 3509.8, 3509.5, 3511.0, 3512.0, 3513.0]  # گروه هم‌کف سوینگ نیست
+        self.assertAlmostEqual(a.swing_sl([x + 1 for x in l2], l2, t, 7, 1)["sl"], 3509.49)
+
     def test_btc_weekend_gaps_go_to_bell_subscribers(self):
         rows = self.FLAT + self.SELL
         tg = make_bot()
