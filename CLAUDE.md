@@ -41,9 +41,10 @@ candle 1 high; sell: up to its low — the 5-min SL is beyond that anyway). Oppo
 version's "likely SL" label was removed). `gap_alerts.M5TradeWatch` per symbol in `Telegram.m5trade`, updated at the
 start of every `alert_tick`; gold and BTC. User's claim, not backtested.
 **5-min entry shown on EVERY same-direction 1-min gap (22 Nov first one only; 23 Nov every one, user: "it doesn't say
-when the 5-min triggered and at what price"):** after each 5-min gap (until it is filled), every same-direction 1-min alert shows whether the 5-min entry has triggered (`M5TradeWatch.entry_info`): triggered →
-purple line at the entry price from the trigger candle, text "5-min entry triggered here", caption "📍 5-min entry
-TRIGGERED at <price> (<time> Tehran)"; not yet → purple box on the chart "5-min entry NOT triggered yet (level now
+when the 5-min triggered and at what price"; later on 23 Nov ALL 1-min alerts, both directions, because the gaps
+right after a 5-min gap are usually the opposite pullback ones):** after each 5-min gap (until it is filled), every 1-min alert shows whether the 5-min entry has triggered (`M5TradeWatch.entry_info`): triggered →
+purple line at the entry price from the trigger candle, text "5-min BUY/SELL entry triggered here", caption "📍 5-min BUY/SELL
+entry TRIGGERED at <price> (<time> Tehran)"; not yet → purple box on the chart "5-min BUY/SELL entry NOT triggered yet (level now
 <price>)" and caption "⏳ …" (level = previous complete 5-min candle's low − 1 pipette for a buy / high + 1 for a sell).
 
 Before 22 Nov (history): bottom bar 📐 Structure · 🧪 Gap backtest · 🌍 All pairs · 🔔 Gold gap alerts · 🔥 Runner alerts.

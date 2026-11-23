@@ -600,7 +600,8 @@ class TestGapAlerts(unittest.TestCase):
         self.assertEqual(w.ctx["trig"], T(45))
         self.assertEqual(w.hint(ev(-1, 47)), "with")
         self.assertEqual(w.hint(ev(-1, 48)), "with")                    # هر گپ هم‌جهت، نه فقط اولی
-        self.assertIsNone(w.hint(ev(1, 48)))                            # خلاف جهت: برچسب ندارد
+        self.assertIsNone(w.hint(ev(1, 48)))                            # خلاف جهت: برچسب TP ندارد
+        self.assertEqual(w.entry_info(ev(1, 48))["entry"], 4002.01)     # ولی وضعیت ورود ۵ دقیقه را دارد
         w.update(df.iloc[:52])                                          # 10:50 تا 4006.5 بالا رفت: گپ پر شد
         self.assertTrue(w.ctx["done"])
         self.assertIsNone(w.hint(ev(-1, 51)))

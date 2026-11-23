@@ -119,11 +119,11 @@ class GapAlerter:
         inf = g.get("m5_entry")
         if inf:
             if inf["trig"] is not None:
-                hint += (f"\n📍 5-min entry TRIGGERED at {self._fmt(inf['entry'])} "
+                hint += (f"\n📍 5-min {'SELL' if inf.get('side', 0) < 0 else 'BUY'} entry TRIGGERED at {self._fmt(inf['entry'])} "
                          f"({inf['trig'].tz_convert(TEHRAN):%H:%M} Tehran)")
             else:
                 lv = f" (level now {self._fmt(inf['level'])})" if inf.get("level") is not None else ""
-                hint += f"\n⏳ 5-min entry NOT triggered yet{lv}"
+                hint += f"\n⏳ 5-min {'SELL' if inf.get('side', 0) < 0 else 'BUY'} entry NOT triggered yet{lv}"
         return (f"🔔 {'🔴 SELL' if s < 0 else '🟢 BUY'} gap · {self.sym} M1 · Leg {g['leg']} · {g['session']}{m5}\n"
                 f"Candle 3 closed {when} Tehran · gap {self._fmt(g['gap_lo'])}–{self._fmt(g['gap_hi'])}{sl}{tr}{hint}")
 
@@ -175,12 +175,12 @@ class GapAlerter:
             if inf.get("entry") is not None:
                 a = max(w.index.searchsorted(inf["trig"]) - 0.4, -0.5)
                 ax.hlines(inf["entry"], a, n + 0.5, color="#7C3AED", lw=1.8, zorder=7)
-                ax.text(a, inf["entry"], "5-min entry triggered here ", color="#7C3AED", fontsize=10,
+                ax.text(a, inf["entry"], f"5-min {'SELL' if inf.get('side', 0) < 0 else 'BUY'} entry triggered here ", color="#7C3AED", fontsize=10,
                         fontweight="bold", ha="right", va="center", zorder=8,
                         bbox=dict(facecolor=BG, edgecolor="none", pad=1.5))
             else:
                 lv = f" (level now {self._fmt(inf['level'])})" if inf.get("level") is not None else ""
-                ax.text(0.01, 0.97, f"5-min entry NOT triggered yet{lv}", transform=ax.transAxes, color="#7C3AED",
+                ax.text(0.01, 0.97, f"5-min {'SELL' if inf.get('side', 0) < 0 else 'BUY'} entry NOT triggered yet{lv}", transform=ax.transAxes, color="#7C3AED",
                         fontsize=11, fontweight="bold", ha="left", va="top", zorder=9,
                         bbox=dict(facecolor="white", edgecolor="#7C3AED", pad=4))
         step = max(1, n // 9)
@@ -344,23 +344,22 @@ class M5TradeWatch:
                 st["done"] = True                          # گپ ۵ دقیقه پر شد (حد ضرر ۵ دقیقه هم آن طرف‌تر است)
 
     def entry_info(self, ev):
-        """کاربر، ۲۲ و ۲۳ نوامبر: برای هر گپ ۱ دقیقه‌ی هم‌جهت بعد از گپ ۵ دقیقه (تا وقتی گپ ۵ دقیقه پر نشده) روی عکس
+        """کاربر، ۲۲ و ۲۳ نوامبر: برای هر گپ ۱ دقیقه (هر جهت؛ ۲۳ نوامبر) بعد از گپ ۵ دقیقه (تا وقتی گپ ۵ دقیقه پر نشده) روی عکس
         نشان داده شود ورود ۵ دقیقه خورده یا نه. خروجی: None یا {"trig": زمان یا None, "entry": قیمت یا None,
         "level": سطح ورود ۵ دقیقه‌ی همین لحظه (اگر هنوز نخورده)}."""
         from .gap import _r
         st = self.ctx
-        if (st is None or st["done"] or ev["side"] != st["side"]
-                or ev["t3"] + pd.Timedelta(minutes=1) <= st["end"]):
+        if st is None or st["done"] or ev["t3"] + pd.Timedelta(minutes=1) <= st["end"]:
             return None
         if st["trig"] is not None:
-            return {"trig": st["trig"], "entry": st["entry"], "level": None}
+            return {"trig": st["trig"], "entry": st["entry"], "level": None, "side": st["side"]}
         level = None
         prev = (ev["t3"] + pd.Timedelta(minutes=1)).floor("5min") - pd.Timedelta(minutes=5)
         m5 = getattr(self, "m5", None)
         if m5 is not None and prev >= st["t3"] and prev in m5.index:
             k = m5.loc[prev]
             level = _r(float(k["High"]) + self.pp if st["side"] < 0 else float(k["Low"]) - self.pp)
-        return {"trig": None, "entry": None, "level": level}
+        return {"trig": None, "entry": None, "level": level, "side": st["side"]}
 
     def hint(self, ev):
         """"with" (هر گپ هم‌جهت بعد از ورود ۵ دقیقه، تا پر شدن گپ) یا None."""
