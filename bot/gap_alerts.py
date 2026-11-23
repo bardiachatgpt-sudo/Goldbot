@@ -344,15 +344,14 @@ class M5TradeWatch:
                 st["done"] = True                          # گپ ۵ دقیقه پر شد (حد ضرر ۵ دقیقه هم آن طرف‌تر است)
 
     def entry_info(self, ev):
-        """کاربر، ۲۲ نوامبر: برای اولین گپ ۱ دقیقه‌ی هم‌جهت بعد از گپ ۵ دقیقه (تا وقتی گپ ۵ دقیقه پر نشده) روی عکس
+        """کاربر، ۲۲ و ۲۳ نوامبر: برای هر گپ ۱ دقیقه‌ی هم‌جهت بعد از گپ ۵ دقیقه (تا وقتی گپ ۵ دقیقه پر نشده) روی عکس
         نشان داده شود ورود ۵ دقیقه خورده یا نه. خروجی: None یا {"trig": زمان یا None, "entry": قیمت یا None,
         "level": سطح ورود ۵ دقیقه‌ی همین لحظه (اگر هنوز نخورده)}."""
         from .gap import _r
         st = self.ctx
-        if (st is None or st["done"] or st["first"] or ev["side"] != st["side"]
+        if (st is None or st["done"] or ev["side"] != st["side"]
                 or ev["t3"] + pd.Timedelta(minutes=1) <= st["end"]):
             return None
-        st["first"] = True
         if st["trig"] is not None:
             return {"trig": st["trig"], "entry": st["entry"], "level": None}
         level = None
