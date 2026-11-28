@@ -143,18 +143,13 @@ class GapAlerter:
         inf = g.get("m5_entry")
         if inf and inf.get("entry") is not None:
             lo, hi = min(lo, inf["entry"]), max(hi, inf["entry"])
-        from .gap_pictures import range_bounds
-        m5w = m5_at(m5, w.index[-1] + pd.Timedelta(minutes=1)) if m5 is not None else None
-        rb = range_bounds(m5w)
-        if rb:                                             # رنج ۵ دقیقه: کل رنج در عکس دیده شود
-            lo, hi = min(lo, rb[1]), max(hi, rb[0])
         pad = (hi - lo) * 0.05 or 1.0
         fig, ax = plt.subplots(figsize=(12, 7), dpi=100)
         fig.patch.set_facecolor(BG)
         ax.set_facecolor(BG)
         span = hi - lo or 1.0
-        g["m5_state"] = draw_m5(ax, self.sym, m5w, w.index, lo, hi, span, pad, labels_left=True, fill=BOX,
-                                flat_range=True)
+        g["m5_state"] = draw_m5(ax, self.sym, m5_at(m5, w.index[-1] + pd.Timedelta(minutes=1)) if m5 is not None
+                                else None, w.index, lo, hi, span, pad, labels_left=True, fill=BOX)
         for i in range(n):
             up = c[i] >= o[i]
             ax.vlines(i, l[i], h[i], color=EDGE, lw=1, zorder=5)
