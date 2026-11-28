@@ -112,6 +112,8 @@ class GapAlerter:
     def gap_caption(self, g):
         s = g["side"]
         m5 = f" · M5: {g['m5_state']}" if g.get("m5_state") and g["m5_state"] != "-" else ""
+        if g.get("m5_range"):
+            m5 += f" ({self._fmt(g['m5_range'][1])}–{self._fmt(g['m5_range'][0])})"
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
         tr = {1: "\n📈 With the trend", -1: "\n↩️ Against the trend"}.get(g.get("trend"), "")
         sl = f"\n🛑 SL {self._fmt(g['sl'])}" if g.get("sl") is not None else ""
@@ -148,8 +150,10 @@ class GapAlerter:
         fig.patch.set_facecolor(BG)
         ax.set_facecolor(BG)
         span = hi - lo or 1.0
-        g["m5_state"] = draw_m5(ax, self.sym, m5_at(m5, w.index[-1] + pd.Timedelta(minutes=1)) if m5 is not None
-                                else None, w.index, lo, hi, span, pad, labels_left=True, fill=BOX)
+        from .gap_pictures import range_bounds
+        m5w = m5_at(m5, w.index[-1] + pd.Timedelta(minutes=1)) if m5 is not None else None
+        g["m5_state"] = draw_m5(ax, self.sym, m5w, w.index, lo, hi, span, pad, labels_left=True, fill=BOX)
+        g["m5_range"] = range_bounds(m5w)                  # فقط برای متن: رنج از چه عددی تا چه عددی
         for i in range(n):
             up = c[i] >= o[i]
             ax.vlines(i, l[i], h[i], color=EDGE, lw=1, zorder=5)

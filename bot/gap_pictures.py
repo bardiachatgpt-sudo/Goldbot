@@ -69,6 +69,18 @@ def watch_rows(sym, m1, t):
     return out
 
 
+def range_bounds(h5w):
+    """اگر فاز آخر ساختار M5 رنج است: (سقف، کف) کل رنج از سقف‌ها و کف‌های کندل‌های M5 آن فاز، وگرنه None.
+    فقط برای متن هشدار (کاربر، ۲۸ نوامبر: «عکس همان قبلی، فقط در کپشن بگو رنج از چه عددی تا چه عددی است»)."""
+    if h5w is None or len(h5w) < 100:
+        return None
+    ph = segment(h5w["Close"].values.astype(float))[0][-1]
+    if ph["type"] != "RANGE":
+        return None
+    a = ph["start"]
+    return float(h5w["High"].values[a:].max()), float(h5w["Low"].values[a:].min())
+
+
 def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False, fill=M5_FILL):
     """جعبه‌های ساختار M5 (از کندل‌های M5 بسته‌شده‌ی h5w) زیر کندل‌های M1 با زمان‌های times. خروجی: نام فاز آخر."""
     if h5w is None or len(h5w) < 100:
