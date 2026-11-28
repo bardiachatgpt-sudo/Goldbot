@@ -60,7 +60,7 @@ class GapAlerter:
                              "session": session_of(t[i]) if self.sessions else "Weekend", "close3": c[i]}
             p.update(self.swing_sl(h, l, t, i, side))
             if p["session"] != "Off":                      # سشن Off: هشدار نمی‌دهد
-                events.append(("gap", dict(p, window=closed.tail(PICTURE_BARS))))
+                events.append(("gap", dict(p, window=closed.tail(PICTURE_BARS), hist=closed.tail(300))))
         self.last_closed = t[-1]
         return events
 
@@ -112,6 +112,8 @@ class GapAlerter:
     def gap_caption(self, g):
         s = g["side"]
         m5 = f" · M5: {g['m5_state']}" if g.get("m5_state") and g["m5_state"] != "-" else ""
+        if g.get("m1_state") and g["m1_state"] != "-":
+            m5 += f" · M1: {g['m1_state']}"
         when = g["t3"].tz_convert(TEHRAN).strftime("%a %d %b %H:%M")
         tr = {1: "\n📈 With the trend", -1: "\n↩️ Against the trend"}.get(g.get("trend"), "")
         sl = f"\n🛑 SL {self._fmt(g['sl'])}" if g.get("sl") is not None else ""
@@ -155,6 +157,11 @@ class GapAlerter:
         span = hi - lo or 1.0
         g["m5_state"] = draw_m5(ax, self.sym, m5w, w.index, lo, hi, span, pad, labels_left=True, fill=BOX,
                                 flat_range=True)
+        from .gap_pictures import draw_m1
+        try:                                               # ساختار ۱ دقیقه داخل ساختار ۵ دقیقه (کاربر، ۲۸ نوامبر)
+            g["m1_state"] = draw_m1(ax, self.sym, g.get("hist"), n, lo, hi, span)
+        except Exception as e:
+            print("M1 structure error:", e)
         for i in range(n):
             up = c[i] >= o[i]
             ax.vlines(i, l[i], h[i], color=EDGE, lw=1, zorder=5)
