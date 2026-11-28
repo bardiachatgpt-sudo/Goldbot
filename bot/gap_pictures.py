@@ -127,39 +127,6 @@ def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False, fill=M5_F
     return NAMES[(ph5[-1]["type"], ph5[-1]["side"])]
 
 
-M1_LINE = "#B45309"     # ساختار ۱ دقیقه داخل عکس هشدار (کهربایی تیره، خط صاف)
-
-
-def draw_m1(ax, sym, hist, n_window, lo, hi, span):
-    """ساختار ۱ دقیقه (کاربر، ۲۸ نوامبر: «خود ساختار ۱ دقیقه هم داخلش کشیده شود»): همان الگوریتم ساختار روی کلوزهای
-    hist (کندل‌های ۱ دقیقه‌ی بسته‌شده، ردیف آخر = کندل ۳ گپ). n_window کندل آخر در عکس‌اند (x = 0 … n_window−1).
-    رنج صاف از بالاترین سقف تا پایین‌ترین کف آن فاز؛ کانال مورب؛ اسپایک صاف. خروجی: نام فاز آخر یا "-"."""
-    if hist is None or len(hist) < 100:
-        return "-"
-    c = hist["Close"].values.astype(float)
-    h, l = hist["High"].values.astype(float), hist["Low"].values.astype(float)
-    ph1, piv1 = segment(c)
-    off = len(hist) - n_window                              # جای کندل اول عکس در hist
-    for k, ph in enumerate(ph1):
-        pa, pb = ph["start"], (len(c) - 1 if k == len(ph1) - 1 else ph["end"])
-        a, b = max(pa, off), pb
-        if b < a:
-            continue
-        pos = np.arange(a, b + 1, dtype=float)
-        if ph["type"] == "RANGE":
-            upper, lower = np.full(len(pos), h[pa:pb + 1].max()), np.full(len(pos), l[pa:pb + 1].min())
-        else:
-            upper, lower = _edges(ph, c, h, l, piv1, pos)
-        upper, lower = np.clip(upper, lo - span, hi + span), np.clip(lower, lo - span, hi + span)
-        xs = pos - off
-        ax.plot(xs, upper, color=M1_LINE, lw=1.6, zorder=3)
-        ax.plot(xs, lower, color=M1_LINE, lw=1.6, zorder=3)
-        if len(xs) >= 6:
-            ax.text(xs[0] + 0.3, upper[0], f"M1 · {NAMES[(ph['type'], ph['side'])]}", color=M1_LINE, fontsize=8.5,
-                    fontweight="bold", va="bottom", zorder=9)
-    return NAMES[(ph1[-1]["type"], ph1[-1]["side"])]
-
-
 def trade_picture(sym, m1, m5, t, num=None):
     """m1: همان کندل‌هایی که بک‌تست روی آن اجرا شد (اندیس‌های t نسبت به آن). t: معامله با entry_time."""
     import matplotlib

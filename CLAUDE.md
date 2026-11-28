@@ -35,10 +35,6 @@ candle before and the candle after the group (bot `swing_sl` and EA `SwingSL` v1
 from the highest high to the lowest low of the M5 candles of that range (`gap_pictures.range_bounds`,
 `draw_m5(flat_range=True)`; not the slanted close-based edges) and the picture's price axis is widened so the whole
 range (top and bottom with prices) is always visible. Channels/spikes unchanged.
-**M1 structure inside (28 Nov, user):** the same structure algorithm on the last 300 closed 1-min candles (event
-`hist`), drawn on the alert picture as thin solid dark-amber lines (`gap_pictures.draw_m1`, colour `M1_LINE`
-#B45309): range flat high–low, channel slanted, spike flat; label "M1 · <phase>" at each phase start; caption gets
-"· M1: <phase>" after the M5 state.
 5-min gap pictures unchanged (no SL).
 **"Likely TP" label (22 Nov, user, 2nd version: "for now I only want the TP ones"):** all 1-min gaps are still sent;
 after every new 5-min gap (not a chained one; a new 5-min gap replaces the old one), once the 5-MIN ENTRY HAS TRIGGERED
