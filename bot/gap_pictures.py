@@ -69,8 +69,21 @@ def watch_rows(sym, m1, t):
     return out
 
 
-def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False, fill=M5_FILL):
-    """جعبه‌های ساختار M5 (از کندل‌های M5 بسته‌شده‌ی h5w) زیر کندل‌های M1 با زمان‌های times. خروجی: نام فاز آخر."""
+def range_bounds(h5w):
+    """اگر فاز آخر ساختار M5 رنج است: (سقف، کف) کل رنج از سقف‌ها و کف‌های کندل‌های M5 آن فاز، وگرنه None
+    (کاربر، ۲۸ نوامبر: «وقتی تریدینگ رنج است کل رنج را روی ۱ دقیقه بکش»)."""
+    if h5w is None or len(h5w) < 100:
+        return None
+    ph = segment(h5w["Close"].values.astype(float))[0][-1]
+    if ph["type"] != "RANGE":
+        return None
+    a, b = ph["start"], len(h5w) - 1
+    return float(h5w["High"].values[a:b + 1].max()), float(h5w["Low"].values[a:b + 1].min())
+
+
+def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False, fill=M5_FILL, flat_range=False):
+    """جعبه‌های ساختار M5 (از کندل‌های M5 بسته‌شده‌ی h5w) زیر کندل‌های M1 با زمان‌های times. خروجی: نام فاز آخر.
+    flat_range: رنج‌ها صاف، از بالاترین سقف تا پایین‌ترین کف کندل‌های M5 همان فاز (نه لبه‌ی کج کلوزها)."""
     if h5w is None or len(h5w) < 100:
         return "-"
     c5 = h5w["Close"].values.astype(float)
@@ -92,7 +105,12 @@ def draw_m5(ax, sym, h5w, times, lo, hi, span, pad, labels_left=False, fill=M5_F
         if not on.any():
             continue
         xs = np.where(on)[0]
-        upper, lower = _edges(ph, c5, h5, l5, piv5, p5[xs])
+        if flat_range and ph["type"] == "RANGE":
+            pe = len(c5) - 1 if k == last5 else pb
+            upper = np.full(len(xs), h5[pa:pe + 1].max())
+            lower = np.full(len(xs), l5[pa:pe + 1].min())
+        else:
+            upper, lower = _edges(ph, c5, h5, l5, piv5, p5[xs])
         upper = np.clip(upper, lo - span, hi + span)
         lower = np.clip(lower, lo - span, hi + span)
         ax.fill_between(xs, lower, upper, color=fill, alpha=0.9, lw=0, zorder=1)

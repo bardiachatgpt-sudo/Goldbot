@@ -31,6 +31,10 @@ than both neighbours' lows (sell: high higher than both), 1 pipette beyond — s
 entry comes after candle 4, candle 3 itself may become the swing; the user moves the stop by hand.) No entry, no TP.
 **Equal lows (22 Nov, user):** candles side by side with EQUAL lows (sell: highs) are ONE swing, compared with the
 candle before and the candle after the group (bot `swing_sl` and EA `SwingSL` v1.60).
+**Whole M5 range in the 1-min alert (28 Nov, user):** when the last M5 phase is a TRADING RANGE, the box is drawn FLAT
+from the highest high to the lowest low of the M5 candles of that range (`gap_pictures.range_bounds`,
+`draw_m5(flat_range=True)`; not the slanted close-based edges) and the picture's price axis is widened so the whole
+range (top and bottom with prices) is always visible. Channels/spikes unchanged.
 5-min gap pictures unchanged (no SL).
 **"Likely TP" label (22 Nov, user, 2nd version: "for now I only want the TP ones"):** all 1-min gaps are still sent;
 after every new 5-min gap (not a chained one; a new 5-min gap replaces the old one), once the 5-MIN ENTRY HAS TRIGGERED
